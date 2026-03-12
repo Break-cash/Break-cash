@@ -6,6 +6,15 @@ import { WalletAssetsList } from '../components/mobile/WalletAssetsList'
 import { useI18n } from '../i18nCore'
 import { walletDashboardMock } from '../ui/mobileMock'
 
+type DemoActivity = {
+  id: number
+  text: string
+  at: string
+}
+
+const demoPairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'BNB/USDT']
+const demoActions = ['شراء تجريبي', 'بيع تجريبي', 'فتح صفقة تجريبية', 'إغلاق صفقة تجريبية']
+
 export function Profile() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -16,6 +25,8 @@ export function Profile() {
   const [profitsOpen, setProfitsOpen] = useState(false)
   const [dailyProfit, setDailyProfit] = useState(0)
   const [totalProfit, setTotalProfit] = useState(0)
+  const [demoRunning, setDemoRunning] = useState(true)
+  const [demoActivity, setDemoActivity] = useState<DemoActivity[]>([])
 
   useEffect(() => {
     Promise.allSettled([getMyProfile(), apiFetch('/api/balance/my'), apiFetch('/api/portfolio/holdings')])
@@ -35,6 +46,28 @@ export function Profile() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  function addDemoActivity() {
+    const pair = demoPairs[Math.floor(Math.random() * demoPairs.length)]
+    const action = demoActions[Math.floor(Math.random() * demoActions.length)]
+    const amount = (Math.random() * 900 + 100).toFixed(2)
+    const now = new Date()
+    const item: DemoActivity = {
+      id: Date.now(),
+      text: `${action}: ${pair} بقيمة $${amount}`,
+      at: now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+    }
+    setDemoActivity((prev) => [item, ...prev].slice(0, 6))
+  }
+
+  useEffect(() => {
+    if (!profitsOpen || !demoRunning) return
+    addDemoActivity()
+    const id = window.setInterval(() => {
+      addDemoActivity()
+    }, 5000)
+    return () => window.clearInterval(id)
+  }, [profitsOpen, demoRunning])
 
   const displayIdentity = useMemo(
     () => profile?.email || profile?.phone || walletDashboardMock.wallet_name,
@@ -118,6 +151,38 @@ export function Profile() {
           <div className="wallet-promo-sub">{walletDashboardMock.promotions.description}</div>
         </div>
       </section>
+
+      {profitsOpen && (
+        <section className="wallet-demo-activity">
+          <div className="wallet-demo-head">
+            <strong>نشاط تفاعلي تجريبي</strong>
+            <div className="wallet-demo-actions">
+              <button type="button" className="wallet-demo-btn" onClick={addDemoActivity}>
+                نشاط الآن
+              </button>
+              <button
+                type="button"
+                className="wallet-demo-btn"
+                onClick={() => setDemoRunning((v) => !v)}
+              >
+                {demoRunning ? 'إيقاف' : 'تشغيل'}
+              </button>
+            </div>
+          </div>
+          <div className="wallet-demo-list">
+            {demoActivity.length === 0 ? (
+              <div className="wallet-demo-empty">لا يوجد نشاط بعد.</div>
+            ) : (
+              demoActivity.map((item) => (
+                <div key={item.id} className="wallet-demo-item">
+                  <span>{item.text}</span>
+                  <small>{item.at}</small>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <section className="wallet-assets-panel">

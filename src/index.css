@@ -1962,6 +1962,68 @@ button {
   font-size: 14px;
 }
 
+.wallet-demo-activity {
+  border-radius: 14px;
+  border: 1px solid #161c2d;
+  background: #0b1020;
+  padding: 10px 12px;
+}
+
+.wallet-demo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.wallet-demo-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.wallet-demo-btn {
+  border: 1px solid #1f2940;
+  background: #0f1423;
+  color: #d9dfeb;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wallet-demo-btn:hover {
+  border-color: #2f3a57;
+}
+
+.wallet-demo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wallet-demo-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: #111827;
+  border: 1px solid #1d2538;
+}
+
+.wallet-demo-item small {
+  color: #8e97a8;
+}
+
+.wallet-demo-empty {
+  font-size: 12px;
+  color: #8e97a8;
+}
+
 .wallet-assets-panel {
   border-radius: 14px;
   border: 1px solid #161c2d;
