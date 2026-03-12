@@ -1,5 +1,5 @@
 export const appData = {
-  app_name: 'ExCoreX',
+  app_name: 'Break cash',
   user_profile: {
     uid: '701928',
     email: 'bffh1331@gmail.com',
@@ -38,7 +38,7 @@ export const appData = {
     },
   ],
   navigation_menu: [
-    { title: 'الصفحة الرئيسية', icon: 'home_icon', route: '/' },
+    { title: 'الصفحة الرئيسية', icon: 'home_icon', route: '/home' },
     { title: 'الأسعار السوقية', icon: 'market_icon', route: '/market' },
     { title: 'التزامن بالصفقة', icon: 'trade_icon', route: '/sync' },
     { title: 'الخيارات', icon: 'options_icon', route: '/options' },

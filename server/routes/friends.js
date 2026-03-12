@@ -1,0 +1,147 @@
+import path from 'node:path'
+import { Router } from 'express'
+import { get, run, all } from '../db.js'
+import { requireAuth } from '../middleware/auth.js'
+
+const asyncRoute = (handler) => async (req, res) => {
+  try {
+    await handler(req, res)
+  } catch (error) {
+    console.error('[friends-route-error]', error)
+    return res.status(500).json({ error: 'SERVER_ERROR', message: 'Friends service failed.' })
+  }
+}
+
+function toPublicPath(absPath) {
+  if (!absPath) return null
+  const rel = path.relative(path.join(process.cwd(), 'server'), absPath).replaceAll('\\', '/')
+  return `/uploads/${rel.replace(/^uploads[/\\]/, '')}`
+}
+
+export function createFriendsRouter(db) {
+  const router = Router()
+  router.use(requireAuth(db))
+
+  // بحث المستخدمين بالـ ID (رقم أو بداية الرقم)
+  router.get('/search', asyncRoute(async (req, res) => {
+    const q = String(req.query?.q || '').trim().replace(/\D/g, '')
+    if (!q) return res.json({ users: [] })
+
+    const me = req.user.id
+    const rows = await all(
+      db,
+      `SELECT id, display_name, avatar_path
+       FROM users
+       WHERE CAST(id AS TEXT) LIKE ? AND id != ? AND is_banned = 0
+       ORDER BY id ASC
+       LIMIT 20`,
+      [`${q}%`, me],
+    )
+    const users = rows.map((r) => ({
+      id: r.id,
+      displayName: r.display_name || `#${r.id}`,
+      avatarUrl: r.avatar_path ? toPublicPath(r.avatar_path) : null,
+    }))
+    return res.json({ users })
+  }))
+
+  // إرسال طلب صداقة
+  router.post('/request', asyncRoute(async (req, res) => {
+    const toUserId = Number(req.body?.toUserId)
+    if (!toUserId || toUserId < 1) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const me = req.user.id
+    if (toUserId === me) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const target = await get(db, `SELECT id, is_banned FROM users WHERE id = ? LIMIT 1`, [toUserId])
+    if (!target) return res.status(404).json({ error: 'NOT_FOUND' })
+    if (Number(target.is_banned) === 1) return res.status(400).json({ error: 'USER_BANNED' })
+
+    const existing = await get(
+      db,
+      `SELECT id, status FROM friend_requests
+       WHERE (from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)
+       LIMIT 1`,
+      [me, toUserId, toUserId, me],
+    )
+    if (existing) {
+      if (existing.status === 'accepted') return res.status(400).json({ error: 'ALREADY_FRIENDS' })
+      return res.status(400).json({ error: 'REQUEST_EXISTS' })
+    }
+
+    await run(
+      db,
+      `INSERT INTO friend_requests (from_user_id, to_user_id, status) VALUES (?, ?, 'pending')`,
+      [me, toUserId],
+    )
+    return res.json({ ok: true })
+  }))
+
+  // قائمة الأصدقاء والطلبات
+  router.get('/list', asyncRoute(async (req, res) => {
+    const me = req.user.id
+    const requests = await all(
+      db,
+      `SELECT fr.id, fr.from_user_id, fr.to_user_id, fr.status, fr.created_at,
+              u.display_name AS from_display_name, u.avatar_path AS from_avatar_path,
+              v.display_name AS to_display_name, v.avatar_path AS to_avatar_path
+       FROM friend_requests fr
+       LEFT JOIN users u ON u.id = fr.from_user_id
+       LEFT JOIN users v ON v.id = fr.to_user_id
+       WHERE fr.from_user_id = ? OR fr.to_user_id = ?
+       ORDER BY fr.created_at DESC`,
+      [me, me],
+    )
+    const friends = []
+    const pendingReceived = []
+    const pendingSent = []
+    for (const r of requests) {
+      const otherId = r.from_user_id === me ? r.to_user_id : r.from_user_id
+      const displayName = r.from_user_id === me ? r.to_display_name : r.from_display_name
+      const avatarPath = r.from_user_id === me ? r.to_avatar_path : r.from_avatar_path
+      const item = {
+        id: r.id,
+        userId: otherId,
+        displayName: displayName || `#${otherId}`,
+        avatarUrl: avatarPath ? toPublicPath(avatarPath) : null,
+        status: r.status,
+        createdAt: r.created_at,
+      }
+      if (r.status === 'accepted') friends.push(item)
+      else if (r.to_user_id === me) pendingReceived.push(item)
+      else pendingSent.push(item)
+    }
+    return res.json({ friends, pendingReceived, pendingSent })
+  }))
+
+  // قبول طلب صداقة
+  router.post('/accept', asyncRoute(async (req, res) => {
+    const requestId = Number(req.body?.requestId)
+    if (!requestId) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const me = req.user.id
+    const row = await get(
+      db,
+      `SELECT id, to_user_id, status FROM friend_requests WHERE id = ? LIMIT 1`,
+      [requestId],
+    )
+    if (!row || row.to_user_id !== me) return res.status(404).json({ error: 'NOT_FOUND' })
+    if (row.status !== 'pending') return res.status(400).json({ error: 'ALREADY_PROCESSED' })
+    await run(db, `UPDATE friend_requests SET status = 'accepted' WHERE id = ?`, [requestId])
+    return res.json({ ok: true })
+  }))
+
+  // إلغاء طلب أو إزالة صديق
+  router.post('/remove', asyncRoute(async (req, res) => {
+    const userId = Number(req.body?.userId)
+    if (!userId) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const me = req.user.id
+    const { changes } = await run(
+      db,
+      `DELETE FROM friend_requests
+       WHERE ((from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?))`,
+      [me, userId, userId, me],
+    )
+    return res.json({ ok: true, removed: changes > 0 })
+  }))
+
+  return router
+}

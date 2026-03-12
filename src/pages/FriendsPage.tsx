@@ -1,0 +1,248 @@
+import { useCallback, useEffect, useState } from 'react'
+import {
+  acceptFriendRequest,
+  getFriendsList,
+  removeFriend,
+  searchUsersById,
+  sendFriendRequest,
+  type FriendItem,
+  type FriendUser,
+} from '../api'
+import { useI18n } from '../i18nCore'
+
+export function FriendsPage() {
+  const { t } = useI18n()
+  const [searchQ, setSearchQ] = useState('')
+  const [searchResults, setSearchResults] = useState<FriendUser[]>([])
+  const [searching, setSearching] = useState(false)
+  const [friends, setFriends] = useState<FriendItem[]>([])
+  const [pendingReceived, setPendingReceived] = useState<FriendItem[]>([])
+  const [pendingSent, setPendingSent] = useState<FriendItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [addingId, setAddingId] = useState<number | null>(null)
+
+  const loadList = useCallback(async () => {
+    try {
+      const res = await getFriendsList()
+      setFriends(res.friends)
+      setPendingReceived(res.pendingReceived)
+      setPendingSent(res.pendingSent)
+    } catch {
+      setMessage({ type: 'error', text: t('friends_load_error') })
+    } finally {
+      setLoading(false)
+    }
+  }, [t])
+
+  useEffect(() => {
+    loadList()
+  }, [loadList])
+
+  async function handleSearch() {
+    const q = searchQ.trim().replace(/\D/g, '')
+    if (!q) {
+      setSearchResults([])
+      return
+    }
+    setSearching(true)
+    setMessage(null)
+    try {
+      const res = await searchUsersById(q)
+      setSearchResults(res.users)
+      if (res.users.length === 0) setMessage({ type: 'error', text: t('friends_no_results') })
+    } catch {
+      setSearchResults([])
+      setMessage({ type: 'error', text: t('friends_search_error') })
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  async function handleAddFriend(user: FriendUser) {
+    setAddingId(user.id)
+    setMessage(null)
+    try {
+      await sendFriendRequest(user.id)
+      setMessage({ type: 'success', text: t('friends_request_sent') })
+      setSearchResults((prev) => prev.filter((u) => u.id !== user.id))
+      loadList()
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('friends_add_error') })
+    } finally {
+      setAddingId(null)
+    }
+  }
+
+  async function handleAccept(item: FriendItem) {
+    setMessage(null)
+    try {
+      await acceptFriendRequest(item.id)
+      setMessage({ type: 'success', text: t('friends_accepted') })
+      loadList()
+    } catch {
+      setMessage({ type: 'error', text: t('friends_accept_error') })
+    }
+  }
+
+  async function handleRemove(item: FriendItem) {
+    setMessage(null)
+    try {
+      await removeFriend(item.userId)
+      setMessage({ type: 'success', text: t('friends_removed') })
+      loadList()
+    } catch {
+      setMessage({ type: 'error', text: t('friends_remove_error') })
+    }
+  }
+
+  const isPendingSent = (userId: number) => pendingSent.some((p) => p.userId === userId)
+  const isFriend = (userId: number) => friends.some((f) => f.userId === userId)
+
+  return (
+    <div className="friends-page">
+      <h1 className="friends-title">{t('nav_friends')}</h1>
+
+      <section className="friends-search-section">
+        <label className="friends-search-label">{t('friends_search_by_id')}</label>
+        <div className="friends-search-row">
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder={t('friends_search_placeholder')}
+            className="friends-search-input"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <button
+            type="button"
+            className="friends-search-btn"
+            onClick={handleSearch}
+            disabled={searching || !searchQ.trim()}
+          >
+            {searching ? t('friends_searching') : t('friends_search')}
+          </button>
+        </div>
+      </section>
+
+      {message && (
+        <div className={`friends-message friends-message-${message.type}`}>{message.text}</div>
+      )}
+
+      {searchResults.length > 0 && (
+        <section className="friends-results">
+          <h2 className="friends-section-title">{t('friends_results')}</h2>
+          <ul className="friends-list">
+            {searchResults.map((user) => (
+              <li key={user.id} className="friends-list-item">
+                <div className="friends-item-avatar">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" />
+                  ) : (
+                    <span className="friends-item-initial">#{user.id}</span>
+                  )}
+                </div>
+                <div className="friends-item-info">
+                  <span className="friends-item-name">{user.displayName}</span>
+                  <span className="friends-item-id">ID: {user.id}</span>
+                </div>
+                {isFriend(user.id) ? (
+                  <span className="friends-item-badge">{t('friends_already')}</span>
+                ) : isPendingSent(user.id) ? (
+                  <span className="friends-item-badge friends-item-pending">{t('friends_pending')}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="friends-add-btn"
+                    onClick={() => handleAddFriend(user)}
+                    disabled={addingId === user.id}
+                  >
+                    {addingId === user.id ? '...' : t('friends_add')}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {loading ? (
+        <div className="friends-loading">{t('friends_loading')}</div>
+      ) : (
+        <>
+          {pendingReceived.length > 0 && (
+            <section className="friends-section">
+              <h2 className="friends-section-title">{t('friends_pending_received')}</h2>
+              <ul className="friends-list">
+                {pendingReceived.map((item) => (
+                  <li key={item.id} className="friends-list-item">
+                    <div className="friends-item-avatar">
+                      {item.avatarUrl ? (
+                        <img src={item.avatarUrl} alt="" />
+                      ) : (
+                        <span className="friends-item-initial">#{item.userId}</span>
+                      )}
+                    </div>
+                    <div className="friends-item-info">
+                      <span className="friends-item-name">{item.displayName}</span>
+                      <span className="friends-item-id">ID: {item.userId}</span>
+                    </div>
+                    <div className="friends-item-actions">
+                      <button
+                        type="button"
+                        className="friends-accept-btn"
+                        onClick={() => handleAccept(item)}
+                      >
+                        {t('friends_accept')}
+                      </button>
+                      <button
+                        type="button"
+                        className="friends-remove-btn"
+                        onClick={() => handleRemove(item)}
+                      >
+                        {t('friends_decline')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="friends-section">
+            <h2 className="friends-section-title">{t('friends_list')}</h2>
+            {friends.length === 0 ? (
+              <p className="friends-empty">{t('friends_empty')}</p>
+            ) : (
+              <ul className="friends-list">
+                {friends.map((item) => (
+                  <li key={item.id} className="friends-list-item">
+                    <div className="friends-item-avatar">
+                      {item.avatarUrl ? (
+                        <img src={item.avatarUrl} alt="" />
+                      ) : (
+                        <span className="friends-item-initial">#{item.userId}</span>
+                      )}
+                    </div>
+                    <div className="friends-item-info">
+                      <span className="friends-item-name">{item.displayName}</span>
+                      <span className="friends-item-id">ID: {item.userId}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="friends-remove-btn"
+                      onClick={() => handleRemove(item)}
+                    >
+                      {t('friends_remove')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  )
+}
