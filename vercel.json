@@ -1,6 +1,12 @@
-﻿{
+{
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://break-cash-api-production.up.railway.app/api/$1" },
-    { "source": "/uploads/(.*)", "destination": "https://break-cash-api-production.up.railway.app/uploads/$1" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://break-cash-api-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://break-cash-api-production.up.railway.app/uploads/:path*"
+    }
   ]
 }
