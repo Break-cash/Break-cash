@@ -22,9 +22,9 @@ export async function scheduleVerificationIfEligible(db, userId) {
     db,
     `UPDATE users
      SET verification_status = 'pending',
-         verification_ready_at = datetime('now', ?)
+        verification_ready_at = CURRENT_TIMESTAMP + (? || ' minutes')::interval
      WHERE id = ?`,
-    [`+${delayMinutes} minutes`, userId],
+    [String(delayMinutes), userId],
   )
   return delayMinutes
 }

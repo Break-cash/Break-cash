@@ -4,9 +4,10 @@ import { type AuthUser, updateMyProfile, uploadAvatar, uploadKyc } from '../api'
 type ProfilePageProps = {
   onLogout: () => void
   user: AuthUser
+  onProfileRefresh?: () => Promise<void> | void
 }
 
-export function ProfilePage({ onLogout, user }: ProfilePageProps) {
+export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePageProps) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url || null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [fullName, setFullName] = useState({
@@ -70,13 +71,15 @@ export function ProfilePage({ onLogout, user }: ProfilePageProps) {
       }
 
       if (avatarFile) {
-        await uploadAvatar(avatarFile)
+        const res = await uploadAvatar(avatarFile)
+        setAvatarPreview(res.profile.avatar_url || null)
       }
 
       if (idCardFile && selfieFile) {
         await uploadKyc(idCardFile, selfieFile)
       }
 
+      await onProfileRefresh?.()
       setSuccess('تم حفظ التغييرات بنجاح.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'تعذر حفظ التغييرات.')

@@ -151,6 +151,13 @@ button {
   font-size: 13px;
 }
 
+.avatar-circle-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 .user-meta {
   display: flex;
   flex-direction: column;
@@ -214,6 +221,13 @@ button {
   justify-content: center;
   font-size: 12px;
   line-height: 1;
+}
+
+.top-profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .top-profile-meta {
@@ -665,6 +679,50 @@ button {
 
 .change.negative {
   color: #ff4d4d;
+}
+
+.market-candles-card {
+  padding: 10px 10px 6px;
+}
+
+.market-candles-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.market-candles-intervals {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.market-itv-btn {
+  border-radius: 999px;
+  border: 1px solid #25304a;
+  background: #0f1423;
+  color: #9aa3b9;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.market-itv-btn.active {
+  color: #e9fff3;
+  border-color: #2fce7f;
+  background: rgba(47, 206, 127, 0.14);
+}
+
+.market-candles-chart {
+  width: 100%;
+  height: 300px;
+}
+
+.market-row-active {
+  background: rgba(0, 230, 118, 0.12) !important;
+  border-inline-start: 2px solid #2fce7f;
 }
 
 .text-muted {
@@ -2195,7 +2253,7 @@ button {
   .mobile-bottom-nav {
     position: fixed;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
     inset-inline: 10px;
     bottom: calc(8px + env(safe-area-inset-bottom));
@@ -2211,10 +2269,40 @@ button {
     min-height: 44px;
     border-radius: 10px;
     display: inline-flex;
+    position: relative;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     color: #8e97a8;
-    font-size: 11px;
+    font-size: 10px;
+    gap: 1px;
+    padding-top: 2px;
+  }
+
+  .mobile-bottom-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .mobile-bottom-label {
+    line-height: 1.05;
+    text-align: center;
+  }
+
+  .mobile-bottom-new {
+    position: absolute;
+    top: -7px;
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff3eb;
+    border: 1px solid rgba(255, 126, 69, 0.95);
+    background: linear-gradient(135deg, #ff6d2d, #ff3b30);
+    box-shadow: 0 4px 10px rgba(255, 79, 41, 0.35);
+    white-space: nowrap;
   }
 
   .mobile-bottom-item.active {

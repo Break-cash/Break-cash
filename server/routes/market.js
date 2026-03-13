@@ -1,43 +1,59 @@
 import { Router } from 'express'
+import { createMarketFeed } from '../services/marketFeed.js'
 
-const marketRows = [
-  { symbol: 'BTCUSDC', price: 69969.87, change24h: -1.91, volume: 124567890 },
-  { symbol: 'ETHUSDC', price: 2033.45, change24h: -2.22, volume: 89456712 },
-  { symbol: 'ADAUSDC', price: 0.260409, change24h: -4.09, volume: 15678234 },
-  { symbol: 'SOLUSDC', price: 137.22, change24h: 5.22, volume: 34456789 },
-  { symbol: 'XRPUSDC', price: 0.56, change24h: 2.43, volume: 44567891 },
-]
+const marketFeed = createMarketFeed()
 
 export function createMarketRouter() {
   const router = Router()
 
   router.get('/quotes', async (_req, res) => {
-    return res.json({ items: marketRows, refreshedAt: new Date().toISOString() })
+    return res.json(marketFeed.getQuotes())
   })
 
   router.get('/search', async (req, res) => {
-    const q = String(req.query.q || '').toUpperCase().trim()
-    const items = q ? marketRows.filter((row) => row.symbol.includes(q)) : marketRows
+    const items = marketFeed.search(req.query.q)
     return res.json({ items })
   })
 
   router.get('/overview', async (_req, res) => {
-    const gainers = [...marketRows].sort((a, b) => b.change24h - a.change24h).slice(0, 3)
-    const losers = [...marketRows].sort((a, b) => a.change24h - b.change24h).slice(0, 3)
-    return res.json({ gainers, losers, refreshedAt: new Date().toISOString() })
+    return res.json(marketFeed.getOverview())
   })
 
   router.get('/pair/:symbol', async (req, res) => {
-    const symbol = String(req.params.symbol || '').toUpperCase()
-    const pair = marketRows.find((row) => row.symbol === symbol)
-    if (!pair) return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
-    return res.json({
-      pair,
-      candles: [
-        { t: '1', o: pair.price * 0.99, h: pair.price * 1.01, l: pair.price * 0.98, c: pair.price },
-        { t: '2', o: pair.price, h: pair.price * 1.02, l: pair.price * 0.99, c: pair.price * 1.01 },
-      ],
-    })
+    const data = marketFeed.getPair(req.params.symbol)
+    if (!data) return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
+    return res.json(data)
+  })
+
+  router.get('/candles', async (req, res) => {
+    const symbol = String(req.query.symbol || 'BTCUSDT').toUpperCase().trim()
+    const interval = String(req.query.interval || '1m').trim()
+    const limit = Math.min(Math.max(Number(req.query.limit || 120), 20), 500)
+
+    const allowedIntervals = new Set(['1m', '5m', '15m', '1h', '4h', '1d'])
+    if (!allowedIntervals.has(interval)) {
+      return res.status(400).json({ error: 'INVALID_INTERVAL' })
+    }
+
+    const endpoint =
+      `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}` +
+      `&interval=${encodeURIComponent(interval)}&limit=${limit}`
+
+    try {
+      const r = await fetch(endpoint)
+      if (!r.ok) return res.status(502).json({ error: 'UPSTREAM_FAILED' })
+      const rows = await r.json()
+      const candles = rows.map((row) => ({
+        time: Math.floor(Number(row[0]) / 1000),
+        open: Number(row[1]),
+        high: Number(row[2]),
+        low: Number(row[3]),
+        close: Number(row[4]),
+      }))
+      return res.json({ symbol, interval, candles, refreshedAt: new Date().toISOString() })
+    } catch {
+      return res.status(502).json({ error: 'UPSTREAM_UNREACHABLE' })
+    }
   })
 
   return router

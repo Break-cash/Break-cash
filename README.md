@@ -1,73 +1,62 @@
-# React + TypeScript + Vite
+# BREAK CASH Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Trading web app with React/Vite frontend and Express/PostgreSQL backend.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. Create `.env` from `.env.example`.
+2. Install dependencies:
+   - `npm install`
+3. Start API:
+   - `npm run dev:server`
+4. Start frontend:
+   - `npm run dev`
 
-## React Compiler
+## Required environment variables
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `OWNER_EMAIL`
+- `OWNER_PASSWORD`
 
-## Expanding the ESLint configuration
+## Optional production integrations
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 1) Sentry (errors + tracing)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Backend:
+  - `SENTRY_DSN`
+  - `SENTRY_TRACES_SAMPLE_RATE` (e.g. `0.1`)
+- Frontend:
+  - `VITE_SENTRY_DSN`
+  - `VITE_SENTRY_TRACES_SAMPLE_RATE` (e.g. `0.1`)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Notes:
+- Backend captures uncaught route/bootstrap errors.
+- Frontend captures runtime errors and API 5xx signals.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 2) Password reset delivery channels
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- SMS (Twilio):
+  - `TWILIO_ACCOUNT_SID`
+  - `TWILIO_AUTH_TOKEN`
+  - `TWILIO_FROM_NUMBER`
+- Email (SMTP):
+  - `SMTP_HOST`
+  - `SMTP_PORT`
+  - `SMTP_USER`
+  - `SMTP_PASS`
+  - `SMTP_FROM`
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+If these values are not provided, reset delivery falls back to `mock` mode in development.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 3) Uptime monitoring probes
+
+Available health endpoints:
+- `GET /api/health/live` (process liveness)
+- `GET /api/health/ready` (DB readiness)
+- `GET /api/health` (DB latency + uptime)
+- `GET /api/health/ping` (optional token-guarded monitor endpoint)
+
+Optional token guard:
+- Set `UPTIME_PING_TOKEN`
+- Probe URL: `/api/health/ping?token=YOUR_TOKEN`

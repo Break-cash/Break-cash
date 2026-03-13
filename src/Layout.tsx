@@ -30,7 +30,7 @@ export function Layout({
   const location = useLocation()
   const navigate = useNavigate()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
+  const [, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState<
     { id: number; title: string; body: string; is_read: number }[]
   >([])
@@ -138,7 +138,11 @@ export function Layout({
         <div className="sidebar-footer">
           <div className="user-chip">
             <div className="avatar-circle">
-              {String(user.id).slice(-2)}
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt="Profile" className="avatar-circle-img" />
+              ) : (
+                String(user.id).slice(-2)
+              )}
             </div>
             <div className="user-meta">
               <div className="user-id">UID: {user.id}</div>
@@ -170,13 +174,16 @@ export function Layout({
               aria-label={t('profile_menu_title')}
             >
               <span className="top-profile-avatar" aria-hidden="true">
-                👤
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt="Profile" className="top-profile-avatar-img" />
+                ) : (
+                  '👤'
+                )}
               </span>
               <span className="top-profile-title">حسابي</span>
             </button>
             <button className="top-notifications-btn" type="button" onClick={toggleNotifications}>
               <span className="top-notifications-icon">🔔</span>
-              {unreadCount > 0 && <span className="top-notifications-dot" />}
             </button>
             <InstallPrompt />
           </div>

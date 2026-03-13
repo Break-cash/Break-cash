@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/react'
+
 export type AuthUser = {
   id: number
   role: 'user' | 'moderator' | 'admin' | 'owner'
@@ -36,6 +38,10 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   ALREADY_FRIENDS: 'Already friends.',
   REQUEST_EXISTS: 'Request already sent or exists.',
   INSUFFICIENT_BALANCE: 'Insufficient balance.',
+  CODE_NOT_FOUND: 'Verification code not found.',
+  CODE_ALREADY_USED: 'Verification code already used.',
+  CODE_EXPIRED: 'Verification code expired.',
+  CODE_INVALID: 'Invalid verification code.',
 }
 
 export function getToken() {
@@ -53,7 +59,13 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(path, { ...init, headers })
+  let res: Response
+  try {
+    res = await fetch(path, { ...init, headers })
+  } catch (error) {
+    Sentry.captureException(error)
+    throw error
+  }
   const contentType = res.headers.get('content-type') || ''
   const body = contentType.includes('application/json') ? await res.json() : await res.text()
 
@@ -61,6 +73,9 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     const code = typeof body === 'object' && body && 'error' in body ? String(body.error) : 'REQUEST_FAILED'
     const serverMsg = typeof body === 'object' && body && 'message' in body ? String(body.message) : ''
     const msg = API_ERROR_MESSAGES[code] || serverMsg || code
+    if (res.status >= 500) {
+      Sentry.captureMessage(`API ${res.status} at ${path}: ${msg}`)
+    }
     throw new Error(msg)
   }
 
@@ -90,6 +105,24 @@ export async function registerWithInvite(
     method: 'POST',
     body: JSON.stringify({ identifier, password, inviteCode }),
   }) as Promise<{ token: string; user: AuthUser }>
+}
+
+export async function sendForgotPasswordCode(identifier: string) {
+  return apiFetch('/api/auth/forgot-password/send-code', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
+  }) as Promise<{ ok: boolean; mode: 'masked' | 'mock' | 'twilio' | 'smtp'; dev_code?: string }>
+}
+
+export async function resetForgotPassword(payload: {
+  identifier: string
+  code: string
+  newPassword: string
+}) {
+  return apiFetch('/api/auth/forgot-password/reset', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean }>
 }
 
 export async function getCurrentUser() {

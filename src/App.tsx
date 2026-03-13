@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import * as Sentry from '@sentry/react'
 import { getCurrentUser, getToken, setToken, type AuthUser } from './api'
 import { I18nProvider } from './i18n'
 import { Layout } from './Layout'
@@ -20,6 +21,7 @@ const WatchlistPage = lazy(() =>
 )
 const FuturesPage = lazy(() => import('./pages/FuturesPage').then((m) => ({ default: m.FuturesPage })))
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })))
+const MiningPage = lazy(() => import('./pages/MiningPage').then((m) => ({ default: m.MiningPage })))
 const DepositPage = lazy(() => import('./pages/DepositPage').then((m) => ({ default: m.DepositPage })))
 const FriendsPage = lazy(() => import('./pages/FriendsPage').then((m) => ({ default: m.FriendsPage })))
 const AdminUsersPage = lazy(() =>
@@ -81,6 +83,14 @@ function App() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    if (!user) {
+      Sentry.setUser(null)
+      return
+    }
+    Sentry.setUser({ id: String(user.id), username: user.display_name || undefined, role: user.role })
+  }, [user])
+
   const isAuthenticated = !!user
   const canManageUsers = useMemo(
     () => user?.role === 'owner' || user?.role === 'admin' || user?.role === 'moderator',
@@ -100,6 +110,11 @@ function App() {
   function handleLogout() {
     setToken(null)
     setUser(null)
+  }
+
+  async function refreshCurrentUser() {
+    const res = await getCurrentUser()
+    setUser(res.user)
   }
 
   if (loading) return <div className="login-wrapper">Loading...</div>
@@ -160,9 +175,16 @@ function App() {
                     <Route path="/market" element={<Market />} />
                     <Route path="/watchlist" element={<WatchlistPage />} />
                     <Route path="/futures" element={<FuturesPage />} />
+                    <Route path="/mining" element={<MiningPage />} />
                     <Route
                       path="/profile"
-                      element={<ProfilePage onLogout={handleLogout} user={user as AuthUser} />}
+                      element={(
+                        <ProfilePage
+                          onLogout={handleLogout}
+                          user={user as AuthUser}
+                          onProfileRefresh={refreshCurrentUser}
+                        />
+                      )}
                     />
                     <Route path="/sync" element={<SyncTrade />} />
                     <Route path="/options" element={<Options />} />

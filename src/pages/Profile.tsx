@@ -27,6 +27,7 @@ export function Profile() {
   const [totalProfit, setTotalProfit] = useState(0)
   const [demoRunning, setDemoRunning] = useState(true)
   const [demoActivity, setDemoActivity] = useState<DemoActivity[]>([])
+  const [liveQuotes, setLiveQuotes] = useState<Record<string, { price: number; change24h: number }>>({})
 
   useEffect(() => {
     Promise.allSettled([getMyProfile(), apiFetch('/api/balance/my'), apiFetch('/api/portfolio/holdings')])
@@ -45,6 +46,30 @@ export function Profile() {
         }
       })
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    async function loadQuotes() {
+      const res = (await apiFetch('/api/market/quotes')) as {
+        items: { symbol: string; price: number; change24h: number }[]
+      }
+      if (!active) return
+      const next: Record<string, { price: number; change24h: number }> = {}
+      for (const item of res.items) {
+        const base = item.symbol.replace(/USDT$/i, '')
+        next[base] = { price: Number(item.price || 0), change24h: Number(item.change24h || 0) }
+      }
+      setLiveQuotes(next)
+    }
+    loadQuotes().catch(() => {})
+    const id = window.setInterval(() => {
+      loadQuotes().catch(() => {})
+    }, 2500)
+    return () => {
+      active = false
+      window.clearInterval(id)
+    }
   }, [])
 
   function addDemoActivity() {
@@ -75,12 +100,17 @@ export function Profile() {
   )
   const dashboardBalance = realBalance ?? walletDashboardMock.total_balance_usd
   const assetsToRender = useMemo(() => {
-    if (holdings.length === 0) return walletDashboardMock.my_assets
     return walletDashboardMock.my_assets.map((item) => {
       const found = holdings.find((holding) => holding.symbol === item.symbol)
-      return { ...item, balance: found?.quantity || 0 }
+      const quote = liveQuotes[item.symbol]
+      return {
+        ...item,
+        price_usd: quote?.price ?? item.price_usd,
+        change_24h_percent: quote?.change24h ?? item.change_24h_percent,
+        balance: holdings.length === 0 ? item.balance : found?.quantity || 0,
+      }
     })
-  }, [holdings])
+  }, [holdings, liveQuotes])
 
   const isOwner = profile?.role === 'owner'
 

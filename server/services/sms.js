@@ -17,7 +17,24 @@ export async function sendPhoneCodeSms(toPhone, code) {
   }
 
   await client.messages.create({
-    body: `Break cash verification code: ${code}`,
+    body: `BREAK CASH verification code: ${code}`,
+    from,
+    to: toPhone,
+  })
+  return { mode: 'twilio' }
+}
+
+export async function sendPasswordResetSms(toPhone, code) {
+  const from = process.env.TWILIO_FROM_NUMBER
+  const client = getTwilioClient()
+
+  if (!client || !from) {
+    // Development fallback when Twilio is not configured.
+    return { mode: 'mock', code }
+  }
+
+  await client.messages.create({
+    body: `BREAK CASH password reset code: ${code}`,
     from,
     to: toPhone,
   })

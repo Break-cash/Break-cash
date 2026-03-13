@@ -1,7 +1,11 @@
 import { Router } from 'express'
+import crypto from 'node:crypto'
+import path from 'node:path'
 import { hashPassword, signToken, verifyPassword } from '../auth.js'
 import { get, run } from '../db.js'
 import { requireApproved, requireAuth } from '../middleware/auth.js'
+import { sendPasswordResetEmail } from '../services/email.js'
+import { sendPasswordResetSms } from '../services/sms.js'
 import { refreshVerificationStatus } from '../services/verification.js'
 
 const asyncRoute = (handler) => async (req, res) => {
@@ -10,6 +14,22 @@ const asyncRoute = (handler) => async (req, res) => {
   } catch (error) {
     console.error('[auth-route-error]', error)
     return res.status(500).json({ error: 'SERVER_ERROR', message: 'Authentication service failed.' })
+  }
+}
+
+function toPublicAvatarPath(avatarPath) {
+  if (!avatarPath) return null
+  const rel = path.relative(path.join(process.cwd(), 'server'), avatarPath).replaceAll('\\', '/')
+  return `/uploads/${rel.replace(/^uploads\//, '')}`
+}
+
+function toSafeUser(user) {
+  const isOwner = user.role === 'owner'
+  return {
+    ...user,
+    avatar_url: toPublicAvatarPath(user.avatar_path),
+    email: isOwner ? user.email : null,
+    phone: isOwner ? user.phone : null,
   }
 }
 
@@ -59,15 +79,20 @@ export function createAuthRouter(db) {
       `INSERT INTO users (
         email, phone, password_hash, role, is_approved, is_banned,
         verification_status, phone_verified, identity_submitted, blue_badge, vip_level
-      ) VALUES (?, ?, ?, 'user', ?, 0, 'unverified', 0, 0, 0, 0)`,
+      ) VALUES (?, ?, ?, 'user', ?, 0, 'unverified', 0, 0, 0, 0)
+      RETURNING id`,
       [email, phone, passwordHash, approved],
     )
+    const createdUserId = Number(result.rows?.[0]?.id)
+    if (!createdUserId) {
+      return res.status(500).json({ error: 'SERVER_ERROR', message: 'Failed to create user.' })
+    }
 
     if (inviteCode) {
       await run(
         db,
         `UPDATE invites SET used_by = ?, used_at = datetime('now'), is_active = 0 WHERE code = ?`,
-        [result.lastID, inviteCode],
+        [createdUserId, inviteCode],
       )
     }
 
@@ -79,15 +104,10 @@ export function createAuthRouter(db) {
         phone_verified, identity_submitted, verification_ready_at
        FROM users
        WHERE id = ? LIMIT 1`,
-      [result.lastID],
+      [createdUserId],
     )
     const token = signToken({ sub: user.id, role: user.role })
-    const isOwner = user.role === 'owner'
-    const safeUser = {
-      ...user,
-      email: isOwner ? user.email : null,
-      phone: isOwner ? user.phone : null,
-    }
+    const safeUser = toSafeUser(user)
     return res.status(201).json({ token, user: safeUser })
   }))
 
@@ -132,12 +152,7 @@ export function createAuthRouter(db) {
     )
 
     const token = signToken({ sub: user.id, role: user.role })
-    const isOwner = freshUser.role === 'owner'
-    const safeUser = {
-      ...freshUser,
-      email: isOwner ? freshUser.email : null,
-      phone: isOwner ? freshUser.phone : null,
-    }
+    const safeUser = toSafeUser(freshUser)
     return res.json({
       token,
       user: safeUser,
@@ -155,13 +170,85 @@ export function createAuthRouter(db) {
        FROM users WHERE id = ? LIMIT 1`,
       [req.user.id],
     )
-    const isOwner = user.role === 'owner'
-    const safeUser = {
-      ...user,
-      email: isOwner ? user.email : null,
-      phone: isOwner ? user.phone : null,
-    }
+    const safeUser = toSafeUser(user)
     return res.json({ user: safeUser })
+  }))
+
+  router.post('/forgot-password/send-code', asyncRoute(async (req, res) => {
+    const identifier = String(req.body?.identifier || '').trim()
+    if (!identifier) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const isEmail = identifier.includes('@')
+    const user = await get(
+      db,
+      isEmail
+        ? `SELECT id, email, phone FROM users WHERE email = ? LIMIT 1`
+        : `SELECT id, email, phone FROM users WHERE phone = ? LIMIT 1`,
+      [identifier],
+    )
+
+    // Do not leak whether account exists.
+    if (!user) return res.json({ ok: true, mode: 'masked' })
+
+    const code = String(Math.floor(100000 + Math.random() * 900000))
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex')
+    const channel = isEmail ? 'email' : 'phone'
+
+    await run(
+      db,
+      `INSERT INTO password_reset_codes (user_id, identifier, channel, code_hash, expires_at)
+       VALUES (?, ?, ?, ?, (CURRENT_TIMESTAMP + INTERVAL '10 minutes'))`,
+      [user.id, identifier, channel, codeHash],
+    )
+
+    const delivery = isEmail
+      ? await sendPasswordResetEmail(identifier, code)
+      : await sendPasswordResetSms(identifier, code)
+
+    return res.json({
+      ok: true,
+      mode: delivery.mode,
+      dev_code: delivery.mode === 'mock' ? code : undefined,
+    })
+  }))
+
+  router.post('/forgot-password/reset', asyncRoute(async (req, res) => {
+    const identifier = String(req.body?.identifier || '').trim()
+    const code = String(req.body?.code || '').trim()
+    const newPassword = String(req.body?.newPassword || '')
+    if (!identifier || !code || newPassword.length < 6) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+
+    const isEmail = identifier.includes('@')
+    const user = await get(
+      db,
+      isEmail
+        ? `SELECT id FROM users WHERE email = ? LIMIT 1`
+        : `SELECT id FROM users WHERE phone = ? LIMIT 1`,
+      [identifier],
+    )
+    if (!user) return res.status(400).json({ error: 'CODE_INVALID' })
+
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex')
+    const row = await get(
+      db,
+      `SELECT id
+       FROM password_reset_codes
+       WHERE user_id = ?
+         AND identifier = ?
+         AND code_hash = ?
+         AND used_at IS NULL
+         AND expires_at > CURRENT_TIMESTAMP
+       ORDER BY id DESC LIMIT 1`,
+      [user.id, identifier, codeHash],
+    )
+    if (!row) return res.status(400).json({ error: 'CODE_INVALID' })
+
+    const passwordHash = await hashPassword(newPassword)
+    await run(db, `UPDATE users SET password_hash = ? WHERE id = ?`, [passwordHash, user.id])
+    await run(db, `UPDATE password_reset_codes SET used_at = CURRENT_TIMESTAMP WHERE id = ?`, [row.id])
+    return res.json({ ok: true })
   }))
 
   router.get('/me/approved', requireAuth(db), requireApproved(), async (req, res) => {
