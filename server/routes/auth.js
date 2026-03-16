@@ -41,7 +41,7 @@ function createReferralCode() {
   return `BC${part}`
 }
 
-async function getUniqueReferralCode(db) {
+export async function getUniqueReferralCode(db) {
   for (let i = 0; i < 8; i += 1) {
     const code = createReferralCode()
     const exists = await get(db, `SELECT id FROM users WHERE referral_code = ? LIMIT 1`, [code])

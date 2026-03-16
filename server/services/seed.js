@@ -1,5 +1,6 @@
-import { get, run } from '../db.js'
+import { all, get, run } from '../db.js'
 import { hashPassword } from '../auth.js'
+import { getUniqueReferralCode } from '../routes/auth.js'
 
 export async function ensureBaseSeed(db) {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@excorex.local'
@@ -37,5 +38,32 @@ export async function ensureBaseSeed(db) {
   const setting = await get(db, `SELECT id FROM settings WHERE key = 'wallet_link' LIMIT 1`)
   if (!setting) {
     await run(db, `INSERT INTO settings (key, value) VALUES ('wallet_link', ?)`, [walletLink])
+  }
+
+  await backfillReferralCodes(db)
+}
+
+/** إضافة رابط وكود الإحالة للحسابات القديمة التي لا تملكه */
+async function backfillReferralCodes(db) {
+  const usersWithoutCode = await all(
+    db,
+    `SELECT id FROM users WHERE referral_code IS NULL OR TRIM(COALESCE(referral_code, '')) = '' ORDER BY id`,
+    [],
+  )
+  if (usersWithoutCode.length === 0) return
+  let updated = 0
+  for (const row of usersWithoutCode) {
+    const userId = Number(row.id)
+    if (!userId) continue
+    try {
+      const code = await getUniqueReferralCode(db)
+      await run(db, `UPDATE users SET referral_code = ? WHERE id = ?`, [code, userId])
+      updated += 1
+    } catch (err) {
+      console.warn(`[seed] Failed to backfill referral code for user ${userId}:`, err?.message || err)
+    }
+  }
+  if (updated > 0) {
+    console.log(`[seed] Backfilled referral codes for ${updated} user(s)`)
   }
 }
