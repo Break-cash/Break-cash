@@ -15,10 +15,10 @@ export function MobileBottomNav() {
   const defaultNavItems = useMemo(
     () => [
       { id: 'home', to: '/portfolio', label: t('nav_home'), icon: 'house', isFab: false },
-      { id: 'tasks', to: '/futures', label: t('nav_tasks'), icon: 'bcmark', isFab: true },
+      { id: 'tasks', to: '/futures', label: t('nav_tasks'), icon: 'candlestick', isFab: true },
       { id: 'mining', to: '/mining', label: t('nav_mining'), icon: 'pickaxe', isFab: false },
       { id: 'assets', to: '/assets', label: t('wallet_assets'), icon: 'wallet', isFab: false },
-      { id: 'markets', to: '/market', label: t('nav_markets'), icon: 'chart', isFab: false },
+      { id: 'markets', to: '/market', label: t('nav_markets'), icon: 'candlestick', isFab: false },
     ],
     [t],
   )
@@ -63,7 +63,7 @@ export function MobileBottomNav() {
           {effectiveNavItems.map((item) => {
             const isActive = location.pathname.startsWith(item.to)
             const isFab = Boolean(item.isFab)
-            const Icon = item.icon !== 'bcmark' ? iconById[item.icon as keyof typeof iconById] : null
+            const Icon = iconById[item.icon as keyof typeof iconById] ?? null
             return (
               <Link
                 key={`${item.id}-${item.to}`}
@@ -85,19 +85,23 @@ export function MobileBottomNav() {
                         }`
                   }`}
                 >
-                  {isFab ? (
+                  {isFab && Icon ? (
+                    <Icon
+                      size={28}
+                      strokeWidth={1.8}
+                      className={isActive ? 'text-white' : 'text-white/75'}
+                    />
+                  ) : isFab ? (
                     <span className="crypto-bottom-nav-bcmark" aria-hidden="true">
                       BC
                     </span>
-                  ) : (
-                    Icon ? (
-                      <Icon
-                        size={24}
-                        strokeWidth={1.8}
-                        className={isActive ? 'text-white' : 'text-white/75'}
-                      />
-                    ) : null
-                  )}
+                  ) : Icon ? (
+                    <Icon
+                      size={24}
+                      strokeWidth={1.8}
+                      className={isActive ? 'text-white' : 'text-white/75'}
+                    />
+                  ) : null}
                 </span>
                 {isActive && !isFab ? (
                   <span className="mb-1 mt-2 h-1 w-5 rounded-full bg-brand-blue/80" />

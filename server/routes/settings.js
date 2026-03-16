@@ -81,8 +81,8 @@ export function createSettingsRouter(db) {
 
   const DEFAULT_MOBILE_NAV_CONFIG = [
     { id: 'assets', to: '/assets', label: 'Assets', icon: 'wallet', isFab: false },
-    { id: 'markets', to: '/market', label: 'Markets', icon: 'chart', isFab: false },
-    { id: 'tasks', to: '/futures', label: 'Tasks', icon: 'bcmark', isFab: true },
+    { id: 'markets', to: '/market', label: 'Markets', icon: 'candlestick', isFab: false },
+    { id: 'tasks', to: '/futures', label: 'Tasks', icon: 'candlestick', isFab: true },
     { id: 'mining', to: '/mining', label: 'Mining', icon: 'pickaxe', isFab: false },
     { id: 'home', to: '/portfolio', label: 'Home', icon: 'house', isFab: false },
   ]
