@@ -1,0 +1,121 @@
+import { useEffect, useMemo, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { getLogoUrl } from '../../api'
+
+type PremiumSplashIntroProps = {
+  onComplete: () => void
+}
+
+export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
+  const prefersReducedMotion = useReducedMotion()
+  const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
+  const [logoBroken, setLogoBroken] = useState(false)
+  // Keep splash visible long enough on all devices,
+  // including users with reduced motion enabled.
+  const totalMs = prefersReducedMotion ? 3000 : 3600
+
+  useEffect(() => {
+    let mounted = true
+    getLogoUrl()
+      .then((res) => {
+        if (!mounted) return
+        const value = String(res.logoUrl || '').trim()
+        if (value) setLogoUrl(value)
+      })
+      .catch(() => {
+        // Keep fallback logo path.
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => onComplete(), totalMs)
+    return () => window.clearTimeout(timer)
+  }, [onComplete, totalMs])
+
+  const arcDuration = useMemo(() => (prefersReducedMotion ? 0 : 7.5), [prefersReducedMotion])
+  const sweepDuration = prefersReducedMotion ? 0 : 0.95
+  const pulseDuration = prefersReducedMotion ? 0 : 0.9
+
+  return (
+    <motion.div
+      className="premium-splash"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.45, ease: 'easeOut' } }}
+      transition={{ duration: 0.45, ease: 'easeOut' }}
+    >
+      <motion.div
+        className="premium-splash-glow"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.82 }}
+        transition={{ duration: prefersReducedMotion ? 0.2 : 0.7, delay: prefersReducedMotion ? 0 : 0.2 }}
+      />
+      <motion.div
+        className="premium-splash-texture"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: prefersReducedMotion ? 0.2 : 0.8, delay: prefersReducedMotion ? 0 : 0.35 }}
+      />
+
+      <div className="premium-splash-center">
+        <div className="premium-splash-arcs-wrap" aria-hidden>
+          <motion.span
+            className="premium-splash-arc arc-outer"
+            animate={prefersReducedMotion ? {} : { rotate: 360 }}
+            transition={
+              prefersReducedMotion
+                ? undefined
+                : { duration: arcDuration, repeat: Infinity, repeatType: 'loop', ease: 'linear' }
+            }
+          />
+          <motion.span
+            className="premium-splash-arc arc-inner"
+            animate={prefersReducedMotion ? {} : { rotate: -360 }}
+            transition={
+              prefersReducedMotion
+                ? undefined
+                : { duration: arcDuration * 0.92, repeat: Infinity, repeatType: 'loop', ease: 'linear' }
+            }
+          />
+        </div>
+
+        <motion.div
+          className="premium-splash-logo-shell"
+          initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: prefersReducedMotion ? 0.2 : 0.9, delay: prefersReducedMotion ? 0 : 0.75 }}
+        >
+          <div className="premium-splash-logo-stage">
+            <img
+              className="premium-splash-logo"
+              src={logoBroken ? '/break-cash-logo-premium.png' : logoUrl}
+              alt="BREAK CASH"
+              decoding="async"
+              loading="eager"
+              onError={() => setLogoBroken(true)}
+            />
+            {!prefersReducedMotion ? (
+              <>
+                <motion.span
+                  className="premium-splash-metal-sweep"
+                  initial={{ x: '-130%' }}
+                  animate={{ x: '140%' }}
+                  transition={{ duration: sweepDuration, delay: 1.45, ease: 'easeInOut' }}
+                />
+                <motion.span
+                  className="premium-splash-energy-pulse"
+                  initial={{ opacity: 0, x: '-110%' }}
+                  animate={{ opacity: [0, 0.9, 0], x: '110%' }}
+                  transition={{ duration: pulseDuration, delay: 1.85, ease: 'easeInOut' }}
+                />
+              </>
+            ) : null}
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  )
+}

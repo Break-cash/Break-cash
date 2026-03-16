@@ -4,6 +4,13 @@ import { Router } from 'express'
 import multer from 'multer'
 import { get, run } from '../db.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
+import {
+  PROFILE_BADGE_VALUES,
+  PROFILE_COLOR_VALUES,
+  isAllowedProfileBadge,
+  isAllowedProfileColor,
+  normalizeNullableEnum,
+} from '../services/premium-identity.js'
 import { sendPhoneCodeSms } from '../services/sms.js'
 import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../services/verification.js'
 
@@ -39,6 +46,22 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 })
 
+async function handleSingleUpload(req, res, fieldName) {
+  await new Promise((resolve, reject) => {
+    upload.single(fieldName)(req, res, (error) => {
+      if (error) return reject(error)
+      return resolve(null)
+    })
+  }).catch((error) => {
+    if (error && typeof error === 'object' && 'code' in error) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'FILE_TOO_LARGE' })
+      }
+    }
+    return res.status(400).json({ error: 'UPLOAD_FAILED' })
+  })
+}
+
 function toPublicPath(absPath) {
   const rel = path.relative(path.join(process.cwd(), 'server'), absPath).replaceAll('\\', '/')
   return `/uploads/${rel.replace(/^uploads\//, '')}`
@@ -49,8 +72,12 @@ function normalizeProfile(row) {
   return {
     ...row,
     avatar_url: row.avatar_path ? toPublicPath(row.avatar_path) : null,
-    badge_color: Number(row.blue_badge) === 1 ? 'blue' : row.verification_status === 'verified' ? 'green' : 'orange',
+    badge_color: Number(row.blue_badge) === 1 ? 'blue' : row.verification_status === 'verified' ? 'gold' : 'none',
   }
+}
+
+function canExposeDevCode() {
+  return String(process.env.ALLOW_DEV_CODE || '').trim() === '1'
 }
 
 async function fetchProfile(db, userId) {
@@ -58,9 +85,10 @@ async function fetchProfile(db, userId) {
   const row = await get(
     db,
     `SELECT
-      id, email, phone, role, is_approved, is_banned, created_at,
-      display_name, avatar_path, verification_status, blue_badge, vip_level,
-      phone_verified, identity_submitted, verification_ready_at
+      id, email, phone, role, is_approved, is_banned, is_frozen, created_at,
+      display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+      phone_verified, identity_submitted, verification_ready_at,
+      referral_code, invited_by, referred_by, total_deposit, points, is_owner
      FROM users WHERE id = ? LIMIT 1`,
     [userId],
   )
@@ -86,27 +114,56 @@ export function createProfileRouter(db) {
     const hasEmail = Object.prototype.hasOwnProperty.call(req.body || {}, 'email')
     const hasPhone = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone')
     const hasDisplayName = Object.prototype.hasOwnProperty.call(req.body || {}, 'displayName')
+    const hasBio = Object.prototype.hasOwnProperty.call(req.body || {}, 'bio')
 
     const email = hasEmail ? (String(req.body?.email || '').trim() || null) : current.email
     const phone = hasPhone ? (String(req.body?.phone || '').trim() || null) : current.phone
     const displayName = hasDisplayName
       ? String(req.body?.displayName || '').trim() || null
       : current.display_name || null
+    const bio = hasBio
+      ? String(req.body?.bio || '').trim().slice(0, 120) || null
+      : current.bio || null
 
     await run(
       db,
-      `UPDATE users SET email = ?, phone = ?, display_name = ? WHERE id = ?`,
-      [email, phone, displayName, req.user.id],
+      `UPDATE users SET email = ?, phone = ?, display_name = ?, bio = ? WHERE id = ?`,
+      [email, phone, displayName, bio, req.user.id],
     )
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ profile })
   }))
 
-  router.post('/avatar', upload.single('avatar'), asyncRoute(async (req, res) => {
+  router.post('/avatar', asyncRoute(async (req, res) => {
+    await handleSingleUpload(req, res, 'avatar')
+    if (res.headersSent) return
     if (!req.file) return res.status(400).json({ error: 'FILE_REQUIRED' })
+    const mime = String(req.file.mimetype || '').toLowerCase()
+    if (!mime.startsWith('image/')) {
+      return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
+    }
     await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [req.file.path, req.user.id])
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ ok: true, profile })
+  }))
+
+  router.post('/avatar/user', requireRole('owner'), asyncRoute(async (req, res) => {
+    await handleSingleUpload(req, res, 'avatar')
+    if (res.headersSent) return
+    const userId = Number(req.body?.userId)
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+    if (!req.file) return res.status(400).json({ error: 'FILE_REQUIRED' })
+    const mime = String(req.file.mimetype || '').toLowerCase()
+    if (!mime.startsWith('image/')) {
+      return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
+    }
+
+    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [req.file.path, userId])
+    const user = await fetchProfile(db, userId)
+    if (!user) return res.status(404).json({ error: 'NOT_FOUND' })
+    return res.json({ ok: true, user })
   }))
 
   router.post(
@@ -123,8 +180,8 @@ export function createProfileRouter(db) {
 
       await run(
         db,
-        `INSERT INTO kyc_submissions (user_id, id_document_path, selfie_path, status)
-         VALUES (?, ?, ?, 'pending')`,
+        `INSERT INTO kyc_submissions (user_id, id_document_path, selfie_path, review_status, auto_review_at)
+         VALUES (?, ?, ?, 'pending', NULL)`,
         [req.user.id, idDoc.path, selfie.path],
       )
       await run(
@@ -157,7 +214,11 @@ export function createProfileRouter(db) {
     )
 
     const smsResult = await sendPhoneCodeSms(phone, code)
-    return res.json({ ok: true, mode: smsResult.mode, dev_code: smsResult.mode === 'mock' ? smsResult.code : undefined })
+    return res.json({
+      ok: true,
+      mode: smsResult.mode,
+      dev_code: canExposeDevCode() && smsResult.mode === 'mock' ? smsResult.code : undefined,
+    })
   }))
 
   router.post('/verify-phone-code', asyncRoute(async (req, res) => {
@@ -196,13 +257,31 @@ export function createProfileRouter(db) {
     return res.json({ ok: true, delay_minutes: delay, profile })
   }))
 
-  // صلاحية خاصة: المالك فقط يمنح/يسحب الشارة الزرقاء
+  // صلاحية خاصة: المالك فقط يمنح/يسحب الشارات الاحترافية (زرقاء/ذهبية)
   router.post('/badge/blue', requireRole('owner'), asyncRoute(async (req, res) => {
     const userId = Number(req.body?.userId)
     const enabled = Number(req.body?.enabled) ? 1 : 0
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
 
     await run(db, `UPDATE users SET blue_badge = ? WHERE id = ?`, [enabled, userId])
+    const row = await fetchProfile(db, userId)
+    return res.json({ ok: true, user: row })
+  }))
+
+  router.post('/badge/style', requireRole('owner'), asyncRoute(async (req, res) => {
+    const userId = Number(req.body?.userId)
+    const style = String(req.body?.style || 'none').trim().toLowerCase()
+    if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
+    if (!['none', 'blue', 'gold'].includes(style)) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    if (style === 'blue') {
+      await run(db, `UPDATE users SET blue_badge = 1, verification_status = 'verified' WHERE id = ?`, [userId])
+    } else if (style === 'gold') {
+      await run(db, `UPDATE users SET blue_badge = 0, verification_status = 'verified' WHERE id = ?`, [userId])
+    } else {
+      await run(db, `UPDATE users SET blue_badge = 0, verification_status = 'unverified' WHERE id = ?`, [userId])
+    }
+
     const row = await fetchProfile(db, userId)
     return res.json({ ok: true, user: row })
   }))
@@ -216,6 +295,57 @@ export function createProfileRouter(db) {
     }
 
     await run(db, `UPDATE users SET vip_level = ? WHERE id = ?`, [vipLevel, userId])
+    const row = await fetchProfile(db, userId)
+    return res.json({ ok: true, user: row })
+  }))
+
+  router.get('/premium-identity/options', requireRole('owner'), asyncRoute(async (_req, res) => {
+    return res.json({
+      profileColors: PROFILE_COLOR_VALUES,
+      profileBadges: PROFILE_BADGE_VALUES,
+    })
+  }))
+
+  router.post('/premium-identity', requireRole('owner'), asyncRoute(async (req, res) => {
+    const userId = Number(req.body?.userId)
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'INVALID_USER' })
+    }
+    const hasProfileColor = Object.prototype.hasOwnProperty.call(req.body || {}, 'profileColor')
+    const hasProfileBadge = Object.prototype.hasOwnProperty.call(req.body || {}, 'profileBadge')
+    if (!hasProfileColor && !hasProfileBadge) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+
+    const currentUser = await get(
+      db,
+      `SELECT id, profile_color, profile_badge FROM users WHERE id = ? LIMIT 1`,
+      [userId],
+    )
+    if (!currentUser) return res.status(404).json({ error: 'NOT_FOUND' })
+
+    let nextProfileColor = currentUser.profile_color
+    let nextProfileBadge = currentUser.profile_badge
+
+    if (hasProfileColor) {
+      nextProfileColor = normalizeNullableEnum(req.body?.profileColor)
+      if (nextProfileColor !== null && !isAllowedProfileColor(nextProfileColor)) {
+        return res.status(400).json({ error: 'INVALID_PROFILE_COLOR' })
+      }
+    }
+    if (hasProfileBadge) {
+      nextProfileBadge = normalizeNullableEnum(req.body?.profileBadge)
+      if (nextProfileBadge !== null && !isAllowedProfileBadge(nextProfileBadge)) {
+        return res.status(400).json({ error: 'INVALID_PROFILE_BADGE' })
+      }
+    }
+
+    await run(
+      db,
+      `UPDATE users SET profile_color = ?, profile_badge = ? WHERE id = ?`,
+      [nextProfileColor, nextProfileBadge, userId],
+    )
+
     const row = await fetchProfile(db, userId)
     return res.json({ ok: true, user: row })
   }))

@@ -44,7 +44,7 @@ export function WatchlistPage() {
         <div className="captcha-row">
           <input
             className="field-input"
-            placeholder="BTCUSDC"
+            placeholder="BTCUSDT"
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
           />

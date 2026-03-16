@@ -55,7 +55,9 @@ export function createPortfolioRouter(db) {
     if (!symbol) return res.status(400).json({ error: 'INVALID_INPUT' })
     await run(
       db,
-      `INSERT OR IGNORE INTO watchlist (user_id, symbol, market_type) VALUES (?, ?, ?)`,
+      `INSERT INTO watchlist (user_id, symbol, market_type)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, symbol) DO NOTHING`,
       [req.user.id, symbol, marketType],
     )
     return res.json({ ok: true })

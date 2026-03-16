@@ -49,7 +49,7 @@ export type WalletDashboardModel = {
 }
 
 export const futuresTradingMock: FuturesTradingModel = {
-  pair: 'BTCUSDC',
+  pair: 'BTCUSDT',
   contract_type: 'Perpetual',
   current_price: 89572.1,
   price_change_percent: -0.6,
@@ -72,7 +72,7 @@ export const futuresTradingMock: FuturesTradingModel = {
     order_types: ['Limit', 'Market', 'Stop Limit'],
     selected_type: 'Limit',
     available_balance: 0,
-    currency: 'USDC',
+    currency: 'USDT',
   },
 }
 

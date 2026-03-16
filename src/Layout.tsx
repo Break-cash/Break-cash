@@ -1,9 +1,26 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { apiFetch, type AuthUser } from './api'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  Bell,
+  Globe2,
+  House,
+  Search,
+  Shield,
+  User,
+  UserCircle2,
+  Wallet,
+  X,
+} from 'lucide-react'
+import { apiFetch, getHeaderIconConfig, type AuthUser, type HeaderIconConfigItem } from './api'
 import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
+import { UserIdentityBadges } from './components/user/UserIdentityBadges'
 import { type Language, useI18n } from './i18nCore'
+import { getPremiumProfileColorClass } from './premiumIdentity'
 
 type LayoutProps = {
   children: ReactNode
@@ -19,7 +36,7 @@ type LayoutProps = {
 export function Layout({
   children,
   user,
-  onLogout: _onLogout,
+  onLogout,
   canManageUsers,
   canManageInvites,
   canManageBalances,
@@ -30,35 +47,120 @@ export function Layout({
   const location = useLocation()
   const navigate = useNavigate()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [, setUnreadCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [headerIcons, setHeaderIcons] = useState<HeaderIconConfigItem[]>([
+    { id: 'search', visible: true },
+    { id: 'language', visible: true },
+    { id: 'notifications', visible: true },
+    { id: 'profile', visible: true },
+  ])
   const [notifications, setNotifications] = useState<
     { id: number; title: string; body: string; is_read: number }[]
   >([])
-  const baseLinks = [
-    { title: t('nav_wallet'), route: '/portfolio' },
-    { title: t('nav_friends'), route: '/friends' },
-    { title: t('nav_markets'), route: '/market' },
-    { title: t('nav_watchlist'), route: '/watchlist' },
-    { title: t('nav_futures'), route: '/futures' },
-    { title: t('nav_profile'), route: '/profile' },
-  ]
-
+  const [avatarBroken, setAvatarBroken] = useState(false)
+  const [avatarRetryNonce, setAvatarRetryNonce] = useState(0)
+  const [avatarFailureCount, setAvatarFailureCount] = useState(0)
+  const profileMenuRef = useRef<HTMLDivElement | null>(null)
   const adminLinks = [
     canViewReports ? { title: t('nav_admin'), route: '/admin/dashboard' } : null,
-    canManageUsers ? { title: 'Users', route: '/admin/users' } : null,
-    canManageInvites ? { title: 'Invites', route: '/admin/invites' } : null,
-    canManageBalances ? { title: 'Balances', route: '/admin/balances' } : null,
-    canManagePermissions ? { title: 'Permissions', route: '/admin/permissions' } : null,
+    canManageUsers ? { title: t('admin_users'), route: '/admin/users' } : null,
+    canManageInvites ? { title: t('admin_invites'), route: '/admin/invites' } : null,
+    canManageBalances ? { title: t('admin_balances'), route: '/admin/balances' } : null,
+    canManagePermissions ? { title: t('admin_permissions'), route: '/admin/permissions' } : null,
   ].filter(Boolean) as { title: string; route: string }[]
 
   const isOwner = user.role === 'owner'
-  const ownerLink = isOwner ? { title: t('nav_owner'), route: '/owner' } : null
+  const ownerLinks = isOwner
+    ? [
+        { title: t('nav_owner'), route: '/owner' },
+        { title: t('owner_quick_operations'), route: '/owner/operations' },
+      ]
+    : []
+  const utilityLinks = [...ownerLinks, ...adminLinks].filter(Boolean) as { title: string; route: string }[]
 
   useEffect(() => {
     apiFetch('/api/notifications/unreadCount')
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
       .catch(() => setUnreadCount(0))
   }, [])
+
+  useEffect(() => {
+    getHeaderIconConfig()
+      .then((res) => {
+        if (Array.isArray(res.items) && res.items.length === 4) setHeaderIcons(res.items)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!profileMenuRef.current) return
+      if (!profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  useEffect(() => {
+    // Reset fallback state when user updates avatar.
+    setAvatarBroken(false)
+    setAvatarRetryNonce(0)
+    setAvatarFailureCount(0)
+  }, [user.avatar_url])
+
+  function retryAvatarLoad() {
+    if (!user.avatar_url) return
+    setAvatarBroken(false)
+    setAvatarRetryNonce((prev) => prev + 1)
+  }
+
+  function resolveAvatarSrc(url: string) {
+    if (!url) return ''
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}retry=${avatarRetryNonce}`
+  }
+
+  function handleAvatarLoadSuccess() {
+    if (avatarBroken) setAvatarBroken(false)
+    if (avatarFailureCount !== 0) setAvatarFailureCount(0)
+  }
+
+  function handleAvatarLoadError() {
+    setAvatarFailureCount((prev) => prev + 1)
+    if (avatarRetryNonce < 4) {
+      setAvatarRetryNonce((prev) => prev + 1)
+      return
+    }
+    setAvatarBroken(true)
+  }
+
+  useEffect(() => {
+    if (!avatarBroken || !user.avatar_url) return
+    const delay = Math.min(15000, 1500 * Math.max(1, avatarFailureCount))
+    const id = window.setTimeout(() => {
+      retryAvatarLoad()
+    }, delay)
+    return () => window.clearTimeout(id)
+  }, [avatarBroken, avatarFailureCount, user.avatar_url])
+
+  useEffect(() => {
+    if (!user.avatar_url) return
+    function handleRecoverableNetworkState() {
+      if (!avatarBroken) return
+      retryAvatarLoad()
+    }
+    window.addEventListener('online', handleRecoverableNetworkState)
+    window.addEventListener('focus', handleRecoverableNetworkState)
+    return () => {
+      window.removeEventListener('online', handleRecoverableNetworkState)
+      window.removeEventListener('focus', handleRecoverableNetworkState)
+    }
+  }, [avatarBroken, user.avatar_url])
 
   async function toggleNotifications() {
     const next = !notificationsOpen
@@ -70,158 +172,389 @@ export function Layout({
     setNotifications(res.notifications)
   }
 
+  const showBackButton = !['/portfolio', '/home', '/'].includes(location.pathname)
+  const effectiveHeaderIcons = headerIcons.length === 4
+    ? headerIcons
+    : [
+      { id: 'search', visible: true },
+      { id: 'language', visible: true },
+      { id: 'notifications', visible: true },
+      { id: 'profile', visible: true },
+    ]
+  const computedBadgeColor = Number(user.blue_badge || 0) === 1
+    ? 'blue'
+    : user.verification_status === 'verified'
+      ? 'gold'
+      : 'none'
+  const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
+  const profileIconVisible = effectiveHeaderIcons.some((item) => item.id === 'profile' && item.visible)
+  const showUtilityLinksInHeader = utilityLinks.length > 0 && location.pathname !== '/portfolio'
+  const desktopQuickLinks = [
+    { to: '/portfolio', label: t('nav_home'), icon: House },
+    { to: '/market', label: t('nav_markets'), icon: BarChart3 },
+    { to: '/assets', label: t('wallet_assets'), icon: Wallet },
+    { to: '/friends', label: t('nav_friends'), icon: User },
+    { to: '/profile', label: t('nav_profile'), icon: UserCircle2 },
+  ]
+
   return (
-    <div className="app-root" dir={direction}>
-      <aside className="sidebar">
-        <div className="logo-area">
-          <div className="logo-circle">
-            <img
-              src="/logo-bc.png"
-              alt="Break cash"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </div>
-          <div>
-            <div className="logo-title">ExCoreX</div>
-            <div className="logo-sub">Digital Trading Platform</div>
-          </div>
-        </div>
+    <div dir={direction} className="min-h-[100dvh] overflow-x-clip bg-app-bg text-white">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[linear-gradient(180deg,rgba(19,23,32,0.96),rgba(16,19,27,0.88))] pt-[max(6px,env(safe-area-inset-top))] shadow-[0_8px_26px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+        <div className="mx-auto w-full max-w-[1280px] px-3 pb-2 pt-1 lg:px-6 lg:pb-2 lg:pt-1.5">
+          <div className={`flex items-center justify-between gap-2.5 ${direction === 'rtl' ? 'flex-row-reverse' : ''}`}>
+            <div className="flex min-w-0 items-center gap-2">
+              {profileIconVisible ? (
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    className={`icon-interactive liquid-glass-icon flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-brand-blue/45 shadow-[0_0_0_1px_rgba(0,123,255,0.18)] focus:outline-none focus:ring-2 focus:ring-brand-blue/35 ${premiumProfileColorClass}`}
+                    type="button"
+                    onClick={() => setProfileMenuOpen((v) => !v)}
+                    aria-label={t('profile_menu_title')}
+                  >
+                    {user.avatar_url && !avatarBroken ? (
+                      <img
+                        src={resolveAvatarSrc(user.avatar_url)}
+                        alt={t('nav_profile')}
+                        className="h-full w-full object-cover"
+                        onLoad={handleAvatarLoadSuccess}
+                        onError={handleAvatarLoadError}
+                      />
+                    ) : (
+                      <UserCircle2 size={20} className="text-white/85" />
+                    )}
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {profileMenuOpen ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                        transition={{ duration: 0.16, ease: 'easeOut' }}
+                        className="absolute start-0 top-14 z-50 min-w-44 rounded-xl border border-white/10 bg-[#202632] p-2 shadow-[0_16px_32px_rgba(0,0,0,0.45)]"
+                      >
+                        <div className="mb-1 rounded-lg border border-app-border bg-app-elevated px-3 py-2">
+                          <div className="truncate text-sm font-semibold text-white">{user.display_name || `#${user.id}`}</div>
+                          <UserIdentityBadges
+                            badgeColor={computedBadgeColor}
+                            vipLevel={user.vip_level || 0}
+                            premiumBadge={user.profile_badge}
+                            mode="verified"
+                            className="mt-1"
+                          />
+                        </div>
+                        {utilityLinks.length > 0 ? (
+                          <div className="mb-1 space-y-1">
+                            {utilityLinks.map((item) => (
+                              <button
+                                key={`menu-${item.route}`}
+                                type="button"
+                                className="w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-app-elevated"
+                                onClick={() => {
+                                  setProfileMenuOpen(false)
+                                  navigate(item.route)
+                                }}
+                              >
+                                {item.title}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-app-elevated"
+                          onClick={() => {
+                            setProfileMenuOpen(false)
+                            navigate('/profile')
+                          }}
+                        >
+                          {t('nav_profile')}
+                        </button>
+                        <button
+                          type="button"
+                          className="mt-1 w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-[#2a3342]"
+                          onClick={() => {
+                            setProfileMenuOpen(false)
+                            onLogout()
+                          }}
+                        >
+                          {t('logout') || 'Logout'}
+                        </button>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              ) : null}
 
-        <nav className="menu">
-          {baseLinks.map((item) => (
-            <Link
-              key={item.route}
-              to={item.route}
-              className={
-                location.pathname === item.route
-                  ? 'menu-item menu-item-active'
-                  : 'menu-item'
-              }
-            >
-              <span className="menu-icon" aria-hidden="true">
-                •
-              </span>
-              <span>{item.title}</span>
-            </Link>
-          ))}
-          {adminLinks.length > 0 && <div className="logo-sub">{t('nav_admin')}</div>}
-          {adminLinks.map((item) => (
-            <Link
-              key={item.route}
-              to={item.route}
-              className={
-                location.pathname === item.route ? 'menu-item menu-item-active' : 'menu-item'
-              }
-            >
-              <span className="menu-icon" aria-hidden="true">
-                •
-              </span>
-              <span>{item.title}</span>
-            </Link>
-          ))}
-          {ownerLink && (
-            <>
-              <div className="logo-sub">{t('nav_owner')}</div>
-              <Link
-                to={ownerLink.route}
-                className={
-                  location.pathname === ownerLink.route ? 'menu-item menu-item-active menu-item-owner' : 'menu-item menu-item-owner'
-                }
-              >
-                <span className="menu-icon" aria-hidden="true">★</span>
-                <span>{ownerLink.title}</span>
-              </Link>
-            </>
-          )}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="user-chip">
-            <div className="avatar-circle">
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt="Profile" className="avatar-circle-img" />
+              {showBackButton ? (
+                <button
+                  className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/50 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  aria-label={t('back')}
+                >
+                  {direction === 'rtl' ? <ArrowRight size={17} /> : <ArrowLeft size={17} />}
+                </button>
               ) : (
-                String(user.id).slice(-2)
+                <div className="h-10 w-10" aria-hidden="true" />
               )}
             </div>
-            <div className="user-meta">
-              <div className="user-id">UID: {user.id}</div>
-              <div className="user-email">{user.email || user.phone || t('contact_hidden')}</div>
+
+            <div className="flex items-center gap-1.5 rounded-2xl border border-white/10 bg-[#1b212d]/84 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+              {effectiveHeaderIcons.map((item) => {
+                if (!item.visible) return null
+                if (item.id === 'profile') return null
+                if (item.id === 'search') {
+                  if (searchOpen) return null
+                  return (
+                    <button
+                      key="search"
+                      className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
+                      type="button"
+                      onClick={() => setSearchOpen(true)}
+                      aria-label={t('search_actions')}
+                    >
+                      <Search size={17} />
+                    </button>
+                  )
+                }
+                if (item.id === 'language') {
+                  return (
+                    <label key="language" className="liquid-glass-icon inline-flex h-10 items-center gap-1.5 rounded-full px-2 text-[11px] text-white/65">
+                      <Globe2 size={13} />
+                      <select
+                        className="h-7 rounded-full border border-white/10 bg-[#202733] px-2 text-xs text-white outline-none focus:border-brand-blue"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value as Language)}
+                        aria-label={t('language')}
+                      >
+                        <option value="ar">AR</option>
+                        <option value="en">EN</option>
+                        <option value="tr">TR</option>
+                      </select>
+                    </label>
+                  )
+                }
+                if (item.id === 'notifications') {
+                  return (
+                    <button
+                      key="notifications"
+                      className="icon-interactive liquid-glass-icon relative flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
+                      type="button"
+                      onClick={toggleNotifications}
+                      aria-label={t('notifications')}
+                    >
+                      <Bell size={17} />
+                      {unreadCount > 0 ? (
+                        <span className="absolute -end-0.5 -top-0.5 min-w-[17px] rounded-full border border-[#1f2228] bg-brand-blue px-1 text-center text-[10px] font-semibold leading-4 text-white">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                }
+                return null
+              })}
             </div>
           </div>
-        </div>
-      </aside>
 
-      <main className="main-area">
-        <header className="top-bar">
-          <div className="top-actions">
-            <label className="lang-select-wrap" aria-label={t('language')}>
-              <span>{t('language')}</span>
-              <select
-                className="lang-select"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as Language)}
+          <AnimatePresence initial={false}>
+            {searchOpen ? (
+              <motion.div
+                initial={{ opacity: 0, y: -6, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, y: -6, height: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="overflow-hidden"
               >
-                <option value="ar">AR</option>
-                <option value="en">EN</option>
-                <option value="tr">TR</option>
-              </select>
-            </label>
-            <button
-              className="top-profile-trigger"
-              type="button"
-              onClick={() => navigate('/profile')}
-              aria-label={t('profile_menu_title')}
-            >
-              <span className="top-profile-avatar" aria-hidden="true">
-                {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="Profile" className="top-profile-avatar-img" />
-                ) : (
-                  '👤'
-                )}
-              </span>
-              <span className="top-profile-title">حسابي</span>
-            </button>
-            <button className="top-notifications-btn" type="button" onClick={toggleNotifications}>
-              <span className="top-notifications-icon">🔔</span>
-            </button>
-            <InstallPrompt />
-          </div>
-        </header>
-        {notificationsOpen && (
-          <div className="card notifications-panel">
-            {notifications.length === 0 ? (
-              <div className="text-muted">{t('no_notifications')}</div>
-            ) : (
-              notifications.map((item) => (
-                <div className="table-row" key={item.id}>
-                  <span>{item.title}</span>
-                  <span>{item.body}</span>
-                  <button
-                    className="link-btn"
-                    type="button"
-                    onClick={async () => {
-                      await apiFetch('/api/notifications/markAsRead', {
-                        method: 'POST',
-                        body: JSON.stringify({ id: item.id }),
-                      })
-                      setNotifications((rows) =>
-                        rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
-                      )
-                      setUnreadCount((value) => (value > 0 ? value - 1 : 0))
-                    }}
-                  >
-                    {t('mark_read')}
-                  </button>
+                <div className="mt-2 rounded-2xl border border-app-border bg-app-card p-2">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-white/40">
+                      <Search size={15} />
+                    </span>
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder={t('wallet_search')}
+                      className="h-10 w-full rounded-full border border-app-border bg-app-elevated ps-10 pe-10 text-sm text-white placeholder:text-app-muted/80 outline-none transition focus:border-brand-blue focus:shadow-[0_0_0_3px_rgba(0,123,255,0.2)]"
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 end-2 inline-flex items-center text-white/60 hover:text-white"
+                      onClick={() => setSearchOpen(false)}
+                      aria-label={t('close_search')}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex gap-2 overflow-x-auto">
+                    <button
+                      type="button"
+                      className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+                      onClick={() => navigate('/market')}
+                    >
+                      {t('nav_markets')}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+                      onClick={() => navigate('/futures')}
+                    >
+                      {t('nav_futures')}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+                      onClick={() => navigate('/friends')}
+                    >
+                      {t('nav_friends')}
+                    </button>
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
-        )}
-        <div className="content">{children}</div>
-        <MobileBottomNav />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+
+          {showUtilityLinksInHeader ? (
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {utilityLinks.map((item) => (
+                <Link
+                  key={item.route}
+                  to={item.route}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${
+                    location.pathname === item.route
+                      ? 'border border-brand-blue/60 bg-brand-blue/22 text-white shadow-[0_0_0_1px_rgba(0,123,255,0.22)]'
+                      : 'border border-white/10 bg-[#242a34] text-white/85 hover:bg-[#2d3542]'
+                  }`}
+                >
+                  <Shield size={11} />
+                  {item.title}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-[1280px] px-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-10">
+        <AnimatePresence initial={false}>
+          {notificationsOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="mb-3 rounded-2xl border border-app-border bg-app-card p-3"
+            >
+              {notifications.length === 0 ? (
+                <div className="text-sm text-white/55">{t('no_notifications')}</div>
+              ) : (
+                <div className="space-y-2">
+                  {notifications.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-3 rounded-xl border border-app-border bg-app-elevated p-2"
+                    >
+                      <div>
+                        <div className="text-sm font-medium">{item.title}</div>
+                        <div className="text-xs text-white/60">{item.body}</div>
+                      </div>
+                      <button
+                      className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
+                        type="button"
+                        onClick={async () => {
+                          await apiFetch('/api/notifications/markAsRead', {
+                            method: 'POST',
+                            body: JSON.stringify({ id: item.id }),
+                          })
+                          setNotifications((rows) =>
+                            rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
+                          )
+                          setUnreadCount((value) => (value > 0 ? value - 1 : 0))
+                        }}
+                      >
+                        {t('mark_read')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-4">
+          <aside className="hidden lg:block">
+            <div className="sticky top-[96px] space-y-3">
+              <div className="rounded-2xl border border-app-border bg-app-card p-3">
+                <div className="flex items-center gap-2">
+                  <div className={`h-11 w-11 overflow-hidden rounded-full border border-app-border bg-app-elevated ${premiumProfileColorClass}`}>
+                    {user.avatar_url && !avatarBroken ? (
+                      <img
+                        src={resolveAvatarSrc(user.avatar_url)}
+                        alt={t('nav_profile')}
+                        className="h-full w-full object-cover"
+                        onLoad={handleAvatarLoadSuccess}
+                        onError={handleAvatarLoadError}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-white/70">
+                        <UserCircle2 size={18} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white">
+                      {user.display_name || `#${user.id}`}
+                    </div>
+                    <UserIdentityBadges
+                      badgeColor={computedBadgeColor}
+                      vipLevel={user.vip_level || 0}
+                      premiumBadge={user.profile_badge}
+                      mode="verified"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-app-border bg-app-card p-2.5">
+                <div className="space-y-1">
+                  {desktopQuickLinks.map((item) => {
+                    const Icon = item.icon
+                    const isActive = location.pathname.startsWith(item.to)
+                    return (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={`group flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition ${
+                          isActive
+                            ? 'border border-brand-blue/45 bg-brand-blue/15 text-white shadow-[0_0_0_1px_rgba(0,123,255,0.2)]'
+                            : 'border border-transparent text-white/75 hover:border-app-border hover:bg-app-elevated'
+                        }`}
+                      >
+                        <span
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition ${
+                            isActive
+                              ? 'border-brand-blue/45 bg-brand-blue/18 text-white'
+                              : 'border-white/10 bg-[#2a303c] text-white/80 group-hover:border-white/20'
+                          }`}
+                        >
+                          <Icon size={14} />
+                        </span>
+                        <span>{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </aside>
+          <div className="min-w-0">{children}</div>
+        </div>
       </main>
+      <InstallPrompt />
+      <div className="lg:hidden">
+        <MobileBottomNav />
+      </div>
     </div>
   )
 }
-

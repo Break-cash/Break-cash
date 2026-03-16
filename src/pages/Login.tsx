@@ -1,36 +1,55 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  apiFetch,
+  getLogoUrl,
+  getLoginLogoVariant,
   login,
   registerAccount,
   registerWithInvite,
-  resetForgotPassword,
-  sendForgotPasswordCode,
   setToken,
+  submitRecoveryCodeReviewRequest,
 } from '../api'
-import { useI18n } from '../i18nCore'
+import { useI18n, type Language } from '../i18nCore'
 
 type LoginProps = {
   onAuthSuccess?: () => void
 }
 
 export function Login({ onAuthSuccess }: LoginProps) {
-  const { t } = useI18n()
+  const { t, language, setLanguage } = useI18n()
+  const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
+  const [logoVariant, setLogoVariant] = useState<'a' | 'b'>('a')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
-  // نجعل وضع إنشاء الحساب هو الافتراضي عند فتح الصفحة
-  const [isRegister, setIsRegister] = useState(true)
+  // Keep sign-in as default primary action.
+  const [isRegister, setIsRegister] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
-  const [walletLink, setWalletLink] = useState('')
-  const [forgotMode, setForgotMode] = useState(false)
-  const [forgotIdentifier, setForgotIdentifier] = useState('')
-  const [forgotCode, setForgotCode] = useState('')
-  const [forgotPassword, setForgotPassword] = useState('')
-  const [codeSent, setCodeSent] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [recoverySuccess, setRecoverySuccess] = useState<string | null>(null)
+  const [logoBroken, setLogoBroken] = useState(false)
+  const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
+  const [recoveryCode, setRecoveryCode] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+    Promise.all([getLogoUrl(), getLoginLogoVariant()])
+      .then(([logoRes, variantRes]) => {
+        if (!mounted) return
+        const value = String(logoRes.logoUrl || '').trim()
+        if (value) setLogoUrl(value)
+        setLogoVariant(variantRes.variant === 'b' ? 'b' : 'a')
+      })
+      .catch(() => {
+        // Keep fallback logo path.
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,54 +83,23 @@ export function Login({ onAuthSuccess }: LoginProps) {
     }
   }
 
-  async function onSendForgotCode() {
-    const trimmed = forgotIdentifier.trim()
-    setError(null)
-    setSuccessMsg(null)
-    if (!trimmed) {
-      setError(t('login_identifier_ph'))
+  async function onRecoveryRequestSubmit() {
+    setRecoveryError(null)
+    setRecoverySuccess(null)
+    const code = recoveryCode.trim().toUpperCase()
+    if (!code) {
+      setRecoveryError(t('login_recovery_request_validation'))
       return
     }
-    setLoading(true)
+    setRecoveryLoading(true)
     try {
-      const res = await sendForgotPasswordCode(trimmed)
-      setCodeSent(true)
-      setSuccessMsg(
-        res.mode === 'mock' && res.dev_code
-          ? `${t('login_reset_code_sent')} (${res.dev_code})`
-          : t('login_reset_code_sent'),
-      )
+      await submitRecoveryCodeReviewRequest(code)
+      setRecoverySuccess(t('login_recovery_request_success'))
+      setRecoveryCode('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('login_unknown_error'))
+      setRecoveryError(err instanceof Error ? err.message : t('login_unknown_error'))
     } finally {
-      setLoading(false)
-    }
-  }
-
-  async function onResetPassword() {
-    setError(null)
-    setSuccessMsg(null)
-    if (!forgotIdentifier.trim() || !forgotCode.trim() || forgotPassword.length < 6) {
-      setError(t('login_reset_validation'))
-      return
-    }
-    setLoading(true)
-    try {
-      await resetForgotPassword({
-        identifier: forgotIdentifier.trim(),
-        code: forgotCode.trim(),
-        newPassword: forgotPassword,
-      })
-      setForgotMode(false)
-      setCodeSent(false)
-      setPassword('')
-      setForgotCode('')
-      setForgotPassword('')
-      setSuccessMsg(t('login_reset_success'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('login_unknown_error'))
-    } finally {
-      setLoading(false)
+      setRecoveryLoading(false)
     }
   }
 
@@ -119,100 +107,99 @@ export function Login({ onAuthSuccess }: LoginProps) {
     <div className="login-wrapper">
       <div className="login-card">
         <div className="login-header">
+          <div className={`login-premium-brand ${logoVariant === 'b' ? 'variant-b' : 'variant-a'}`} aria-hidden>
+            <div className="login-premium-brand-shell">
+              <span className="login-premium-arc arc-a" />
+              <span className="login-premium-arc arc-b" />
+              <div className="login-premium-logo-wrap">
+                <img
+                  src={logoBroken ? '/break-cash-logo-premium.png' : logoUrl}
+                  alt="BREAK CASH"
+                  className="login-premium-logo"
+                  decoding="async"
+                  loading="eager"
+                  onError={() => setLogoBroken(true)}
+                />
+                <span className="login-premium-sweep" />
+              </div>
+            </div>
+            <div className="login-premium-brand-text">BREAK CASH</div>
+            <div className="login-premium-brand-sub">{t('header_trading_platform')}</div>
+          </div>
+          <div className="login-lang-switch" role="group" aria-label={t('language')}>
+            {(['ar', 'en', 'tr'] as Language[]).map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                className={`login-lang-btn ${language === lang ? 'active' : ''}`}
+                onClick={() => setLanguage(lang)}
+                aria-pressed={language === lang}
+              >
+                {lang.toUpperCase()}
+              </button>
+            ))}
+          </div>
           <div className="login-badge">{t('login_badge')}</div>
           <h1 className="login-title">{t('login_title')}</h1>
           <p className="login-subtitle">{t('login_subtitle')}</p>
         </div>
 
         <form className="login-form" onSubmit={onSubmit}>
-          {forgotMode ? (
+          <label className="login-field">
+            <span className="field-label">{t('login_identifier')}</span>
+            <small className="field-hint">{t('login_identifier_hint')}</small>
+            <input
+              type="text"
+              className="field-input"
+              placeholder={t('login_identifier_ph')}
+              autoComplete="username"
+              inputMode="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              aria-label={t('login_identifier')}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+            />
+          </label>
+
+          <label className="login-field">
+            <span className="field-label">{t('login_password')}</span>
+            <div className="field-input field-input-with-icon">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="field-input-inner"
+                placeholder={t('login_password_ph')}
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                aria-label={t('login_password')}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="field-icon-btn"
+                aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
+                aria-pressed={showPassword}
+                title={showPassword ? t('login_hide_password') : t('login_show_password')}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                👁
+              </button>
+            </div>
+          </label>
+
+          {isRegister ? (
             <label className="login-field">
-              <span className="field-label">{t('login_identifier')}</span>
+              <span className="field-label">{t('login_invite')}</span>
               <input
                 type="text"
                 className="field-input"
-                placeholder={t('login_identifier_ph')}
-                autoComplete="username"
-                value={forgotIdentifier}
-                onChange={(e) => setForgotIdentifier(e.target.value)}
+                placeholder={t('login_invite_ph')}
+                autoComplete="off"
+                aria-label={t('login_invite')}
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
               />
             </label>
-          ) : (
-            <>
-              <label className="login-field">
-                <span className="field-label">{t('login_identifier')}</span>
-                <input
-                  type="text"
-                  className="field-input"
-                  placeholder={t('login_identifier_ph')}
-                  autoComplete="username"
-                  inputMode="email"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                />
-              </label>
-
-              <label className="login-field">
-                <span className="field-label">{t('login_password')}</span>
-                <div className="field-input field-input-with-icon">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="field-input-inner"
-                    placeholder={t('login_password_ph')}
-                    autoComplete={isRegister ? 'new-password' : 'current-password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="field-icon-btn"
-                    aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
-                    onClick={() => setShowPassword((v) => !v)}
-                  >
-                    👁
-                  </button>
-                </div>
-              </label>
-
-              {isRegister ? (
-                <label className="login-field">
-                  <span className="field-label">{t('login_invite')}</span>
-                  <input
-                    type="text"
-                    className="field-input"
-                    placeholder={t('login_invite_ph')}
-                    autoComplete="off"
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                  />
-                </label>
-              ) : null}
-            </>
-          )}
-
-          {forgotMode && codeSent ? (
-            <>
-              <label className="login-field">
-                <span className="field-label">{t('login_reset_code')}</span>
-                <input
-                  type="text"
-                  className="field-input"
-                  placeholder={t('login_reset_code_ph')}
-                  value={forgotCode}
-                  onChange={(e) => setForgotCode(e.target.value)}
-                />
-              </label>
-              <label className="login-field">
-                <span className="field-label">{t('login_reset_new_password')}</span>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="field-input"
-                  placeholder={t('login_password_ph')}
-                  value={forgotPassword}
-                  onChange={(e) => setForgotPassword(e.target.value)}
-                />
-              </label>
-            </>
           ) : null}
 
           {error ? (
@@ -222,86 +209,75 @@ export function Login({ onAuthSuccess }: LoginProps) {
           ) : null}
           {successMsg ? <div className="login-success">{successMsg}</div> : null}
 
-          {forgotMode ? (
-            <>
-              {!codeSent ? (
-                <button type="button" className="login-submit" disabled={loading} onClick={onSendForgotCode}>
-                  {loading ? t('login_signin_loading') : t('login_reset_send_code')}
-                </button>
-              ) : (
-                <button type="button" className="login-submit" disabled={loading} onClick={onResetPassword}>
-                  {loading ? t('login_signin_loading') : t('login_reset_submit')}
-                </button>
-              )}
-            </>
-          ) : (
-            <button type="submit" className="login-submit" disabled={loading}>
-              {loading
-                ? isRegister
-                  ? t('login_register_loading')
-                  : t('login_signin_loading')
-                : isRegister
-                ? t('login_register')
-                : t('login_signin')}
-            </button>
-          )}
-
-          <details className="login-secondary">
-            <summary>{t('login_more_options')}</summary>
-            <label className="login-field">
-              <span className="field-label">{t('login_verification_code')}</span>
-              <div className="captcha-row">
-                <input type="text" className="field-input" placeholder={t('login_verification_ph')} />
-                <div className="captcha-box" aria-label={t('login_verification_code')}>
-                  <span>S</span>
-                  <span>K</span>
-                  <span>T</span>
-                  <span>V</span>
-                </div>
-              </div>
-            </label>
-            <button
-              type="button"
-              className="link-btn login-wallet-link-btn"
-              onClick={() => {
-                apiFetch('/api/settings/wallet-link')
-                  .then((res) => {
-                    const value = (res as { walletLink?: string }).walletLink || t('login_wallet_link_empty')
-                    setWalletLink(value)
-                  })
-                  .catch(() => setWalletLink(t('login_wallet_link_failed')))
-              }}
-            >
-              {t('login_wallet_link_show')}
-            </button>
-            {walletLink ? <div className="login-success">{walletLink}</div> : null}
-          </details>
+          <button type="submit" className="login-submit" disabled={loading}>
+            {loading
+              ? isRegister
+                ? t('login_register_loading')
+                : t('login_signin_loading')
+              : isRegister
+              ? t('login_register')
+              : t('login_signin')}
+          </button>
+          <p className="login-primary-hint">{t('login_primary_action_hint')}</p>
 
           <div className="login-footer-links">
+            {!isRegister ? (
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setRecoveryError(null)
+                  setRecoverySuccess(null)
+                  setShowRecoveryRequest((v) => !v)
+                }}
+              >
+                {showRecoveryRequest ? t('login_recovery_request_close') : t('login_recovery_request_open')}
+              </button>
+            ) : null}
             <button
               type="button"
               className="link-btn"
               onClick={() => {
                 setError(null)
                 setSuccessMsg(null)
-                setForgotMode((v) => !v)
-                setCodeSent(false)
-              }}
-            >
-              {forgotMode ? t('login_back_signin') : t('login_forgot_password')}
-            </button>
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                setError(null)
-                setSuccessMsg(null)
+                setRecoveryError(null)
+                setRecoverySuccess(null)
+                setShowRecoveryRequest(false)
                 setIsRegister((v) => !v)
               }}
             >
               {isRegister ? t('login_have_account') : t('login_create_account')}
             </button>
           </div>
+          {!isRegister && showRecoveryRequest ? (
+            <div className="mt-3 rounded-xl border border-app-border bg-app-elevated p-3">
+              <label className="login-field">
+                <span className="field-label">{t('login_recovery_request_label')}</span>
+                <small className="field-hint">{t('login_recovery_request_hint')}</small>
+                <input
+                  type="text"
+                  className="field-input"
+                  placeholder={t('login_recovery_request_ph')}
+                  autoComplete="off"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  aria-label={t('login_recovery_request_label')}
+                  value={recoveryCode}
+                  onChange={(e) => setRecoveryCode(e.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="login-submit mt-2"
+                disabled={recoveryLoading}
+                onClick={onRecoveryRequestSubmit}
+              >
+                {recoveryLoading ? t('login_recovery_request_loading') : t('login_recovery_request_submit')}
+              </button>
+              {recoveryError ? <div className="login-error mt-2">{recoveryError}</div> : null}
+              {recoverySuccess ? <div className="login-success mt-2">{recoverySuccess}</div> : null}
+            </div>
+          ) : null}
         </form>
       </div>
     </div>

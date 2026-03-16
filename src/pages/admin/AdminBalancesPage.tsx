@@ -1,55 +1,527 @@
-import { useState } from 'react'
-import { apiFetch } from '../../api'
+import { useEffect, useState } from 'react'
+import {
+  apiFetch,
+  completeAdminWithdrawalRequest,
+  getAdminUnlockOverride,
+  getAdminDepositRequests,
+  getAdminWithdrawalRequests,
+  getBalanceRules,
+  reviewAdminDepositRequest,
+  reviewAdminWithdrawalRequest,
+  upsertAdminUnlockOverride,
+  type BalanceRequestStatus,
+  type BalanceRules,
+  type DepositRequestItem,
+  type WithdrawalSummary,
+  type WithdrawalRequestItem,
+  updateBalanceRules,
+} from '../../api'
+import { useI18n } from '../../i18nCore'
 
 export function AdminBalancesPage() {
+  const { t } = useI18n()
   const [userId, setUserId] = useState('')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
+  const [rules, setRules] = useState<BalanceRules>({
+    minDeposit: 10,
+    minWithdrawal: 10,
+    depositMethods: ['USDT TRC20', 'Bank Transfer'],
+    withdrawalMethods: ['USDT TRC20'],
+    manualReview: true,
+    withdrawalFeePercent: 0,
+    minimumProfitToUnlock: 0,
+    defaultUnlockRatio: 1,
+    unlockRatioByLevel: { 0: 1, 1: 0.9, 2: 0.75, 3: 0.6, 4: 0.45, 5: 0.3 },
+  })
+  const [statusFilter, setStatusFilter] = useState<'' | BalanceRequestStatus>('pending')
+  const [depositItems, setDepositItems] = useState<DepositRequestItem[]>([])
+  const [withdrawItems, setWithdrawItems] = useState<WithdrawalRequestItem[]>([])
+  const [adminNoteById, setAdminNoteById] = useState<Record<string, string>>({})
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [loadingRequests, setLoadingRequests] = useState(false)
+  const [rulesSaving, setRulesSaving] = useState(false)
+  const [overrideUserId, setOverrideUserId] = useState('')
+  const [overrideLoading, setOverrideLoading] = useState(false)
+  const [overrideSaving, setOverrideSaving] = useState(false)
+  const [overrideForceUnlock, setOverrideForceUnlock] = useState(false)
+  const [overrideCustomRatio, setOverrideCustomRatio] = useState('')
+  const [overrideCustomMinProfit, setOverrideCustomMinProfit] = useState('')
+  const [overrideNote, setOverrideNote] = useState('')
+  const [overrideSummary, setOverrideSummary] = useState<WithdrawalSummary | null>(null)
 
   async function adjust(type: 'add' | 'deduct') {
-    await apiFetch('/api/balance/adjust', {
-      method: 'POST',
-      body: JSON.stringify({
-        userId: Number(userId),
-        amount: Number(amount),
-        currency: 'USDC',
-        type,
-        note,
-      }),
-    })
-    setNote('')
+    setMessage(null)
+    try {
+      await apiFetch('/api/balance/adjust', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: Number(userId),
+          amount: Number(amount),
+          currency: 'USDT',
+          type,
+          note,
+        }),
+      })
+      setNote('')
+      setMessage({ type: 'success', text: t('admin_wallet_adjust_success') })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    }
+  }
+
+  async function loadRequests() {
+    setLoadingRequests(true)
+    try {
+      const [depRes, wdRes] = await Promise.all([
+        getAdminDepositRequests(statusFilter || undefined),
+        getAdminWithdrawalRequests(statusFilter || undefined),
+      ])
+      setDepositItems(depRes.items || [])
+      setWithdrawItems(wdRes.items || [])
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    } finally {
+      setLoadingRequests(false)
+    }
+  }
+
+  useEffect(() => {
+    getBalanceRules()
+      .then((res) => setRules(res.rules))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    loadRequests().catch(() => {})
+  }, [statusFilter])
+
+  function getStatusLabel(status: BalanceRequestStatus) {
+    if (status === 'approved') return t('wallet_requests_status_approved')
+    if (status === 'rejected') return t('wallet_requests_status_rejected')
+    if (status === 'completed') return t('wallet_requests_status_completed')
+    return t('wallet_requests_status_pending')
+  }
+
+  function statusClass(status: BalanceRequestStatus) {
+    if (status === 'approved') return 'status-approved'
+    if (status === 'rejected') return 'status-rejected'
+    if (status === 'completed') return 'status-completed'
+    return 'status-pending'
+  }
+
+  async function saveRules() {
+    setRulesSaving(true)
+    setMessage(null)
+    try {
+      const cleaned: BalanceRules = {
+        ...rules,
+        minDeposit: Number(rules.minDeposit || 0),
+        minWithdrawal: Number(rules.minWithdrawal || 0),
+        withdrawalFeePercent: Number(rules.withdrawalFeePercent || 0),
+        minimumProfitToUnlock: Number(rules.minimumProfitToUnlock || 0),
+        defaultUnlockRatio: Number(rules.defaultUnlockRatio || 0),
+        depositMethods: rules.depositMethods.map((x) => x.trim()).filter(Boolean),
+        withdrawalMethods: rules.withdrawalMethods.map((x) => x.trim()).filter(Boolean),
+      }
+      const res = await updateBalanceRules(cleaned)
+      setRules(res.rules)
+      setMessage({ type: 'success', text: t('admin_wallet_rules_saved') })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    } finally {
+      setRulesSaving(false)
+    }
+  }
+
+  async function reviewDeposit(requestId: number, action: 'approve' | 'reject') {
+    setMessage(null)
+    try {
+      await reviewAdminDepositRequest({
+        requestId,
+        action,
+        adminNote: adminNoteById[`dep_${requestId}`] || '',
+      })
+      setMessage({ type: 'success', text: t('admin_wallet_request_updated') })
+      await loadRequests()
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    }
+  }
+
+  async function reviewWithdrawal(requestId: number, action: 'approve' | 'reject') {
+    setMessage(null)
+    try {
+      await reviewAdminWithdrawalRequest({
+        requestId,
+        action,
+        adminNote: adminNoteById[`wd_${requestId}`] || '',
+      })
+      setMessage({ type: 'success', text: t('admin_wallet_request_updated') })
+      await loadRequests()
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    }
+  }
+
+  async function completeWithdrawal(requestId: number) {
+    setMessage(null)
+    try {
+      await completeAdminWithdrawalRequest(requestId, adminNoteById[`wd_${requestId}`] || '')
+      setMessage({ type: 'success', text: t('admin_wallet_request_updated') })
+      await loadRequests()
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    }
+  }
+
+  async function loadOverride() {
+    const uid = Number(overrideUserId)
+    if (!uid || !Number.isFinite(uid)) {
+      setMessage({ type: 'error', text: t('wallet_requests_invalid_input') })
+      return
+    }
+    setOverrideLoading(true)
+    setMessage(null)
+    try {
+      const res = await getAdminUnlockOverride(uid)
+      setOverrideForceUnlock(Number(res.override.force_unlock_principal || 0) === 1)
+      setOverrideCustomRatio(
+        res.override.custom_unlock_ratio == null ? '' : String(Number(res.override.custom_unlock_ratio)),
+      )
+      setOverrideCustomMinProfit(
+        res.override.custom_min_profit == null ? '' : String(Number(res.override.custom_min_profit)),
+      )
+      setOverrideNote(String(res.override.note || ''))
+      setOverrideSummary(res.summary || null)
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    } finally {
+      setOverrideLoading(false)
+    }
+  }
+
+  async function saveOverride() {
+    const uid = Number(overrideUserId)
+    if (!uid || !Number.isFinite(uid)) {
+      setMessage({ type: 'error', text: t('wallet_requests_invalid_input') })
+      return
+    }
+    setOverrideSaving(true)
+    setMessage(null)
+    try {
+      const res = await upsertAdminUnlockOverride({
+        userId: uid,
+        forceUnlockPrincipal: overrideForceUnlock,
+        customUnlockRatio: overrideCustomRatio === '' ? null : Number(overrideCustomRatio),
+        customMinProfit: overrideCustomMinProfit === '' ? null : Number(overrideCustomMinProfit),
+        note: overrideNote,
+      })
+      setOverrideSummary(res.summary || null)
+      setMessage({ type: 'success', text: t('admin_wallet_rules_saved') })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+    } finally {
+      setOverrideSaving(false)
+    }
   }
 
   return (
     <div className="page">
-      <h1 className="page-title">Admin Balances</h1>
+      <h1 className="page-title">{t('admin_wallet_title')}</h1>
+      {message ? <div className={`owner-message owner-message-${message.type}`}>{message.text}</div> : null}
+
       <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('admin_wallet_adjust_title')}</h3>
         <input
           className="field-input"
-          placeholder="User ID"
+          placeholder={t('admin_wallet_user_id')}
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
         />
         <input
           className="field-input"
-          placeholder="Amount"
+          placeholder={t('admin_wallet_amount')}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
         <input
           className="field-input"
-          placeholder="Note"
+          placeholder={t('admin_wallet_note')}
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
         <div className="wallet-actions">
           <button className="wallet-action-btn wallet-action-deposit" type="button" onClick={() => adjust('add')}>
-            Add
+            {t('admin_wallet_add')}
           </button>
           <button className="wallet-action-btn wallet-action-withdraw" type="button" onClick={() => adjust('deduct')}>
-            Deduct
+            {t('admin_wallet_deduct')}
           </button>
         </div>
+      </div>
+
+      <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('admin_wallet_rules_title')}</h3>
+        <div className="owner-form-row">
+          <input
+            className="field-input"
+            type="number"
+            min={0}
+            step="any"
+            placeholder={t('wallet_requests_min_deposit')}
+            value={String(rules.minDeposit)}
+            onChange={(e) => setRules((prev) => ({ ...prev, minDeposit: Number(e.target.value || 0) }))}
+          />
+          <input
+            className="field-input"
+            type="number"
+            min={0}
+            step="any"
+            placeholder={t('wallet_requests_min_withdraw')}
+            value={String(rules.minWithdrawal)}
+            onChange={(e) => setRules((prev) => ({ ...prev, minWithdrawal: Number(e.target.value || 0) }))}
+          />
+        </div>
+        <input
+          className="field-input"
+          type="number"
+          min={0}
+          step="any"
+          placeholder={t('wallet_requests_withdraw_fee')}
+          value={String(rules.withdrawalFeePercent)}
+          onChange={(e) => setRules((prev) => ({ ...prev, withdrawalFeePercent: Number(e.target.value || 0) }))}
+        />
+        <div className="owner-form-row">
+          <input
+            className="field-input"
+            type="number"
+            min={0}
+            step="any"
+            placeholder={t('wallet_lock_min_profit_to_unlock')}
+            value={String(rules.minimumProfitToUnlock)}
+            onChange={(e) => setRules((prev) => ({ ...prev, minimumProfitToUnlock: Number(e.target.value || 0) }))}
+          />
+          <input
+            className="field-input"
+            type="number"
+            min={0}
+            step="any"
+            placeholder={t('wallet_lock_default_unlock_ratio')}
+            value={String(rules.defaultUnlockRatio)}
+            onChange={(e) => setRules((prev) => ({ ...prev, defaultUnlockRatio: Number(e.target.value || 0) }))}
+          />
+        </div>
+        <div className="owner-form-row">
+          {[0, 1, 2, 3, 4, 5].map((lvl) => (
+            <input
+              key={lvl}
+              className="field-input"
+              type="number"
+              min={0}
+              step="any"
+              placeholder={`${t('wallet_lock_level_ratio')} VIP ${lvl}`}
+              value={String(Number(rules.unlockRatioByLevel?.[String(lvl)] ?? rules.defaultUnlockRatio))}
+              onChange={(e) =>
+                setRules((prev) => ({
+                  ...prev,
+                  unlockRatioByLevel: {
+                    ...(prev.unlockRatioByLevel || {}),
+                    [String(lvl)]: Number(e.target.value || 0),
+                  },
+                }))
+              }
+            />
+          ))}
+        </div>
+        <input
+          className="field-input"
+          placeholder={t('admin_wallet_deposit_methods')}
+          value={rules.depositMethods.join(', ')}
+          onChange={(e) =>
+            setRules((prev) => ({
+              ...prev,
+              depositMethods: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
+            }))
+          }
+        />
+        <input
+          className="field-input"
+          placeholder={t('admin_wallet_withdraw_methods')}
+          value={rules.withdrawalMethods.join(', ')}
+          onChange={(e) =>
+            setRules((prev) => ({
+              ...prev,
+              withdrawalMethods: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
+            }))
+          }
+        />
+        <label className="owner-hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={rules.manualReview}
+            onChange={(e) => setRules((prev) => ({ ...prev, manualReview: e.target.checked }))}
+          />
+          {t('admin_wallet_manual_review')}
+        </label>
+        <button className="wallet-action-btn owner-set-btn" type="button" onClick={saveRules} disabled={rulesSaving}>
+          {rulesSaving ? t('common_loading') : t('admin_wallet_save_rules')}
+        </button>
+      </div>
+
+      <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('wallet_lock_user_override_title')}</h3>
+        <div className="owner-form-row">
+          <input
+            className="field-input"
+            placeholder={t('admin_wallet_user_id')}
+            value={overrideUserId}
+            onChange={(e) => setOverrideUserId(e.target.value)}
+          />
+          <button type="button" className="wallet-action-btn owner-set-btn" onClick={loadOverride} disabled={overrideLoading}>
+            {overrideLoading ? t('common_loading') : t('admin_wallet_reload')}
+          </button>
+        </div>
+        <label className="owner-hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" checked={overrideForceUnlock} onChange={(e) => setOverrideForceUnlock(e.target.checked)} />
+          {t('wallet_lock_force_unlock')}
+        </label>
+        <div className="owner-form-row">
+          <input
+            className="field-input"
+            type="number"
+            min={0}
+            step="any"
+            placeholder={t('wallet_lock_custom_ratio')}
+            value={overrideCustomRatio}
+            onChange={(e) => setOverrideCustomRatio(e.target.value)}
+          />
+          <input
+            className="field-input"
+            type="number"
+            min={0}
+            step="any"
+            placeholder={t('wallet_lock_custom_min_profit')}
+            value={overrideCustomMinProfit}
+            onChange={(e) => setOverrideCustomMinProfit(e.target.value)}
+          />
+        </div>
+        <input
+          className="field-input"
+          placeholder={t('admin_wallet_admin_note')}
+          value={overrideNote}
+          onChange={(e) => setOverrideNote(e.target.value)}
+        />
+        {overrideSummary ? (
+          <p className="owner-hint">
+            {t('wallet_lock_withdrawable')}: {overrideSummary.withdrawable_balance.toFixed(2)} USDT | {t('wallet_lock_principal')}:{' '}
+            {overrideSummary.locked_balance.toFixed(2)} USDT | {t('wallet_lock_unlock_progress')}: {overrideSummary.unlock_progress_pct.toFixed(2)}%
+          </p>
+        ) : null}
+        <button type="button" className="wallet-action-btn owner-set-btn" onClick={saveOverride} disabled={overrideSaving}>
+          {overrideSaving ? t('common_loading') : t('admin_wallet_save_rules')}
+        </button>
+      </div>
+
+      <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('admin_wallet_requests_title')}</h3>
+        <div className="owner-form-row">
+          <select
+            className="field-input owner-image-key"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as '' | BalanceRequestStatus)}
+          >
+            <option value="">{t('wallet_requests_filter_all')}</option>
+            <option value="pending">{t('wallet_requests_status_pending')}</option>
+            <option value="approved">{t('wallet_requests_status_approved')}</option>
+            <option value="rejected">{t('wallet_requests_status_rejected')}</option>
+            <option value="completed">{t('wallet_requests_status_completed')}</option>
+          </select>
+          <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => loadRequests()}>
+            {t('admin_wallet_reload')}
+          </button>
+        </div>
+        {loadingRequests ? <p className="owner-empty">{t('common_loading')}</p> : null}
+      </div>
+
+      <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('wallet_requests_deposit_title')}</h3>
+        {depositItems.length === 0 ? (
+          <p className="owner-empty">{t('wallet_requests_empty')}</p>
+        ) : (
+          <ul className="owner-history-list">
+            {depositItems.map((item) => (
+              <li key={`dep-${item.id}`} className="owner-history-item">
+                <span>#{item.id}</span>
+                <span>{item.user_display_name || item.user_email || item.user_phone || `#${item.user_id}`}</span>
+                <span>{Number(item.amount).toFixed(2)} {item.currency}</span>
+                <span>{item.method}</span>
+                <span className={`request-status-badge ${statusClass(item.request_status)}`}>{getStatusLabel(item.request_status)}</span>
+                <input
+                  className="field-input"
+                  placeholder={t('admin_wallet_admin_note')}
+                  value={adminNoteById[`dep_${item.id}`] || ''}
+                  onChange={(e) => setAdminNoteById((prev) => ({ ...prev, [`dep_${item.id}`]: e.target.value }))}
+                />
+                {item.proof_image_path ? (
+                  <a href={item.proof_image_path} target="_blank" rel="noreferrer" className="owner-nav-link">
+                    {t('wallet_requests_view_proof')}
+                  </a>
+                ) : null}
+                {item.request_status === 'pending' ? (
+                  <div className="owner-buttons">
+                    <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={() => reviewDeposit(item.id, 'approve')}>
+                      {t('admin_wallet_approve')}
+                    </button>
+                    <button type="button" className="wallet-action-btn wallet-action-withdraw" onClick={() => reviewDeposit(item.id, 'reject')}>
+                      {t('admin_wallet_reject')}
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('wallet_requests_withdraw_title')}</h3>
+        {withdrawItems.length === 0 ? (
+          <p className="owner-empty">{t('wallet_requests_empty')}</p>
+        ) : (
+          <ul className="owner-history-list">
+            {withdrawItems.map((item) => (
+              <li key={`wd-${item.id}`} className="owner-history-item">
+                <span>#{item.id}</span>
+                <span>{item.user_display_name || item.user_email || item.user_phone || `#${item.user_id}`}</span>
+                <span>{Number(item.amount).toFixed(2)} {item.currency}</span>
+                <span>{item.method}</span>
+                <span className={`request-status-badge ${statusClass(item.request_status)}`}>{getStatusLabel(item.request_status)}</span>
+                <input
+                  className="field-input"
+                  placeholder={t('admin_wallet_admin_note')}
+                  value={adminNoteById[`wd_${item.id}`] || ''}
+                  onChange={(e) => setAdminNoteById((prev) => ({ ...prev, [`wd_${item.id}`]: e.target.value }))}
+                />
+                {item.request_status === 'pending' ? (
+                  <div className="owner-buttons">
+                    <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={() => reviewWithdrawal(item.id, 'approve')}>
+                      {t('admin_wallet_approve')}
+                    </button>
+                    <button type="button" className="wallet-action-btn wallet-action-withdraw" onClick={() => reviewWithdrawal(item.id, 'reject')}>
+                      {t('admin_wallet_reject')}
+                    </button>
+                  </div>
+                ) : null}
+                {item.request_status === 'approved' ? (
+                  <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => completeWithdrawal(item.id)}>
+                    {t('admin_wallet_complete')}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

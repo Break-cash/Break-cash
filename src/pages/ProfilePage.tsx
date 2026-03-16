@@ -1,5 +1,8 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { type AuthUser, updateMyProfile, uploadAvatar, uploadKyc } from '../api'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Check, Copy, KeyRound } from 'lucide-react'
+import { getRecoveryCodeStatus, type AuthUser, updateMyProfile, uploadAvatar, uploadKyc } from '../api'
+import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
+import { getPremiumProfileColorClass } from '../premiumIdentity'
 
 type ProfilePageProps = {
   onLogout: () => void
@@ -7,8 +10,12 @@ type ProfilePageProps = {
   onProfileRefresh?: () => Promise<void> | void
 }
 
+type SplashMode = 'always' | 'session'
+const SPLASH_MODE_KEY = 'breakcash_splash_mode'
+
 export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePageProps) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url || null)
+  const [avatarBroken, setAvatarBroken] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [fullName, setFullName] = useState({
     firstName: '',
@@ -17,7 +24,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
     motherName: '',
     birthDate: '',
   })
-  const [bio, setBio] = useState('')
+  const [bio, setBio] = useState(user.bio || '')
   const [identity, setIdentity] = useState({
     legalName: '',
     nationalId: '',
@@ -28,15 +35,43 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
   const [idCardFile, setIdCardFile] = useState<File | null>(null)
   const [selfieFile, setSelfieFile] = useState<File | null>(null)
-  const [openSection, setOpenSection] = useState<'avatar' | 'name' | 'bio' | 'identity' | null>(null)
+  const [openSection, setOpenSection] = useState<
+    'avatar' | 'name' | 'bio' | 'identity' | 'splash' | 'recovery' | null
+  >(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState(false)
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
+  const [loadingRecoveryCode, setLoadingRecoveryCode] = useState(false)
+  const [copiedRecoveryCode, setCopiedRecoveryCode] = useState(false)
+  const [splashMode, setSplashMode] = useState<SplashMode>('always')
+  const computedBadgeColor =
+    Number(user.blue_badge || 0) === 1 ? 'blue' : user.verification_status === 'verified' ? 'gold' : 'none'
+  const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
+
+  useEffect(() => {
+    const raw = String(localStorage.getItem(SPLASH_MODE_KEY) || '').trim().toLowerCase()
+    setSplashMode(raw === 'session' ? 'session' : 'always')
+  }, [])
+
+  useEffect(() => {
+    setLoadingRecoveryCode(true)
+    getRecoveryCodeStatus()
+      .then((res) => {
+        setRecoveryCode(res.recoveryCode ? String(res.recoveryCode) : null)
+      })
+      .catch(() => {
+        setRecoveryCode(null)
+      })
+      .finally(() => setLoadingRecoveryCode(false))
+  }, [])
 
   function handleAvatarChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const url = URL.createObjectURL(file)
+    setAvatarBroken(false)
     setAvatarPreview(url)
     setAvatarFile(file)
   }
@@ -67,11 +102,14 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
         .map((p) => p.trim())
         .filter(Boolean)
       if (parts.length > 0) {
-        await updateMyProfile({ displayName: parts.join(' ') })
+        await updateMyProfile({ displayName: parts.join(' '), bio: bio.trim() || null })
+      } else if ((user.bio || '') !== bio.trim()) {
+        await updateMyProfile({ bio: bio.trim() || null })
       }
 
       if (avatarFile) {
         const res = await uploadAvatar(avatarFile)
+        setAvatarBroken(false)
         setAvatarPreview(res.profile.avatar_url || null)
       }
 
@@ -88,11 +126,152 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
     }
   }
 
+  async function handleCopyUserId() {
+    try {
+      await navigator.clipboard.writeText(String(user.id))
+      setCopiedId(true)
+      window.setTimeout(() => setCopiedId(false), 1600)
+    } catch {
+      setCopiedId(false)
+    }
+  }
+
+  async function handleCopyRecoveryCode() {
+    if (!recoveryCode) return
+    try {
+      await navigator.clipboard.writeText(recoveryCode)
+      setCopiedRecoveryCode(true)
+      window.setTimeout(() => setCopiedRecoveryCode(false), 1600)
+    } catch {
+      setCopiedRecoveryCode(false)
+    }
+  }
+
   return (
-    <div className="page profile-settings-page">
+    <div className="page profile-settings-page space-y-4">
       <h1 className="page-title">الملف الشخصي</h1>
-      <form className="profile-settings-grid" onSubmit={handleSubmit}>
-        <section className="profile-settings-card">
+      <div className="elite-enter elite-hover-lift elite-panel p-3 lg:rounded-3xl lg:p-4">
+        <div className="flex items-center gap-3 lg:gap-4">
+          <div className={`h-16 w-16 overflow-hidden rounded-full border-2 border-brand-blue/35 bg-app-elevated shadow-[0_8px_18px_rgba(0,0,0,0.28)] lg:h-24 lg:w-24 lg:border-brand-blue/40 lg:shadow-[0_10px_24px_rgba(0,0,0,0.35)] ${premiumProfileColorClass}`}>
+            {avatarPreview && !avatarBroken ? (
+              <img
+                src={avatarPreview}
+                alt={user.display_name || `#${user.id}`}
+                className="h-full w-full object-cover"
+                onError={() => setAvatarBroken(true)}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-base font-semibold text-white/80 lg:text-xl">
+                {String(user.id).slice(-2)}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-base font-semibold text-white lg:text-lg">{user.display_name || `#${user.id}`}</span>
+              <UserIdentityBadges
+                badgeColor={computedBadgeColor}
+                vipLevel={user.vip_level || 0}
+                premiumBadge={user.profile_badge}
+                mode="verified"
+              />
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-xs text-white/85">
+                ID: #{user.id}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyUserId}
+                className="inline-flex h-8 items-center gap-1 rounded-full border border-brand-blue/35 bg-brand-blue/10 px-2.5 text-xs text-white/90 hover:bg-brand-blue/20"
+                aria-label="نسخ رقم المستخدم"
+                title="نسخ رقم المستخدم"
+              >
+                {copiedId ? <Check size={13} /> : <Copy size={13} />}
+                <span>{copiedId ? 'تم النسخ' : 'نسخ'}</span>
+              </button>
+            </div>
+            <UserIdentityBadges
+              badgeColor={computedBadgeColor}
+              vipLevel={user.vip_level || 0}
+              premiumBadge={user.profile_badge}
+              mode="secondary"
+              className="mt-2"
+            />
+            <div className="mt-2 text-xs text-white/65 lg:text-sm">{bio.trim() || 'لا توجد سيرة ذاتية حالياً.'}</div>
+          </div>
+        </div>
+      </div>
+      <form className="profile-settings-grid gap-3" onSubmit={handleSubmit}>
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
+          <button
+            className="profile-settings-toggle"
+            type="button"
+            onClick={() => setOpenSection((key) => (key === 'recovery' ? null : 'recovery'))}
+          >
+            <span className="inline-flex items-center gap-2">
+              <KeyRound size={14} />
+              <span>رمز الاسترداد</span>
+            </span>
+            <span className="profile-settings-toggle-icon">
+              {openSection === 'recovery' ? '▴' : '▾'}
+            </span>
+          </button>
+          {openSection === 'recovery' && (
+            <>
+              <p className="profile-settings-sub">يمكنك عرض ونسخ رمز الاسترداد في أي وقت.</p>
+              <div className="rounded-xl border border-app-border bg-app-elevated p-3">
+                <div className="select-all break-all text-center font-mono text-sm font-semibold tracking-[0.12em] text-brand-blue">
+                  {loadingRecoveryCode ? 'جارٍ التحميل...' : (recoveryCode || 'غير متاح حالياً')}
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-end">
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center gap-1 rounded-full border border-brand-blue/35 bg-brand-blue/10 px-3 text-xs text-white/90 hover:bg-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleCopyRecoveryCode}
+                  disabled={!recoveryCode || loadingRecoveryCode}
+                >
+                  {copiedRecoveryCode ? <Check size={13} /> : <Copy size={13} />}
+                  <span>{copiedRecoveryCode ? 'تم النسخ' : 'نسخ الرمز'}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
+          <button
+            className="profile-settings-toggle"
+            type="button"
+            onClick={() => setOpenSection((key) => (key === 'splash' ? null : 'splash'))}
+          >
+            <span>إعداد شاشة البداية</span>
+            <span className="profile-settings-toggle-icon">
+              {openSection === 'splash' ? '▴' : '▾'}
+            </span>
+          </button>
+          {openSection === 'splash' && (
+            <>
+              <p className="profile-settings-sub">اختر كيف تظهر شاشة INTRO قبل تسجيل الدخول.</p>
+              <select
+                className="field-input"
+                value={splashMode}
+                onChange={(e) => {
+                  const mode = e.target.value === 'session' ? 'session' : 'always'
+                  setSplashMode(mode)
+                  localStorage.setItem(SPLASH_MODE_KEY, mode)
+                  setSuccess('تم حفظ إعداد شاشة البداية.')
+                }}
+              >
+                <option value="always">في كل مرة</option>
+                <option value="session">مرة واحدة لكل جلسة</option>
+              </select>
+            </>
+          )}
+        </section>
+
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
           <button
             className="profile-settings-toggle"
             type="button"
@@ -110,8 +289,8 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
               </p>
               <div className="profile-settings-avatar-row">
                 <div className="profile-settings-avatar-preview">
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt="Profile preview" />
+                  {avatarPreview && !avatarBroken ? (
+                    <img src={avatarPreview} alt="Profile preview" onError={() => setAvatarBroken(true)} />
                   ) : (
                     <span>{String(user.id).slice(-2)}</span>
                   )}
@@ -125,7 +304,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
           )}
         </section>
 
-        <section className="profile-settings-card">
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
           <button
             className="profile-settings-toggle"
             type="button"
@@ -173,7 +352,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
           )}
         </section>
 
-        <section className="profile-settings-card">
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
           <button
             className="profile-settings-toggle"
             type="button"
@@ -199,7 +378,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
           )}
         </section>
 
-        <section className="profile-settings-card">
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
           <button
             className="profile-settings-toggle"
             type="button"
@@ -267,11 +446,11 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
           )}
         </section>
 
-        <div className="profile-settings-actions">
-          <button className="ghost-btn" type="button" onClick={onLogout}>
+        <div className="elite-enter elite-panel profile-settings-actions p-3">
+          <button className="ghost-btn h-10 px-4" type="button" onClick={onLogout}>
             تسجيل الخروج
           </button>
-          <button className="login-submit" type="submit" disabled={saving}>
+          <button className="login-submit h-10 px-5" type="submit" disabled={saving}>
             {saving ? 'جارٍ الحفظ...' : 'حفظ التغييرات'}
           </button>
         </div>

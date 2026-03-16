@@ -21,13 +21,16 @@ export function createPermissionsRouter(db) {
   })
 
   router.get('/moderators', requirePermission(db, 'manage_permissions'), async (_req, res) => {
+    const limit = Math.min(300, Math.max(20, Number(_req.query.limit) || 120))
     const rows = await all(
       db,
       `SELECT u.id, u.email, u.phone, u.role, p.permission
        FROM users u
        LEFT JOIN permissions p ON p.user_id = u.id
        WHERE u.role IN ('moderator', 'admin')
-       ORDER BY u.id DESC`,
+       ORDER BY u.id DESC
+       LIMIT ?`,
+      [limit],
     )
     return res.json({ moderators: rows })
   })
@@ -46,8 +49,16 @@ export function createPermissionsRouter(db) {
     }
     await run(
       db,
-      `INSERT OR IGNORE INTO permissions (user_id, permission, granted_by) VALUES (?, ?, ?)`,
+      `INSERT INTO permissions (user_id, permission, granted_by)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, permission) DO NOTHING`,
       [userId, permission, req.user.id],
+    )
+    await run(
+      db,
+      `INSERT INTO admin_audit_logs (actor_user_id, target_user_id, section, action, metadata)
+       VALUES (?, ?, 'staff_permissions', 'grant_permission', ?)`,
+      [req.user.id, userId, JSON.stringify({ permission })],
     )
     return res.json({ ok: true })
   })
@@ -57,6 +68,12 @@ export function createPermissionsRouter(db) {
     const permission = String(req.body?.permission || '')
     if (!userId || !permission) return res.status(400).json({ error: 'INVALID_INPUT' })
     await run(db, `DELETE FROM permissions WHERE user_id = ? AND permission = ?`, [userId, permission])
+    await run(
+      db,
+      `INSERT INTO admin_audit_logs (actor_user_id, target_user_id, section, action, metadata)
+       VALUES (?, ?, 'staff_permissions', 'revoke_permission', ?)`,
+      [req.user.id, userId, JSON.stringify({ permission })],
+    )
     return res.json({ ok: true })
   })
 

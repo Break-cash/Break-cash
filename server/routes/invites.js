@@ -31,11 +31,13 @@ export function createInvitesRouter(db) {
     '/list',
     requireAuth(db),
     requirePermission(db, 'manage_invites'),
-    async (_req, res) => {
+    async (req, res) => {
+      const limit = Math.min(300, Math.max(20, Number(req.query.limit) || 200))
       const rows = await all(
         db,
         `SELECT id, code, created_by, used_by, used_at, expires_at, is_active, created_at
-         FROM invites ORDER BY id DESC`,
+         FROM invites ORDER BY id DESC LIMIT ?`,
+        [limit],
       )
       return res.json({ invites: rows })
     },

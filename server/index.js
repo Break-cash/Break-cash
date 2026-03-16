@@ -3,8 +3,11 @@ import express from 'express'
 import cors from 'cors'
 import path from 'node:path'
 import * as Sentry from '@sentry/node'
+import { verifyToken } from './auth.js'
 import { openDb } from './db.js'
+import { get } from './db.js'
 import { ensureBaseSeed } from './services/seed.js'
+import { subscribeLiveClient } from './services/live-updates.js'
 import { createAuthRouter } from './routes/auth.js'
 import { createInvitesRouter } from './routes/invites.js'
 import { createPermissionsRouter } from './routes/permissions.js'
@@ -17,6 +20,10 @@ import { createPortfolioRouter } from './routes/portfolio.js'
 import { createMarketRouter } from './routes/market.js'
 import { createStatsRouter } from './routes/stats.js'
 import { createFriendsRouter } from './routes/friends.js'
+import { createOwnerGrowthRouter } from './routes/owner-growth.js'
+import { createTasksRouter } from './routes/tasks.js'
+import { createMiningRouter } from './routes/mining.js'
+import { createRewardsRouter } from './routes/rewards.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -59,6 +66,27 @@ app.get('/api/health/ready', async (_req, res) => {
   }
 })
 
+app.get('/api/live/stream', async (req, res) => {
+  const token = String(req.query.token || '').trim()
+  if (!token || !dbRef) return res.status(401).json({ error: 'AUTH_REQUIRED' })
+  let payload = null
+  try {
+    payload = verifyToken(token)
+  } catch {
+    return res.status(401).json({ error: 'INVALID_TOKEN' })
+  }
+  const user = await get(dbRef, `SELECT id FROM users WHERE id = ? LIMIT 1`, [payload.sub])
+  if (!user) return res.status(401).json({ error: 'INVALID_TOKEN' })
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  const close = subscribeLiveClient({ userId: user.id, res })
+  res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`)
+  req.on('close', () => close())
+})
+
 app.get('/api/health', async (_req, res) => {
   if (!dbRef) {
     return res.status(503).json({ ok: false, db: 'disconnected' })
@@ -95,11 +123,69 @@ async function bootstrap() {
   app.use('/api/market', createMarketRouter())
   app.use('/api/stats', createStatsRouter(db))
   app.use('/api/friends', createFriendsRouter(db))
+  app.use('/api/owner-growth', createOwnerGrowthRouter(db))
+  app.use('/api/tasks', createTasksRouter(db))
+  app.use('/api/mining', createMiningRouter(db))
+  app.use('/api/rewards', createRewardsRouter(db))
+
+  app.get('/manifest.json', async (_req, res) => {
+    const defaults = {
+      name: 'Break cash',
+      short_name: 'Break cash',
+      description: 'Invite-only trading dashboard PWA',
+      background_color: '#0A0E17',
+      theme_color: '#00C853',
+      icon_192: '/break-cash-logo-premium.png',
+      icon_512: '/break-cash-logo-premium.png',
+    }
+    let config = { ...defaults }
+    try {
+      const row = await get(db, `SELECT value FROM settings WHERE key='pwa_config' LIMIT 1`)
+      const parsed = JSON.parse(String(row?.value || 'null'))
+      if (parsed && typeof parsed === 'object') {
+        config = {
+          ...config,
+          ...parsed,
+        }
+      }
+    } catch {
+      // keep defaults on parse/query errors
+    }
+    return res.json({
+      name: config.name || defaults.name,
+      short_name: config.short_name || defaults.short_name,
+      description: config.description || defaults.description,
+      start_url: '/',
+      display: 'standalone',
+      background_color: config.background_color || defaults.background_color,
+      theme_color: config.theme_color || defaults.theme_color,
+      icons: [
+        {
+          src: config.icon_192 || defaults.icon_192,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any maskable',
+        },
+        {
+          src: config.icon_512 || defaults.icon_512,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any maskable',
+        },
+      ],
+    })
+  })
 
   app.use((err, _req, res, _next) => {
     if (SENTRY_DSN) Sentry.captureException(err)
     return res.status(500).json({ error: 'SERVER_ERROR' })
   })
+
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.join(process.cwd(), 'dist')
+    app.use(express.static(distPath))
+    app.get('/{*path}', (_req, res) => res.sendFile(path.join(distPath, 'index.html')))
+  }
 
   app.listen(PORT, () => {
     console.log(`BREAK CASH API running on http://localhost:${PORT}`)

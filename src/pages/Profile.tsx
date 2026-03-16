@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch, getMyProfile, type AuthUser } from '../api'
-import { WalletQuickActions } from '../components/mobile/WalletQuickActions'
-import { WalletAssetsList } from '../components/mobile/WalletAssetsList'
+import { motion } from 'framer-motion'
+import { ChevronDown } from 'lucide-react'
+import {
+  apiFetch,
+  getMyProfile,
+  getPromoBanners,
+  subscribeToLiveUpdates,
+  type AuthUser,
+  type PromoBannerItem,
+} from '../api'
+import { PromoBanner } from '../components/ads/PromoBanner'
+import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
+import { getPremiumProfileColorClass } from '../premiumIdentity'
+import { appData } from '../data'
 import { walletDashboardMock } from '../ui/mobileMock'
-
-type DemoActivity = {
-  id: number
-  text: string
-  at: string
-}
-
-const demoPairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'BNB/USDT']
-const demoActions = ['شراء تجريبي', 'بيع تجريبي', 'فتح صفقة تجريبية', 'إغلاق صفقة تجريبية']
 
 export function Profile() {
   const { t } = useI18n()
@@ -22,82 +24,120 @@ export function Profile() {
   const [profile, setProfile] = useState<AuthUser | null>(null)
   const [holdings, setHoldings] = useState<{ id: number; symbol: string; quantity: number }[]>([])
   const [loading, setLoading] = useState(true)
-  const [profitsOpen, setProfitsOpen] = useState(false)
-  const [dailyProfit, setDailyProfit] = useState(0)
-  const [totalProfit, setTotalProfit] = useState(0)
-  const [demoRunning, setDemoRunning] = useState(true)
-  const [demoActivity, setDemoActivity] = useState<DemoActivity[]>([])
+  const [currency, setCurrency] = useState('USDT')
   const [liveQuotes, setLiveQuotes] = useState<Record<string, { price: number; change24h: number }>>({})
+  const [promoBanners, setPromoBanners] = useState<PromoBannerItem[]>([])
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
+  const [pullDistance, setPullDistance] = useState(0)
+  const pullStartYRef = useRef(0)
+  const pullActiveRef = useRef(false)
+  const liveRefreshTimerRef = useRef<number | null>(null)
+  const mainMiningAd: PromoBannerItem = useMemo(
+    () => ({
+      id: 'local-mining-main-ad',
+      title: t('nav_mining'),
+      subtitle: t('mining_media_hint'),
+      ctaLabel: t('nav_mining'),
+      to: '/mining',
+      imageUrl: '/ads/mining-main-banner.jpg',
+      placement: 'all',
+      enabled: true,
+      order: -100,
+    }),
+    [t],
+  )
+  const dailyEarnings = Number(appData.balance_info.today_earnings || 0)
+  const earningsCurrency = appData.balance_info.currency || 'USDT'
 
-  useEffect(() => {
-    Promise.allSettled([getMyProfile(), apiFetch('/api/balance/my'), apiFetch('/api/portfolio/holdings')])
-      .then((results) => {
-        const [profileRes, balanceRes, holdingsRes] = results
-        if (profileRes.status === 'fulfilled') setProfile(profileRes.value.profile)
-        if (balanceRes.status === 'fulfilled') {
-          const balances = (balanceRes.value as { balances: { amount: number }[] }).balances
-          const sum = balances.reduce((acc, row) => acc + Number(row.amount || 0), 0)
-          setRealBalance(sum)
-        }
-        if (holdingsRes.status === 'fulfilled') {
-          setHoldings(
-            (holdingsRes.value as { holdings: { id: number; symbol: string; quantity: number }[] }).holdings,
-          )
-        }
-      })
-      .finally(() => setLoading(false))
+  const loadCoreDashboardData = useCallback(async () => {
+    const results = await Promise.allSettled([getMyProfile(), apiFetch('/api/balance/my'), apiFetch('/api/portfolio/holdings')])
+    const [profileRes, balanceRes, holdingsRes] = results
+    if (profileRes.status === 'fulfilled') setProfile(profileRes.value.profile)
+    if (balanceRes.status === 'fulfilled') {
+      const balances = (balanceRes.value as { balances: { amount: number }[] }).balances
+      const sum = balances.reduce((acc, row) => acc + Number(row.amount || 0), 0)
+      setRealBalance(sum)
+    }
+    if (holdingsRes.status === 'fulfilled') {
+      setHoldings(
+        (holdingsRes.value as { holdings: { id: number; symbol: string; quantity: number }[] }).holdings,
+      )
+    }
   }, [])
 
-  useEffect(() => {
-    let active = true
-    async function loadQuotes() {
+  const loadPromoData = useCallback(async () => {
+    getPromoBanners()
+      .then((res) => setPromoBanners(res.items || []))
+      .catch(() => setPromoBanners([]))
+  }, [])
+
+  const loadQuotes = useCallback(async () => {
+    try {
       const res = (await apiFetch('/api/market/quotes')) as {
         items: { symbol: string; price: number; change24h: number }[]
       }
-      if (!active) return
       const next: Record<string, { price: number; change24h: number }> = {}
       for (const item of res.items) {
         const base = item.symbol.replace(/USDT$/i, '')
         next[base] = { price: Number(item.price || 0), change24h: Number(item.change24h || 0) }
       }
       setLiveQuotes(next)
-    }
-    loadQuotes().catch(() => {})
-    const id = window.setInterval(() => {
-      loadQuotes().catch(() => {})
-    }, 2500)
-    return () => {
-      active = false
-      window.clearInterval(id)
+    } catch {
+      return
     }
   }, [])
 
-  function addDemoActivity() {
-    const pair = demoPairs[Math.floor(Math.random() * demoPairs.length)]
-    const action = demoActions[Math.floor(Math.random() * demoActions.length)]
-    const amount = (Math.random() * 900 + 100).toFixed(2)
-    const now = new Date()
-    const item: DemoActivity = {
-      id: Date.now(),
-      text: `${action}: ${pair} بقيمة $${amount}`,
-      at: now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+  const refreshDashboard = useCallback(async (withSpinner = false) => {
+    if (withSpinner) setIsPullRefreshing(true)
+    try {
+      await Promise.allSettled([loadCoreDashboardData(), loadPromoData(), loadQuotes()])
+    } finally {
+      if (withSpinner) setIsPullRefreshing(false)
     }
-    setDemoActivity((prev) => [item, ...prev].slice(0, 6))
-  }
+  }, [loadCoreDashboardData, loadPromoData, loadQuotes])
 
   useEffect(() => {
-    if (!profitsOpen || !demoRunning) return
-    addDemoActivity()
-    const id = window.setInterval(() => {
-      addDemoActivity()
-    }, 5000)
-    return () => window.clearInterval(id)
-  }, [profitsOpen, demoRunning])
+    loadCoreDashboardData()
+      .catch(() => {})
+      .finally(() => setLoading(false))
+    loadPromoData().catch(() => {})
+    loadQuotes().catch(() => {})
+  }, [loadCoreDashboardData, loadPromoData, loadQuotes])
 
-  const displayIdentity = useMemo(
-    () => profile?.email || profile?.phone || walletDashboardMock.wallet_name,
-    [profile],
-  )
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      loadQuotes()
+    }, 15000)
+    return () => {
+      window.clearInterval(id)
+    }
+  }, [loadQuotes])
+
+  useEffect(() => {
+    const unsub = subscribeToLiveUpdates((event) => {
+      if (liveRefreshTimerRef.current) {
+        window.clearTimeout(liveRefreshTimerRef.current)
+      }
+      liveRefreshTimerRef.current = window.setTimeout(() => {
+        if (event.type === 'home_content_updated' || event.type === 'announcement_updated') {
+          loadPromoData().catch(() => {})
+          return
+        }
+        if (event.type === 'balance_updated') {
+          loadCoreDashboardData().catch(() => {})
+          return
+        }
+        refreshDashboard(false).catch(() => {})
+      }, 180)
+    })
+    return () => {
+      if (liveRefreshTimerRef.current) {
+        window.clearTimeout(liveRefreshTimerRef.current)
+      }
+      unsub()
+    }
+  }, [loadCoreDashboardData, loadPromoData, refreshDashboard])
+
   const dashboardBalance = realBalance ?? walletDashboardMock.total_balance_usd
   const assetsToRender = useMemo(() => {
     return walletDashboardMock.my_assets.map((item) => {
@@ -112,121 +152,230 @@ export function Profile() {
     })
   }, [holdings, liveQuotes])
 
-  const isOwner = profile?.role === 'owner'
+  const tabAssets = useMemo(() => assetsToRender.slice(0, 5), [assetsToRender])
+  const totalPoints = useMemo(
+    () => Math.round((dashboardBalance || 0) * 2 + tabAssets.length * 11),
+    [dashboardBalance, tabAssets.length],
+  )
+  const profileBanners = useMemo(
+    () => {
+      const filtered = promoBanners.filter((x) => x.enabled && (x.placement === 'profile' || x.placement === 'all'))
+      const hasMainMiningAd = filtered.some(
+        (item) => item.id === mainMiningAd.id || String(item.imageUrl || '').includes('/ads/mining-main-banner.jpg'),
+      )
+      return hasMainMiningAd ? filtered : [mainMiningAd, ...filtered]
+    },
+    [mainMiningAd, promoBanners],
+  )
+  const ownerTools = useMemo(
+    () =>
+      profile?.role === 'owner'
+        ? [
+            { label: t('nav_owner'), to: '/owner' },
+            { label: t('owner_quick_operations'), to: '/owner/operations' },
+            { label: t('nav_admin'), to: '/admin/dashboard' },
+            { label: t('admin_users'), to: '/admin/users' },
+            { label: t('admin_balances'), to: '/admin/balances' },
+          ]
+        : [],
+    [profile?.role, t],
+  )
+  const premiumProfileColorClass = getPremiumProfileColorClass(profile?.profile_color)
+  const quickActions = [
+    { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', imageUrl: '/ads/vip-benefits.jpg' },
+    { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', imageUrl: '/ads/invite-earn.jpg' },
+    { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', imageUrl: '/ads/rewards-center.jpg' },
+    { key: 'partners', label: t('home_action_partners'), to: '/friends', imageUrl: '/ads/partners-program.jpg' },
+  ] as const
+
+  function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (window.scrollY > 0 || isPullRefreshing) return
+    pullStartYRef.current = event.touches[0]?.clientY || 0
+    pullActiveRef.current = true
+  }
+
+  function handleTouchMove(event: TouchEvent<HTMLDivElement>) {
+    if (!pullActiveRef.current || window.scrollY > 0 || isPullRefreshing) return
+    const currentY = event.touches[0]?.clientY || 0
+    const delta = Math.max(0, currentY - pullStartYRef.current)
+    const eased = Math.min(110, delta * 0.38)
+    if (eased > 0) setPullDistance(eased)
+  }
+
+  function handleTouchEnd() {
+    if (!pullActiveRef.current) return
+    pullActiveRef.current = false
+    const shouldRefresh = pullDistance >= 68
+    setPullDistance(0)
+    if (shouldRefresh) {
+      refreshDashboard(true).catch(() => {})
+    }
+  }
 
   return (
-    <div className="wallet-screen">
-      <div className="wallet-brand-wrap">
-        <img src="/logo-bc.png" alt="Break Cash" className="wallet-brand-logo" />
-        <span className="wallet-brand-name">BREAK CASH</span>
-        <span className="wallet-brand-tagline">المحفظة الرقمية</span>
+    <div
+      className="space-y-4 pb-6"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div
+        className="pointer-events-none overflow-hidden transition-[max-height,opacity] duration-200"
+        style={{ maxHeight: pullDistance > 0 || isPullRefreshing ? 40 : 0, opacity: pullDistance > 0 || isPullRefreshing ? 1 : 0 }}
+      >
+        <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-[#1e2430]/85 px-3 py-1 text-[11px] text-white/85">
+          <span>{isPullRefreshing ? t('common_loading') : t('home_pull_to_refresh')}</span>
+        </div>
       </div>
-
-      <section className="wallet-balance-card">
-        <div className="wallet-balance-head">
-          <span>{walletDashboardMock.wallet_name}</span>
-          <button className="wallet-inline-icon" type="button">
-            ⧉
-          </button>
-        </div>
-        <div className="wallet-main-balance">${dashboardBalance.toFixed(2)}</div>
-        <div className="wallet-balance-actions">
-          <button className="wallet-receive-btn" type="button">
-            {t('wallet_receive')}
-          </button>
-        </div>
-      </section>
-
-      <WalletQuickActions
-        onDepositClick={() => navigate('/deposit')}
-        onToggleProfits={() => setProfitsOpen((open) => !open)}
-      />
-
-      {profitsOpen && (
-        <section className="wallet-profits-panel">
-          <div className="wallet-profits-row">
-            <span>الأرباح اليومية</span>
-            {isOwner ? (
-              <input
-                className="field-input wallet-profits-input"
-                type="number"
-                value={dailyProfit}
-                onChange={(e) => setDailyProfit(Number(e.target.value) || 0)}
-              />
-            ) : (
-              <span className="wallet-profits-value">{dailyProfit}</span>
-            )}
-          </div>
-          <div className="wallet-profits-row">
-            <span>إجمالي الأرباح</span>
-            {isOwner ? (
-              <input
-                className="field-input wallet-profits-input"
-                type="number"
-                value={totalProfit}
-                onChange={(e) => setTotalProfit(Number(e.target.value) || 0)}
-              />
-            ) : (
-              <span className="wallet-profits-value">{totalProfit}</span>
-            )}
+      {ownerTools.length > 0 ? (
+        <section className="elite-enter overflow-x-auto rounded-2xl border border-white/10 bg-[#1e2430]/70 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <div className="flex min-w-max items-center gap-2">
+            {ownerTools.map((tool) => (
+              <button
+                key={tool.to}
+                type="button"
+                onClick={() => navigate(tool.to)}
+                className="icon-interactive rounded-full border border-white/10 bg-[#252d3a] px-3 py-1.5 text-xs font-medium text-white/85 hover:border-brand-blue/35 hover:bg-[#2b3443]"
+              >
+                {tool.label}
+              </button>
+            ))}
           </div>
         </section>
-      )
-      }
-
-      <section className="wallet-promo-card">
-        <div className="wallet-promo-icon">{walletDashboardMock.promotions.asset_icon[0]}</div>
-        <div>
-          <div className="wallet-promo-title">{walletDashboardMock.promotions.title}</div>
-          <div className="wallet-promo-sub">{walletDashboardMock.promotions.description}</div>
-        </div>
-      </section>
-
-      {profitsOpen && (
-        <section className="wallet-demo-activity">
-          <div className="wallet-demo-head">
-            <strong>نشاط تفاعلي تجريبي</strong>
-            <div className="wallet-demo-actions">
-              <button type="button" className="wallet-demo-btn" onClick={addDemoActivity}>
-                نشاط الآن
-              </button>
-              <button
-                type="button"
-                className="wallet-demo-btn"
-                onClick={() => setDemoRunning((v) => !v)}
-              >
-                {demoRunning ? 'إيقاف' : 'تشغيل'}
-              </button>
+      ) : null}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: 'easeOut' }}
+        className={`elite-enter elite-hover-lift elite-shine rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#272c35,#222831)] p-4 shadow-[0_12px_44px_rgba(0,0,0,0.3)] ${premiumProfileColorClass}`}
+      >
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div className="text-start">
+            <p className="text-xs text-app-muted">{t('profile_total_assets')}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <h1 className="text-3xl font-bold tracking-tight lg:text-[2.1rem]">${dashboardBalance.toFixed(2)}</h1>
+              <label className="relative inline-flex items-center">
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="h-8 appearance-none rounded-lg border border-app-border bg-app-elevated px-2 pe-6 text-xs text-white"
+                >
+                  <option value="USDT">USDT</option>
+                  <option value="USD">USD</option>
+                </select>
+                <ChevronDown size={12} className="pointer-events-none absolute end-2 text-white/70" />
+              </label>
+            </div>
+            <div className="mt-1">
+              <p className="text-[11px] text-app-muted">{t('home_today_earnings')}</p>
+              <p className={`text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
+                {dailyEarnings.toFixed(2)} {earningsCurrency}
+              </p>
             </div>
           </div>
-          <div className="wallet-demo-list">
-            {demoActivity.length === 0 ? (
-              <div className="wallet-demo-empty">لا يوجد نشاط بعد.</div>
-            ) : (
-              demoActivity.map((item) => (
-                <div key={item.id} className="wallet-demo-item">
-                  <span>{item.text}</span>
-                  <small>{item.at}</small>
-                </div>
-              ))
-            )}
+        </div>
+        {profile ? (
+          <div className="inline-flex items-center gap-2 rounded-xl border border-app-border bg-app-elevated px-2.5 py-1">
+            <span className="text-xs font-medium text-white/90">{profile.display_name || `#${profile.id}`}</span>
+            <UserIdentityBadges
+              badgeColor={profile.badge_color || 'none'}
+              vipLevel={profile.vip_level || 0}
+              premiumBadge={profile.profile_badge}
+              mode="verified"
+            />
           </div>
-        </section>
-      )}
+        ) : null}
+      </motion.section>
+      <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm font-semibold text-white">{t('home_announcement_board')}</p>
+        </div>
+        <PromoBanner className="my-0 opacity-95" items={profileBanners} />
+      </section>
 
-      {loading ? (
-        <section className="wallet-assets-panel">
-          <div className="text-muted">Loading...</div>
-        </section>
-      ) : (
-        <WalletAssetsList assets={assetsToRender} />
-      )}
+      <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
+        <div className="mb-3 text-sm font-semibold text-white">{t('home_quick_actions_title')}</div>
+        <div className="grid grid-cols-2 gap-2">
+          {quickActions.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => navigate(item.to)}
+              className="icon-interactive elite-hover-lift overflow-hidden rounded-2xl border border-app-border bg-app-card text-start"
+            >
+              <img
+                src={item.imageUrl}
+                alt={item.label}
+                className="h-28 w-full object-cover"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      </section>
 
-      {!loading && assetsToRender.length === 0 ? (
-        <div className="wallet-empty">{t('wallet_empty_assets')}</div>
-      ) : null}
+      <section className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-app-border bg-app-card p-3">
+          <p className="text-[11px] text-app-muted">{t('home_today_earnings')}</p>
+          <p className={`mt-1 text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
+            {dailyEarnings.toFixed(2)} {earningsCurrency}
+          </p>
+        </div>
+        <div className="rounded-xl border border-app-border bg-app-card p-3">
+          <p className="text-[11px] text-app-muted">{t('wallet_assets')}</p>
+          <p className="mt-1 text-sm font-semibold text-white">{tabAssets.length}</p>
+        </div>
+        <div className="rounded-xl border border-app-border bg-app-card p-3">
+          <p className="text-[11px] text-app-muted">{t('profile_points')}</p>
+          <p className="mt-1 text-sm font-semibold text-brand-blue">{totalPoints}</p>
+        </div>
+      </section>
 
-      <div className="wallet-screen-user">{displayIdentity}</div>
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.33, ease: 'easeOut', delay: 0.08 }}
+        className="elite-enter rounded-2xl border border-app-border bg-app-card p-3"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-white">{t('home_most_traded')}</p>
+          <button
+            type="button"
+            onClick={() => navigate('/market')}
+            className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+          >
+            {t('nav_markets')}
+          </button>
+        </div>
+        {loading ? (
+          <div className="py-4 text-sm text-app-muted">{t('common_loading')}</div>
+        ) : tabAssets.length === 0 ? (
+          <div className="py-4 text-sm text-app-muted">{t('wallet_empty_assets')}</div>
+        ) : (
+          <div className="space-y-2">
+            {tabAssets.map((asset) => (
+              <motion.div
+                key={asset.symbol}
+                layout
+                transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+                className="elite-hover-lift flex items-center justify-between rounded-xl border border-app-border bg-app-elevated px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-semibold">{asset.symbol}</p>
+                  <p className="text-xs text-app-muted">${asset.price_usd.toLocaleString()}</p>
+                </div>
+                <div className="text-end">
+                  <p className="text-sm font-semibold">{asset.balance.toFixed(4)}</p>
+                  <p className={`text-xs ${asset.change_24h_percent >= 0 ? 'text-positive' : 'text-negative'}`}>
+                    {asset.change_24h_percent >= 0 ? '+' : ''}
+                    {asset.change_24h_percent.toFixed(2)}%
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.section>
     </div>
   )
 }

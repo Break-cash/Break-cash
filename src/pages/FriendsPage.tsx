@@ -8,6 +8,7 @@ import {
   type FriendItem,
   type FriendUser,
 } from '../api'
+import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
 
 export function FriendsPage() {
@@ -21,6 +22,7 @@ export function FriendsPage() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [addingId, setAddingId] = useState<number | null>(null)
+  const [selectedUser, setSelectedUser] = useState<FriendUser | null>(null)
 
   const loadList = useCallback(async () => {
     try {
@@ -50,6 +52,7 @@ export function FriendsPage() {
     try {
       const res = await searchUsersById(q)
       setSearchResults(res.users)
+      setSelectedUser(res.users[0] || null)
       if (res.users.length === 0) setMessage({ type: 'error', text: t('friends_no_results') })
     } catch {
       setSearchResults([])
@@ -98,9 +101,16 @@ export function FriendsPage() {
 
   const isPendingSent = (userId: number) => pendingSent.some((p) => p.userId === userId)
   const isFriend = (userId: number) => friends.some((f) => f.userId === userId)
+  const selectedBadgeColor =
+    selectedUser && Number(selectedUser.blueBadge || 0) === 1
+      ? 'blue'
+      : selectedUser?.verificationStatus === 'verified'
+        ? 'gold'
+        : 'none'
+  const selectedVerified = selectedUser?.verificationStatus === 'verified'
 
   return (
-    <div className="friends-page">
+    <div className="friends-page page">
       <h1 className="friends-title">{t('nav_friends')}</h1>
 
       <section className="friends-search-section">
@@ -147,6 +157,13 @@ export function FriendsPage() {
                   <span className="friends-item-name">{user.displayName}</span>
                   <span className="friends-item-id">ID: {user.id}</span>
                 </div>
+                <button
+                  type="button"
+                  className="friends-view-btn"
+                  onClick={() => setSelectedUser(user)}
+                >
+                  {t('friends_view_profile')}
+                </button>
                 {isFriend(user.id) ? (
                   <span className="friends-item-badge">{t('friends_already')}</span>
                 ) : isPendingSent(user.id) ? (
@@ -155,7 +172,10 @@ export function FriendsPage() {
                   <button
                     type="button"
                     className="friends-add-btn"
-                    onClick={() => handleAddFriend(user)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAddFriend(user)
+                    }}
                     disabled={addingId === user.id}
                   >
                     {addingId === user.id ? '...' : t('friends_add')}
@@ -243,6 +263,63 @@ export function FriendsPage() {
           </section>
         </>
       )}
+
+      {selectedUser ? (
+        <div className="friends-profile-overlay" onClick={() => setSelectedUser(null)}>
+          <div className="friends-profile-popup" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="friends-profile-close"
+              onClick={() => setSelectedUser(null)}
+              aria-label={t('close_search')}
+            >
+              ×
+            </button>
+            <div className="friends-profile-header">
+              <div className="friends-profile-avatar">
+                {selectedUser.avatarUrl ? (
+                  <img src={selectedUser.avatarUrl} alt={selectedUser.displayName} />
+                ) : (
+                  <span>{String(selectedUser.id).slice(-2)}</span>
+                )}
+              </div>
+              <div className="friends-profile-title-wrap">
+                <div className="friends-profile-title-row">
+                  <span className="friends-profile-name">{selectedUser.displayName}</span>
+                  <UserIdentityBadges
+                    badgeColor={selectedBadgeColor}
+                    vipLevel={selectedUser.vipLevel || 0}
+                    mode="verified"
+                  />
+                </div>
+                <div className="friends-profile-id">ID: {selectedUser.id}</div>
+                <UserIdentityBadges
+                  badgeColor={selectedBadgeColor}
+                  vipLevel={selectedUser.vipLevel || 0}
+                  mode="secondary"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            <div className="friends-profile-bio">
+              {selectedUser.bio?.trim() || t('friends_bio_empty')}
+            </div>
+
+            <div className="friends-profile-status-row">
+              <span className={`friends-verify-dot ${selectedVerified ? 'verified' : 'unverified'}`} />
+              <span className="friends-verify-text">
+                {selectedVerified ? t('friends_verified') : t('friends_not_verified')}
+              </span>
+            </div>
+
+            <div className="friends-profile-balance">
+              <span>{t('friends_trading_balance')}</span>
+              <strong>{Number(selectedUser.tradingBalance || 0).toFixed(2)} USDT</strong>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

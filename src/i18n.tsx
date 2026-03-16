@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { I18nContext, languageDirection, translations, type I18nContextValue, type Language } from './i18nCore'
 
+function detectLanguage(): Language {
+  const raw = (navigator.language || '').toLowerCase()
+  if (raw.startsWith('ar')) return 'ar'
+  if (raw.startsWith('tr')) return 'tr'
+  return 'en'
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('breakcash_language')
-    return saved === 'en' || saved === 'tr' || saved === 'ar' ? saved : 'ar'
+    return saved === 'en' || saved === 'tr' || saved === 'ar' ? saved : detectLanguage()
   })
 
   const direction = languageDirection[language]

@@ -30,17 +30,28 @@ export function createFriendsRouter(db) {
     const me = req.user.id
     const rows = await all(
       db,
-      `SELECT id, display_name, avatar_path
-       FROM users
-       WHERE CAST(id AS TEXT) LIKE ? AND id != ? AND is_banned = 0
-       ORDER BY id ASC
+      `SELECT u.id, u.display_name, u.bio, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level,
+              COALESCE(bal.total_balance, 0) AS trading_balance
+       FROM users u
+       LEFT JOIN (
+         SELECT user_id, SUM(amount) AS total_balance
+         FROM balances
+         GROUP BY user_id
+       ) bal ON bal.user_id = u.id
+       WHERE CAST(u.id AS TEXT) LIKE ? AND u.id != ? AND u.is_banned = 0
+       ORDER BY u.id ASC
        LIMIT 20`,
       [`${q}%`, me],
     )
     const users = rows.map((r) => ({
       id: r.id,
       displayName: r.display_name || `#${r.id}`,
+      bio: String(r.bio || '').slice(0, 120),
       avatarUrl: r.avatar_path ? toPublicPath(r.avatar_path) : null,
+      verificationStatus: String(r.verification_status || 'unverified'),
+      blueBadge: Number(r.blue_badge || 0),
+      vipLevel: Number(r.vip_level || 0),
+      tradingBalance: Number(r.trading_balance || 0),
     }))
     return res.json({ users })
   }))
@@ -79,6 +90,7 @@ export function createFriendsRouter(db) {
   // قائمة الأصدقاء والطلبات
   router.get('/list', asyncRoute(async (req, res) => {
     const me = req.user.id
+    const limit = Math.min(300, Math.max(40, Number(req.query.limit) || 180))
     const requests = await all(
       db,
       `SELECT fr.id, fr.from_user_id, fr.to_user_id, fr.status, fr.created_at,
@@ -88,8 +100,9 @@ export function createFriendsRouter(db) {
        LEFT JOIN users u ON u.id = fr.from_user_id
        LEFT JOIN users v ON v.id = fr.to_user_id
        WHERE fr.from_user_id = ? OR fr.to_user_id = ?
-       ORDER BY fr.created_at DESC`,
-      [me, me],
+       ORDER BY fr.created_at DESC
+       LIMIT ?`,
+      [me, me, limit],
     )
     const friends = []
     const pendingReceived = []

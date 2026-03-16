@@ -7,10 +7,15 @@ export function createNotificationsRouter(db) {
   router.use(requireAuth(db), requireApproved())
 
   router.get('/list', async (req, res) => {
+    const limit = Math.min(200, Math.max(20, Number(req.query.limit) || 100))
     const rows = await all(
       db,
-      `SELECT id, title, body, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC`,
-      [req.user.id],
+      `SELECT id, title, body, is_read, created_at
+       FROM notifications
+       WHERE user_id = ?
+       ORDER BY id DESC
+       LIMIT ?`,
+      [req.user.id, limit],
     )
     return res.json({ notifications: rows })
   })

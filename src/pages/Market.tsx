@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../api'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
+import { useI18n } from '../i18nCore'
 
 type Quote = { symbol: string; price: number; change24h: number; volume: number }
 type Candle = { time: number; open: number; high: number; low: number; close: number }
 const intervals = ['1m', '5m', '15m', '1h', '4h', '1d']
 
 export function Market() {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [marketData, setMarketData] = useState<Quote[]>([])
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
@@ -31,11 +33,23 @@ export function Market() {
     }
   }, [])
 
+  const filtered = useMemo(() => {
+    if (!query.trim()) return marketData
+    return marketData.filter((item) => item.symbol.includes(query.toUpperCase().trim()))
+  }, [query, marketData])
+
+  const effectiveSelectedSymbol =
+    filtered.length === 0
+      ? selectedSymbol
+      : filtered.some((item) => item.symbol === selectedSymbol)
+      ? selectedSymbol
+      : filtered[0].symbol
+
   useEffect(() => {
     let active = true
     async function loadCandles() {
       const res = (await apiFetch(
-        `/api/market/candles?symbol=${encodeURIComponent(selectedSymbol)}&interval=${selectedInterval}&limit=120`,
+        `/api/market/candles?symbol=${encodeURIComponent(effectiveSelectedSymbol)}&interval=${selectedInterval}&limit=120`,
       )) as { candles: Candle[] }
       if (active) setCandles(res.candles || [])
     }
@@ -47,41 +61,29 @@ export function Market() {
       active = false
       window.clearInterval(id)
     }
-  }, [selectedSymbol, selectedInterval])
-
-  const filtered = useMemo(() => {
-    if (!query.trim()) return marketData
-    return marketData.filter((item) => item.symbol.includes(query.toUpperCase().trim()))
-  }, [query, marketData])
-
-  useEffect(() => {
-    if (filtered.length === 0) return
-    if (!filtered.some((item) => item.symbol === selectedSymbol)) {
-      setSelectedSymbol(filtered[0].symbol)
-    }
-  }, [filtered, selectedSymbol])
+  }, [effectiveSelectedSymbol, selectedInterval])
 
   return (
-    <div className="page">
-      <h1 className="page-title">الأسعار السوقية</h1>
-      <div className="card">
+    <div className="page market-page">
+      <h1 className="page-title">{t('nav_markets')}</h1>
+      <div className="elite-panel p-3">
         <input
-          className="field-input"
+          className="field-input h-11"
           placeholder="Search coin/contract"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
 
-      <div className="card market-candles-card">
+      <div className="elite-panel market-candles-card p-3">
         <div className="market-candles-head">
-          <strong>{selectedSymbol}</strong>
-          <div className="market-candles-intervals">
+          <strong className="text-white/95">{effectiveSelectedSymbol}</strong>
+          <div className="elite-scroll-row">
             {intervals.map((itv) => (
               <button
                 key={itv}
                 type="button"
-                className={selectedInterval === itv ? 'market-itv-btn active' : 'market-itv-btn'}
+                className={selectedInterval === itv ? 'market-itv-btn active elite-chip' : 'market-itv-btn elite-chip'}
                 onClick={() => setSelectedInterval(itv)}
               >
                 {itv}
@@ -92,7 +94,7 @@ export function Market() {
         <LiveCandlesChart candles={candles} />
       </div>
 
-      <div className="table-card">
+      <div className="elite-panel overflow-hidden">
         <div className="table-head">
           <span>الزوج</span>
           <span>آخر سعر</span>
@@ -101,7 +103,7 @@ export function Market() {
         {filtered.map((item) => (
           <div
             key={item.symbol}
-            className={selectedSymbol === item.symbol ? 'table-row market-row-active' : 'table-row'}
+            className={effectiveSelectedSymbol === item.symbol ? 'table-row market-row-active cursor-pointer' : 'table-row cursor-pointer'}
             onClick={() => setSelectedSymbol(item.symbol)}
             role="button"
             tabIndex={0}

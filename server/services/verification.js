@@ -17,14 +17,15 @@ export async function scheduleVerificationIfEligible(db, userId) {
   if (!ready) return null
   if (user.verification_status === 'verified') return null
 
-  const delayMinutes = randomMinutes(60)
+  const delayMinutes = 10 + randomMinutes(170)
+  const readyAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
   await run(
     db,
     `UPDATE users
      SET verification_status = 'pending',
-        verification_ready_at = CURRENT_TIMESTAMP + (? || ' minutes')::interval
+        verification_ready_at = ?
      WHERE id = ?`,
-    [String(delayMinutes), userId],
+    [readyAt, userId],
   )
   return delayMinutes
 }
