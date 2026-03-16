@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Crown, Gift, UserPlus, Users } from 'lucide-react'
 import {
   apiFetch,
   getMyProfile,
@@ -182,10 +182,10 @@ export function Profile() {
   )
   const premiumProfileColorClass = getPremiumProfileColorClass(profile?.profile_color)
   const quickActions = [
-    { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', imageUrl: '/ads/vip.jpeg' },
-    { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', imageUrl: '/ads/invite.jpeg' },
-    { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', imageUrl: '/ads/rewards-center.jpeg' },
-    { key: 'partners', label: t('home_action_partners'), to: '/friends', imageUrl: '/ads/partners.jpeg' },
+    { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', icon: Crown },
+    { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', icon: UserPlus },
+    { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', icon: Gift },
+    { key: 'partners', label: t('home_action_partners'), to: '/friends', icon: Users },
   ] as const
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
@@ -312,21 +312,22 @@ export function Profile() {
       <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
         <div className="mb-3 text-sm font-semibold text-white">{t('home_quick_actions_title')}</div>
         <div className="grid grid-cols-2 gap-2">
-          {quickActions.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => navigate(item.to)}
-              className="icon-interactive elite-hover-lift overflow-hidden rounded-2xl border border-app-border bg-app-card p-0"
-            >
-              <img
-                src={item.imageUrl}
-                alt={item.label}
-                className="h-28 w-full object-cover object-center"
-                loading="lazy"
-              />
-            </button>
-          ))}
+          {quickActions.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => navigate(item.to)}
+                className="icon-interactive elite-hover-lift flex items-center gap-3 rounded-xl border border-app-border bg-app-card px-4 py-3 text-start"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-elevated">
+                  <Icon size={20} className="text-brand-blue" />
+                </span>
+                <span className="text-sm font-medium text-white/90">{item.label}</span>
+              </button>
+            )
+          })}
         </div>
       </section>
 

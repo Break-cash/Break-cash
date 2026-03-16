@@ -111,6 +111,9 @@ export function FriendsPage() {
 
   return (
     <div className="friends-page page">
+      <section className="mb-4 overflow-hidden rounded-2xl border border-app-border">
+        <img src="/ads/partners.jpeg" alt={t('home_action_partners')} className="w-full object-cover" loading="eager" />
+      </section>
       <h1 className="friends-title">{t('nav_friends')}</h1>
 
       <section className="friends-search-section">

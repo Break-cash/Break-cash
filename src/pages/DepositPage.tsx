@@ -321,6 +321,10 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         ←
       </button>
 
+      <section className="deposit-promo-banner mb-4 overflow-hidden rounded-2xl border border-app-border">
+        <img src="/ads/rewards-center.jpeg" alt={t('home_action_rewards_center')} className="w-full object-cover" loading="eager" />
+      </section>
+
       <div className="deposit-brand">
         <div className="deposit-logo-wrap">
           {isOwner ? (

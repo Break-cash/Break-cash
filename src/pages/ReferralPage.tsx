@@ -75,6 +75,9 @@ export function ReferralPage() {
 
   return (
     <div className="page space-y-3">
+      <section className="overflow-hidden rounded-2xl border border-app-border">
+        <img src="/ads/invite.jpeg" alt={t('home_action_invite_earn')} className="w-full object-cover" loading="eager" />
+      </section>
       <section className="elite-panel p-4">
         <div className="flex items-center gap-2">
           <Users size={18} className="text-brand-blue" />
