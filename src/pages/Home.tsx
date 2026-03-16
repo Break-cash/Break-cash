@@ -4,13 +4,13 @@ import { appData } from '../data'
 import { PromoBanner } from '../components/ads/PromoBanner'
 import { useI18n } from '../i18nCore'
 
-type Quote = { symbol: string; price: number; change24h: number }
+type MarketQuote = { symbol: string; price: number; change24h: number }
 
 export function Home() {
   const { t } = useI18n()
-  const { balance_info, market_data } = appData
+  const { balance_info } = appData
   const [promoBanners, setPromoBanners] = useState<PromoBannerItem[]>([])
-  const [liveMarket, setLiveMarket] = useState<Quote[]>([])
+  const [marketData, setMarketData] = useState<MarketQuote[]>([])
   const mainMiningAd: PromoBannerItem = useMemo(
     () => ({
       id: 'local-mining-main-ad',
@@ -35,13 +35,23 @@ export function Home() {
   useEffect(() => {
     let active = true
     async function loadQuotes() {
-      const res = (await apiFetch('/api/market/quotes')) as { items: Quote[] }
-      if (active) setLiveMarket(res.items || [])
+      try {
+        const res = (await apiFetch('/api/market/quotes')) as {
+          items: Array<{ symbol: string; price: number; change24h: number }>
+        }
+        if (!active) return
+        const rows = (res.items || []).map((item) => ({
+          symbol: String(item.symbol || '').toUpperCase(),
+          price: Number(item.price || 0),
+          change24h: Number(item.change24h || 0),
+        }))
+        setMarketData(rows)
+      } catch {
+        if (active) setMarketData([])
+      }
     }
-    loadQuotes().catch(() => setLiveMarket([]))
-    const id = window.setInterval(() => {
-      loadQuotes().catch(() => {})
-    }, 5000)
+    loadQuotes().catch(() => {})
+    const id = window.setInterval(() => loadQuotes().catch(() => {}), 5000)
     return () => {
       active = false
       window.clearInterval(id)
@@ -58,15 +68,6 @@ export function Home() {
     },
     [mainMiningAd, promoBanners],
   )
-
-  const effectiveMarket =
-    liveMarket.length > 0
-      ? liveMarket.map((item) => ({
-          pair: item.symbol,
-          last_price: item.price,
-          change_percentage: item.change24h,
-        }))
-      : market_data
 
   return (
     <div className="page home-page space-y-4 lg:space-y-5">
@@ -116,25 +117,32 @@ export function Home() {
               <span>{t('home_last_price')}</span>
               <span>{t('home_change_24h')}</span>
             </div>
-            {effectiveMarket.map((item) => (
-              <div key={item.pair} className="table-row">
-                <div className="pair">
-                  <div className="icon-circle">{item.pair[0]}</div>
-                  <div className="pair-meta">
-                    <div className="pair-name">{item.pair}</div>
-                    <div className="pair-sub">{t('home_spot')}</div>
+            {marketData.length === 0 ? (
+              <div className="table-row">{t('common_loading')}</div>
+            ) : (
+              marketData.map((item) => {
+                const pair = item.symbol.replace(/USDT$/i, '/USDT')
+                return (
+                  <div key={item.symbol} className="table-row">
+                    <div className="pair">
+                      <div className="icon-circle">{item.symbol[0]}</div>
+                      <div className="pair-meta">
+                        <div className="pair-name">{pair}</div>
+                        <div className="pair-sub">{t('home_spot')}</div>
+                      </div>
+                    </div>
+                    <div className="price">{item.price.toLocaleString()}</div>
+                    <div
+                      className={
+                        item.change24h >= 0 ? 'change positive' : 'change negative'
+                      }
+                    >
+                      {item.change24h.toFixed(2)}%
+                    </div>
                   </div>
-                </div>
-                <div className="price">{item.last_price.toLocaleString()}</div>
-                <div
-                  className={
-                    item.change_percentage >= 0 ? 'change positive' : 'change negative'
-                  }
-                >
-                  {item.change_percentage.toFixed(2)}%
-                </div>
-              </div>
-            ))}
+                )
+              })
+            )}
           </div>
         </section>
         <div className="space-y-3 lg:col-span-1">

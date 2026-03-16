@@ -69,7 +69,7 @@ export function Market() {
       <div className="elite-panel p-3">
         <input
           className="field-input h-11"
-          placeholder="Search coin/contract"
+          placeholder={t('market_search_placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -96,9 +96,9 @@ export function Market() {
 
       <div className="elite-panel overflow-hidden">
         <div className="table-head">
-          <span>الزوج</span>
-          <span>آخر سعر</span>
-          <span>التغير</span>
+          <span>{t('home_pair')}</span>
+          <span>{t('home_last_price')}</span>
+          <span>{t('home_change_24h')}</span>
         </div>
         {filtered.map((item) => (
           <div
@@ -115,7 +115,7 @@ export function Market() {
               <div className="icon-circle">{item.symbol[0]}</div>
               <div className="pair-meta">
                 <div className="pair-name">{item.symbol}</div>
-                <div className="pair-sub">سوق فوري</div>
+                <div className="pair-sub">{t('home_spot')}</div>
               </div>
             </div>
             <div className="price">{item.price.toLocaleString()}</div>

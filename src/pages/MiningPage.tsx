@@ -361,7 +361,7 @@ export function MiningPage() {
               </button>
             </div>
           </div>
-        </div>
+      </div>
       ) : null}
     </div>
   )

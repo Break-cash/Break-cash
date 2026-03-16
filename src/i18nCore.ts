@@ -8,6 +8,7 @@ export const translations: Record<Language, Dictionary> = {
   ar: {
     nav_wallet: 'المحفظة',
     nav_markets: 'الأسواق',
+    market_search_placeholder: 'ابحث عن عملة/عقد',
     nav_futures: 'العقود الآجلة',
     nav_watchlist: 'قائمة المراقبة',
     nav_profile: 'الملف الشخصي',
@@ -709,6 +710,7 @@ export const translations: Record<Language, Dictionary> = {
   en: {
     nav_wallet: 'Wallet',
     nav_markets: 'Markets',
+    market_search_placeholder: 'Search coin/contract',
     nav_futures: 'Futures',
     nav_watchlist: 'Watchlist',
     nav_profile: 'Profile',
@@ -1410,6 +1412,7 @@ export const translations: Record<Language, Dictionary> = {
   tr: {
     nav_wallet: 'Cuzdan',
     nav_markets: 'Piyasalar',
+    market_search_placeholder: 'Coin/sözleşme ara',
     nav_futures: 'Vadeli',
     nav_watchlist: 'Takip Listesi',
     nav_profile: 'Profil',

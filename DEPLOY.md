@@ -12,16 +12,38 @@
 
 ### خطوات النشر على Railway
 
+#### ربط المشروع الصحيح (من سطر الأوامر)
+
+إذا كان لديك مشروع على Railway وتريد ربط هذا المجلد به:
+
+```powershell
+# ثبّت Railway CLI
+npm install -g @railway/cli
+
+# سجّل الدخول
+railway login
+
+# ادخل لمجلد المشروع واربطه بالمشروع الموجود
+cd breakcash.cash
+railway link
+
+# انشر
+railway up
+```
+
+عند `railway link` اختر المشروع الصحيح من القائمة أو أدخل معرّف المشروع.
+
+#### ربط من GitHub
+
 1. سجّل دخولك إلى [railway.app](https://railway.app) وربط مستودع GitHub لمشروعك.
-2. أضف خدمة **PostgreSQL** من القائمة ثم انسخ `DATABASE_URL` من Variables.
-3. أضف خدمة جديدة واختر **Deploy from GitHub** ثم اختر المشروع.
-4. في الإعدادات:
-   - **Build Command:** (اتركه فارغاً أو `docker build -t app .`)
-   - **Start Command:** (اتركه فارغاً إذا استخدمت Dockerfile)
-   - **Root Directory:** المجلد الجذر للمشروع
-   - إذا كان Railway يكتشف Dockerfile تلقائياً، سيُبنى ويُشغّل من Docker.
-5. في **Variables** أضف كل متغيرات `.env` (خصوصاً `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, `PORT`).
-6. من **Settings** فعّل **Public Networking** واختر Generate Domain لتحصل على رابط مثل `https://xxx.up.railway.app`.
+2. انقر **New Project** → **Deploy from GitHub repo** → اختر المستودع.
+3. أضف خدمة **PostgreSQL**: انقر **+ New** → **Database** → **Add PostgreSQL**.
+4. في خدمة التطبيق، اذهب إلى **Variables** وأضف:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (مرجع تلقائي)
+   - `NODE_ENV` = `production`
+   - `JWT_SECRET` = (سري قوي)
+5. ملف `railway.json` مضبوط مسبقاً: `npm run build` ثم `npm start`.
+6. من **Settings** → **Networking** → **Generate Domain** لتحصل على رابط مثل `https://xxx.up.railway.app`.
 
 ### خطوات النشر على Render
 

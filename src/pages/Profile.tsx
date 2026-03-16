@@ -182,10 +182,10 @@ export function Profile() {
   )
   const premiumProfileColorClass = getPremiumProfileColorClass(profile?.profile_color)
   const quickActions = [
-    { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', imageUrl: '/ads/vip-benefits.jpg' },
-    { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', imageUrl: '/ads/invite-earn.jpg' },
-    { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', imageUrl: '/ads/rewards-center.jpg' },
-    { key: 'partners', label: t('home_action_partners'), to: '/friends', imageUrl: '/ads/partners-program.jpg' },
+    { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', imageUrl: '/ads/vip.jpeg' },
+    { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', imageUrl: '/ads/invite.jpeg' },
+    { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', imageUrl: '/ads/rewards-center.jpeg' },
+    { key: 'partners', label: t('home_action_partners'), to: '/friends', imageUrl: '/ads/partners.jpeg' },
   ] as const
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
@@ -250,7 +250,23 @@ export function Profile() {
         className={`elite-enter elite-hover-lift elite-shine rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#272c35,#222831)] p-4 shadow-[0_12px_44px_rgba(0,0,0,0.3)] ${premiumProfileColorClass}`}
       >
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div className="text-start">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/deposit')}
+              className="icon-interactive deposit-glow-icon h-10 rounded-xl border border-brand-blue/40 bg-brand-blue px-4 text-sm font-semibold text-white hover:brightness-110"
+            >
+              {t('deposit')}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/withdraw')}
+              className="icon-interactive withdraw-glow-icon h-10 rounded-xl border border-emerald-300/30 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 px-4 text-sm font-semibold text-white hover:brightness-110"
+            >
+              {t('withdraw')}
+            </button>
+          </div>
+          <div className="ms-auto text-start">
             <p className="text-xs text-app-muted">{t('profile_total_assets')}</p>
             <div className="mt-1 flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight lg:text-[2.1rem]">${dashboardBalance.toFixed(2)}</h1>
@@ -301,12 +317,12 @@ export function Profile() {
               key={item.key}
               type="button"
               onClick={() => navigate(item.to)}
-              className="icon-interactive elite-hover-lift overflow-hidden rounded-2xl border border-app-border bg-app-card text-start"
+              className="icon-interactive elite-hover-lift overflow-hidden rounded-2xl border border-app-border bg-app-card p-0"
             >
               <img
                 src={item.imageUrl}
                 alt={item.label}
-                className="h-28 w-full object-cover"
+                className="h-28 w-full object-cover object-center"
                 loading="lazy"
               />
             </button>
