@@ -10,6 +10,28 @@ export function createMarketRouter() {
     return res.json(marketFeed.getQuotes())
   })
 
+  router.get('/quote', async (req, res) => {
+    const symbol = String(req.query.symbol || '').toUpperCase().trim()
+    if (!symbol) return res.status(400).json({ error: 'MISSING_SYMBOL' })
+    const { items } = marketFeed.getQuotes()
+    const cached = items.find((q) => q.symbol === symbol)
+    if (cached) return res.json({ item: cached })
+    try {
+      const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`)
+      if (!r.ok) return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
+      const row = await r.json()
+      const item = {
+        symbol: String(row?.symbol || '').toUpperCase(),
+        price: Number(row?.lastPrice ?? 0) || 0,
+        change24h: Number(row?.priceChangePercent ?? 0) || 0,
+        volume: Number(row?.quoteVolume ?? 0) || 0,
+      }
+      return res.json({ item })
+    } catch {
+      return res.status(502).json({ error: 'UPSTREAM_UNREACHABLE' })
+    }
+  })
+
   router.get('/search', async (req, res) => {
     const items = marketFeed.search(req.query.q)
     return res.json({ items })

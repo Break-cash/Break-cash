@@ -1,6 +1,10 @@
 import WebSocket from 'ws'
 
-const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT', 'DOGEUSDT']
+const DEFAULT_SYMBOLS = [
+  'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT',
+  'AVAXUSDT', 'LINKUSDT', 'DOTUSDT', 'MATICUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT',
+  'TRXUSDT', 'ETCUSDT', 'APTUSDT', 'ARBUSDT', 'OPUSDT', 'INJUSDT',
+]
 const REST_ENDPOINT = 'https://api.binance.com/api/v3/ticker/24hr'
 
 function toQuote(row) {
