@@ -23,7 +23,6 @@ import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.Home })))
 const Market = lazy(() => import('./pages/Market').then((m) => ({ default: m.Market })))
-const Assets = lazy(() => import('./pages/Assets').then((m) => ({ default: m.Assets })))
 const Options = lazy(() => import('./pages/Options').then((m) => ({ default: m.Options })))
 const SyncTrade = lazy(() => import('./pages/SyncTrade').then((m) => ({ default: m.SyncTrade })))
 const JoinInvite = lazy(() => import('./pages/JoinInvite').then((m) => ({ default: m.JoinInvite })))
@@ -370,7 +369,7 @@ function App() {
                     <Route path="/withdraw" element={<DepositPage user={user as AuthUser} pageMode="withdraw" />} />
                     <Route path="/friends" element={<FriendsPage />} />
                     <Route path="/home" element={<Home />} />
-                    <Route path="/assets" element={<Assets />} />
+                    <Route path="/assets" element={<WalletPage />} />
                     <Route path="/market" element={<Market />} />
                     <Route path="/watchlist" element={<WatchlistPage />} />
                     <Route path="/futures" element={<FuturesPage />} />
