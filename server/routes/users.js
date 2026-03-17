@@ -3,6 +3,11 @@ import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { hashPassword } from '../auth.js'
 import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
+import {
+  getMainBalance,
+  recordTransaction,
+  appendLegacyBalanceTransaction,
+} from '../services/wallet-ledger.js'
 
 async function withTransaction(db, fn) {
   await run(db, 'BEGIN')
@@ -325,32 +330,28 @@ export function createUsersRouter(db) {
     if (!['add', 'deduct'].includes(type)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
-    let next = 0
+    const delta = type === 'add' ? amount : -amount
     try {
       await withTransaction(db, async () => {
-        const existing = await get(
-          db,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-          [userId, currency],
-        )
-        const current = Number(existing?.amount || 0)
-        next = Number((type === 'add' ? current + amount : current - amount).toFixed(8))
-        if (next < 0) throw new Error('INSUFFICIENT_BALANCE')
-        await run(
-          db,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, ?, ?, datetime('now'))
-           ON CONFLICT(user_id, currency) DO UPDATE SET
-             amount = excluded.amount,
-             updated_at = excluded.updated_at`,
-          [userId, currency, next],
-        )
-        await run(
-          db,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [userId, req.user.id, type === 'add' ? 'bonus_add' : 'bonus_deduct', currency, amount, 'owner bonus action'],
-        )
+        await recordTransaction(db, {
+          userId,
+          currency,
+          transactionType: 'adjust',
+          sourceType: 'system',
+          referenceType: 'admin_bonus',
+          referenceId: req.user.id,
+          amount: delta,
+          idempotencyKey: `bonus_${userId}_${currency}_${Date.now()}`,
+          createdBy: req.user.id,
+        })
+        await appendLegacyBalanceTransaction(db, {
+          userId,
+          adminId: req.user.id,
+          type: type === 'add' ? 'bonus_add' : 'bonus_deduct',
+          currency,
+          amount,
+          note: 'owner bonus action',
+        })
       })
     } catch (error) {
       if (error instanceof Error && error.message === 'INSUFFICIENT_BALANCE') {
@@ -358,6 +359,7 @@ export function createUsersRouter(db) {
       }
       throw error
     }
+    const next = await getMainBalance(db, userId, currency)
     await logAdminAction(db, req.user.id, 'finance', 'bonus_adjust', userId, { type, currency, amount })
     return res.json({ ok: true, balance: { userId, currency, amount: next } })
   })

@@ -87,16 +87,11 @@ async function reserveFirst3000IdsSqlite(db) {
     const maxRows = await allAsync(db, `SELECT COALESCE(MAX(id), 0) AS max_id FROM "${tableName}"`)
     const currentMax = Number(maxRows?.[0]?.max_id || 0)
     const targetValue = Math.max(RESERVED_ID_FLOOR, currentMax)
-    await runAsync(
-      db,
-      `INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)
-       ON CONFLICT(name) DO UPDATE SET
-         seq = CASE
-           WHEN seq < excluded.seq THEN excluded.seq
-           ELSE seq
-         END`,
-      [tableName, targetValue],
-    )
+    const seqRow = await allAsync(db, `SELECT seq FROM sqlite_sequence WHERE name = ?`, [tableName])
+    const currentSeq = Number(seqRow?.[0]?.seq || 0)
+    const newSeq = Math.max(targetValue, currentSeq)
+    await runAsync(db, `DELETE FROM sqlite_sequence WHERE name = ?`, [tableName])
+    await runAsync(db, `INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)`, [tableName, newSeq])
   }
 }
 
@@ -624,6 +619,123 @@ CREATE TABLE IF NOT EXISTS kyc_watchlist (
   created_by INTEGER REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS ads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL CHECK (type IN ('image', 'video')),
+  media_url TEXT NOT NULL,
+  title TEXT,
+  description TEXT,
+  link_url TEXT,
+  placement TEXT NOT NULL DEFAULT 'all',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ads_placement ON ads(placement);
+CREATE INDEX IF NOT EXISTS idx_ads_is_active ON ads(is_active);
+
+CREATE TABLE IF NOT EXISTS earning_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  config_json TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_earning_sources_code ON earning_sources(code);
+CREATE INDEX IF NOT EXISTS idx_earning_sources_active ON earning_sources(is_active);
+
+CREATE TABLE IF NOT EXISTS wallet_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  account_type TEXT NOT NULL DEFAULT 'main',
+  source_type TEXT NOT NULL DEFAULT 'system',
+  balance_amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, currency, account_type, source_type)
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_accounts_user ON wallet_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_accounts_user_currency ON wallet_accounts(user_id, currency);
+
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  transaction_type TEXT NOT NULL,
+  source_type TEXT NOT NULL DEFAULT 'system',
+  reference_type TEXT,
+  reference_id INTEGER,
+  amount REAL NOT NULL,
+  fee_amount REAL NOT NULL DEFAULT 0,
+  net_amount REAL NOT NULL,
+  balance_before REAL,
+  balance_after REAL,
+  account_type_before TEXT,
+  account_type_after TEXT,
+  metadata TEXT,
+  idempotency_key TEXT UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_by INTEGER REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user ON wallet_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_created ON wallet_transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference ON wallet_transactions(reference_type, reference_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_transactions_idempotency ON wallet_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS earning_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  source_type TEXT NOT NULL,
+  reference_type TEXT NOT NULL,
+  reference_id INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  amount REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  transferred_at TEXT,
+  transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(source_type, reference_type, reference_id)
+);
+CREATE INDEX IF NOT EXISTS idx_earning_entries_user ON earning_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_earning_entries_status ON earning_entries(status);
+CREATE INDEX IF NOT EXISTS idx_earning_entries_reference ON earning_entries(reference_type, reference_id);
+
+CREATE TABLE IF NOT EXISTS mining_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  status TEXT NOT NULL DEFAULT 'inactive',
+  principal_amount REAL NOT NULL DEFAULT 0,
+  daily_percent REAL NOT NULL DEFAULT 0,
+  monthly_percent REAL NOT NULL DEFAULT 0,
+  emergency_fee_percent REAL NOT NULL DEFAULT 0,
+  started_at TEXT,
+  ended_at TEXT,
+  monthly_lock_until TEXT,
+  last_daily_claim_at TEXT,
+  daily_profit_claimed_total REAL NOT NULL DEFAULT 0,
+  monthly_profit_accrued_total REAL NOT NULL DEFAULT 0,
+  returned_principal REAL NOT NULL DEFAULT 0,
+  penalty_amount REAL NOT NULL DEFAULT 0,
+  closure_reason TEXT,
+  cancel_requested_at TEXT,
+  principal_release_at TEXT,
+  principal_released_at TEXT,
+  emergency_withdrawn_at TEXT,
+  video_access_unlocked INTEGER NOT NULL DEFAULT 0,
+  video_access_unlocked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mining_subscriptions_status ON mining_subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_mining_subscriptions_user ON mining_subscriptions(user_id);
 `
 
 async function ensureSchema(db) {
@@ -796,6 +908,22 @@ async function ensureSchema(db) {
       [level, title, minDeposit, referralPercent],
     )
   }
+  try {
+    for (const [code, name, desc, sortOrder] of [
+      ['mining', 'Mining', 'Mining subscription earnings', 1],
+      ['tasks', 'Tasks', 'Task reward redemptions', 2],
+      ['referrals', 'Referrals', 'Referral rewards', 3],
+      ['deposits', 'Deposits', 'Deposit-based bonuses', 4],
+    ]) {
+      await runAsync(db, `INSERT OR IGNORE INTO earning_sources (code, name, description, is_active, sort_order) VALUES (?, ?, ?, 1, ?)`, [code, name, desc, sortOrder])
+    }
+  } catch (_) {}
+  try {
+    const rows = await allAsync(db, `SELECT user_id, currency, amount FROM balances`)
+    for (const r of rows || []) {
+      await runAsync(db, `INSERT OR IGNORE INTO wallet_accounts (user_id, currency, account_type, source_type, balance_amount) VALUES (?, ?, 'main', 'system', ?)`, [r.user_id, r.currency, r.amount])
+    }
+  } catch (_) {}
   // IMPORTANT: first 3000 IDs are reserved. New auto IDs start from 3001+.
   await reserveFirst3000IdsSqlite(db)
 }

@@ -5,12 +5,12 @@ import { ChevronDown, Crown, Gift, UserPlus, Users } from 'lucide-react'
 import {
   apiFetch,
   getMyProfile,
-  getPromoBanners,
+  getAds,
   subscribeToLiveUpdates,
   type AuthUser,
-  type PromoBannerItem,
+  type AdItem,
 } from '../api'
-import { PromoBanner } from '../components/ads/PromoBanner'
+import { AdBanner } from '../components/ads/AdBanner'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
 import { getPremiumProfileColorClass } from '../premiumIdentity'
@@ -26,26 +26,12 @@ export function Profile() {
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState('USDT')
   const [liveQuotes, setLiveQuotes] = useState<Record<string, { price: number; change24h: number }>>({})
-  const [promoBanners, setPromoBanners] = useState<PromoBannerItem[]>([])
+  const [profileAds, setProfileAds] = useState<AdItem[]>([])
   const [isPullRefreshing, setIsPullRefreshing] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
   const pullStartYRef = useRef(0)
   const pullActiveRef = useRef(false)
   const liveRefreshTimerRef = useRef<number | null>(null)
-  const mainMiningAd: PromoBannerItem = useMemo(
-    () => ({
-      id: 'local-mining-main-ad',
-      title: t('nav_mining'),
-      subtitle: t('mining_media_hint'),
-      ctaLabel: t('nav_mining'),
-      to: '/mining',
-      imageUrl: '/ads/mining-main-banner.jpg',
-      placement: 'all',
-      enabled: true,
-      order: -100,
-    }),
-    [t],
-  )
   const dailyEarnings = Number(appData.balance_info.today_earnings || 0)
   const earningsCurrency = appData.balance_info.currency || 'USDT'
 
@@ -65,10 +51,10 @@ export function Profile() {
     }
   }, [])
 
-  const loadPromoData = useCallback(async () => {
-    getPromoBanners()
-      .then((res) => setPromoBanners(res.items || []))
-      .catch(() => setPromoBanners([]))
+  const loadAdsData = useCallback(async () => {
+    getAds('profile')
+      .then((res) => setProfileAds(res.items || []))
+      .catch(() => setProfileAds([]))
   }, [])
 
   const loadQuotes = useCallback(async () => {
@@ -90,19 +76,19 @@ export function Profile() {
   const refreshDashboard = useCallback(async (withSpinner = false) => {
     if (withSpinner) setIsPullRefreshing(true)
     try {
-      await Promise.allSettled([loadCoreDashboardData(), loadPromoData(), loadQuotes()])
+      await Promise.allSettled([loadCoreDashboardData(), loadAdsData(), loadQuotes()])
     } finally {
       if (withSpinner) setIsPullRefreshing(false)
     }
-  }, [loadCoreDashboardData, loadPromoData, loadQuotes])
+  }, [loadCoreDashboardData, loadAdsData, loadQuotes])
 
   useEffect(() => {
     loadCoreDashboardData()
       .catch(() => {})
       .finally(() => setLoading(false))
-    loadPromoData().catch(() => {})
+    loadAdsData().catch(() => {})
     loadQuotes().catch(() => {})
-  }, [loadCoreDashboardData, loadPromoData, loadQuotes])
+  }, [loadCoreDashboardData, loadAdsData, loadQuotes])
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -120,7 +106,7 @@ export function Profile() {
       }
       liveRefreshTimerRef.current = window.setTimeout(() => {
         if (event.type === 'home_content_updated' || event.type === 'announcement_updated') {
-          loadPromoData().catch(() => {})
+          loadAdsData().catch(() => {})
           return
         }
         if (event.type === 'balance_updated') {
@@ -136,7 +122,7 @@ export function Profile() {
       }
       unsub()
     }
-  }, [loadCoreDashboardData, loadPromoData, refreshDashboard])
+  }, [loadCoreDashboardData, loadAdsData, refreshDashboard])
 
   const dashboardBalance = realBalance ?? walletDashboardMock.total_balance_usd
   const assetsToRender = useMemo(() => {
@@ -153,20 +139,6 @@ export function Profile() {
   }, [holdings, liveQuotes])
 
   const tabAssets = useMemo(() => assetsToRender.slice(0, 5), [assetsToRender])
-  const totalPoints = useMemo(
-    () => Math.round((dashboardBalance || 0) * 2 + tabAssets.length * 11),
-    [dashboardBalance, tabAssets.length],
-  )
-  const profileBanners = useMemo(
-    () => {
-      const filtered = promoBanners.filter((x) => x.enabled && (x.placement === 'profile' || x.placement === 'all'))
-      const hasMainMiningAd = filtered.some(
-        (item) => item.id === mainMiningAd.id || String(item.imageUrl || '').includes('/ads/mining-main-banner.jpg'),
-      )
-      return hasMainMiningAd ? filtered : [mainMiningAd, ...filtered]
-    },
-    [mainMiningAd, promoBanners],
-  )
   const ownerTools = useMemo(
     () =>
       profile?.role === 'owner'
@@ -250,8 +222,8 @@ export function Profile() {
         transition={{ duration: 0.28, ease: 'easeOut' }}
         className={`elite-enter elite-hover-lift elite-shine rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#272c35,#222831)] p-4 shadow-[0_12px_44px_rgba(0,0,0,0.3)] ${premiumProfileColorClass}`}
       >
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-4 flex items-center gap-2">
             <button
               type="button"
               onClick={() => navigate('/deposit')}
@@ -307,7 +279,7 @@ export function Profile() {
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-semibold text-white">{t('home_announcement_board')}</p>
         </div>
-        <PromoBanner className="my-0 opacity-95" items={profileBanners} />
+        <AdBanner items={profileAds} placement="profile" className="my-0 opacity-95" />
       </section>
 
       <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
@@ -329,23 +301,6 @@ export function Profile() {
               </button>
             )
           })}
-        </div>
-      </section>
-
-      <section className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-xl border border-app-border bg-app-card p-3">
-          <p className="text-[11px] text-app-muted">{t('home_today_earnings')}</p>
-          <p className={`mt-1 text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
-            {dailyEarnings.toFixed(2)} {earningsCurrency}
-          </p>
-        </div>
-        <div className="rounded-xl border border-app-border bg-app-card p-3">
-          <p className="text-[11px] text-app-muted">{t('wallet_assets')}</p>
-          <p className="mt-1 text-sm font-semibold text-white">{tabAssets.length}</p>
-        </div>
-        <div className="rounded-xl border border-app-border bg-app-card p-3">
-          <p className="text-[11px] text-app-muted">{t('profile_points')}</p>
-          <p className="mt-1 text-sm font-semibold text-brand-blue">{totalPoints}</p>
         </div>
       </section>
 

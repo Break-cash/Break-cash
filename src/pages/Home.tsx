@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { apiFetch, getPromoBanners, type PromoBannerItem } from '../api'
+import { useEffect, useState } from 'react'
+import { apiFetch, getAds, subscribeToLiveUpdates, type AdItem } from '../api'
 import { appData } from '../data'
-import { PromoBanner } from '../components/ads/PromoBanner'
+import { AdBanner } from '../components/ads/AdBanner'
 import { useI18n } from '../i18nCore'
 
 type MarketQuote = { symbol: string; price: number; change24h: number }
@@ -9,27 +9,22 @@ type MarketQuote = { symbol: string; price: number; change24h: number }
 export function Home() {
   const { t } = useI18n()
   const { balance_info } = appData
-  const [promoBanners, setPromoBanners] = useState<PromoBannerItem[]>([])
+  const [ads, setAds] = useState<AdItem[]>([])
   const [marketData, setMarketData] = useState<MarketQuote[]>([])
-  const mainMiningAd: PromoBannerItem = useMemo(
-    () => ({
-      id: 'local-mining-main-ad',
-      title: t('nav_mining'),
-      subtitle: t('mining_media_hint'),
-      ctaLabel: t('nav_mining'),
-      to: '/mining',
-      imageUrl: '/ads/mining-main-banner.jpg',
-      placement: 'all',
-      enabled: true,
-      order: -100,
-    }),
-    [t],
-  )
 
   useEffect(() => {
-    getPromoBanners()
-      .then((res) => setPromoBanners(res.items || []))
-      .catch(() => setPromoBanners([]))
+    getAds('home')
+      .then((res) => setAds(res.items || []))
+      .catch(() => setAds([]))
+  }, [])
+
+  useEffect(() => {
+    const unsub = subscribeToLiveUpdates((event) => {
+      if (event.type === 'home_content_updated') {
+        getAds('home').then((res) => setAds(res.items || [])).catch(() => {})
+      }
+    })
+    return unsub
   }, [])
 
   useEffect(() => {
@@ -57,17 +52,6 @@ export function Home() {
       window.clearInterval(id)
     }
   }, [])
-
-  const homeBanners = useMemo(
-    () => {
-      const filtered = promoBanners.filter((x) => x.enabled && (x.placement === 'home' || x.placement === 'all'))
-      const hasMainMiningAd = filtered.some(
-        (item) => item.id === mainMiningAd.id || String(item.imageUrl || '').includes('/ads/mining-main-banner.jpg'),
-      )
-      return hasMainMiningAd ? filtered : [mainMiningAd, ...filtered]
-    },
-    [mainMiningAd, promoBanners],
-  )
 
   return (
     <div className="page home-page">
@@ -183,16 +167,12 @@ export function Home() {
             </div>
           </div>
         </section>
-
-        {/* Sidebar - Promotions */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-[110px] space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-app-muted px-1">{t('home_promotions')}</h3>
-            <PromoBanner
-              className="my-0"
-              items={homeBanners}
-            />
-          </div>
+        <div className="space-y-3 lg:col-span-1">
+          <AdBanner
+            items={ads}
+            placement="home"
+            className="my-0 lg:sticky lg:top-[110px]"
+          />
         </div>
       </div>
     </div>

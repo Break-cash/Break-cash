@@ -1,178 +1,101 @@
-# نشر Break cash للإنتاج
+# دليل النشر للإنتاج | Production Deployment Guide
 
-## البنية الحالية: Vercel (الواجهة) + Railway (التطبيق/API)
+## البنية الحالية
 
-| العنصر | المضيف | القيمة |
-|--------|--------|--------|
-| **الواجهة** | Vercel | https://breakcash.cash |
-| **API** | Railway | https://api.breakcash.cash |
-
-### أوامر النشر
-
-```powershell
-# 1. الواجهة على Vercel
-cd breakcash.cash
-vercel --prod
-
-# 2. التطبيق/API على Railway
-railway up --service break-cash-api
-```
-
-### ربط المشروع بـ Vercel (أول مرة)
-
-```powershell
-# ثبّت Vercel CLI
-npm install -g vercel
-
-# سجّل الدخول
-vercel login
-
-# ادخل لمجلد المشروع
-cd breakcash.cash
-
-# ربط المشروع (اختر المشروع أو أنشئ جديداً)
-vercel link
-
-# نشر للإنتاج
-vercel --prod
-```
-
-### ربط من GitHub (Vercel)
-
-1. ادخل إلى [vercel.com](https://vercel.com) وسجّل الدخول.
-2. **Add New** → **Project** → اختر المستودع من GitHub.
-3. إعدادات البناء (يُكتشف تلقائياً لمشاريع Vite):
-   - **Framework Preset:** Vite
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `dist`
-4. أضف النطاق `breakcash.cash` من **Settings** → **Domains**.
-5. كل دفع (push) إلى الفرع الرئيسي سينشر تلقائياً.
+- **Frontend**: React + Vite (يُبنى في `dist/`)
+- **Backend**: Express API على نفس الخادم
+- **قواعد البيانات**: PostgreSQL (إنتاج) أو SQLite (تطوير)
 
 ---
 
-## الطريقة 1: سيرفر واحد (Docker) — موصى بها
+## 1. النشر على Railway
 
-يعمل الواجهة والـ API من نفس السيرفر. مناسب لـ VPS أو Railway أو Render أو أي مضيف يدعم Docker.
+### المتطلبات
+- حساب [Railway](https://railway.app)
+- قاعدة بيانات PostgreSQL (Railway أو خارجية)
 
-### متطلبات
+### الخطوات
 
-- Docker مثبت على جهازك أو على السيرفر
-- قاعدة بيانات PostgreSQL (مثلاً من Railway أو Supabase أو أي مضيف)
-- ملف `.env` للإنتاج (انسخ من `.env.example` وعدّل القيم)
+1. **ربط المستودع**
+   - اربط مشروعك من GitHub إلى Railway
+   - أو استخدم `railway link` من CLI
 
-### خطوات النشر على Railway
+2. **إعداد المتغيرات البيئية** (في Railway Dashboard → Variables):
 
-#### ربط المشروع الصحيح (من سطر الأوامر)
+   | المتغير | مطلوب | الوصف |
+   |---------|-------|-------|
+   | `NODE_ENV` | نعم | `production` |
+   | `PORT` | تلقائي | Railway يضبطه تلقائياً |
+   | `DATABASE_URL` | نعم | رابط PostgreSQL |
+   | `JWT_SECRET` | نعم | سري قوي (32+ حرف) |
+   | `ADMIN_EMAIL` | نعم | بريد المدير |
+   | `ADMIN_PASSWORD` | نعم | كلمة مرور المدير |
+   | `OWNER_EMAIL` | نعم | بريد المالك |
+   | `OWNER_PASSWORD` | نعم | كلمة مرور المالك |
+   | `SENTRY_DSN` | اختياري | لمراقبة الأخطاء |
+   | `UPTIME_PING_TOKEN` | اختياري | لفحص الصحة |
 
-إذا كان لديك مشروع على Railway وتريد ربط هذا المجلد به:
+3. **قاعدة البيانات**
+   - أنشئ خدمة PostgreSQL من Railway أو استخدم رابط خارجي
+   - انسخ `DATABASE_URL` إلى المتغيرات
 
-```powershell
-# ثبّت Railway CLI
-npm install -g @railway/cli
+4. **النشر**
+   - Railway يبني المشروع بـ `npm run build` ثم يشغّل `npm start`
+   - Healthcheck: `/api/health`
 
-# سجّل الدخول
-railway login
+---
 
-# ادخل لمجلد المشروع واربطه بالمشروع الموجود
-cd breakcash.cash
-railway link
+## 2. النشر على Vercel (Frontend فقط)
 
-# انشر
-railway up
-```
+إذا كان الـ API على `api.breakcash.cash`:
 
-عند `railway link` اختر المشروع الصحيح من القائمة أو أدخل معرّف المشروع.
+1. اربط المستودع من Vercel
+2. Build Command: `npm run build`
+3. Output Directory: `dist`
+4. المتغيرات: `VITE_API_URL` إذا كان الـ API على دومين مختلف
 
-#### ربط من GitHub
+ملف `vercel.json` الحالي يعيد توجيه:
+- `/api/*` → `https://api.breakcash.cash/api/*`
+- `/uploads/*` → `https://api.breakcash.cash/uploads/*`
 
-1. سجّل دخولك إلى [railway.app](https://railway.app) وربط مستودع GitHub لمشروعك.
-2. انقر **New Project** → **Deploy from GitHub repo** → اختر المستودع.
-3. أضف خدمة **PostgreSQL**: انقر **+ New** → **Database** → **Add PostgreSQL**.
-4. في خدمة التطبيق، اذهب إلى **Variables** وأضف:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (مرجع تلقائي)
-   - `NODE_ENV` = `production`
-   - `JWT_SECRET` = (سري قوي)
-5. ملف `railway.json` مضبوط مسبقاً: `npm run build` ثم `npm start`.
-6. من **Settings** → **Networking** → **Generate Domain** لتحصل على رابط مثل `https://xxx.up.railway.app`.
+---
 
-### خطوات النشر على Render
-
-1. ادخل إلى [render.com](https://render.com) وربط مستودع GitHub.
-2. **New → PostgreSQL** لإنشاء قاعدة بيانات، ثم انسخ **Internal Database URL**.
-3. **New → Web Service**، اختر المستودع.
-4. الإعدادات:
-   - **Environment:** Docker
-   - **Build Command:** (يُستخدم Dockerfile تلقائياً)
-   - **Start Command:** (من Dockerfile)
-5. في **Environment** أضف المتغيرات: `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, وباقي ما في `.env.example`.
-6. احفظ ثم انتظر انتهاء الـ Build والـ Deploy. ستظهر لك عنوان مثل `https://xxx.onrender.com`.
-
-### تشغيل Docker محلياً (للتجربة)
+## 3. النشر عبر Docker
 
 ```bash
 # بناء الصورة
 docker build -t breakcash .
 
-# تشغيل (غيّر DATABASE_URL حسب بيئتك)
-docker run --rm -p 5174:5174 \
+# تشغيل (مع PostgreSQL خارجي)
+docker run -p 5174:5174 \
   -e NODE_ENV=production \
-  -e DATABASE_URL="postgresql://..." \
-  -e JWT_SECRET="your-secret" \
+  -e DATABASE_URL=postgresql://... \
+  -e JWT_SECRET=... \
+  -e ADMIN_EMAIL=... \
+  -e ADMIN_PASSWORD=... \
+  -e OWNER_EMAIL=... \
+  -e OWNER_PASSWORD=... \
   breakcash
 ```
 
-ثم افتح المتصفح على: `http://localhost:5174`
-
 ---
 
-## الطريقة 2: بدون Docker (بناء يدوي على VPS)
-
-مفيدة إذا كان السيرفر يعمل عليه Node.js فقط بدون Docker.
+## 4. التحقق بعد النشر
 
 ```bash
-# على السيرفر (مثلاً Ubuntu)
-cd /path/to/breakcash.cash
-npm ci
-npm run build
+# فحص الصحة
+curl https://api.breakcash.cash/api/health
 
-# تشغيل بالإنتاج (يُفضّل استخدام pm2)
-export NODE_ENV=production
-export PORT=5174
-# اضبط DATABASE_URL و JWT_SECRET وغيرها في .env
-npm start
-```
-
-مع **PM2** لبقاء العملية تعمل بعد إغلاق الطرفية:
-
-```bash
-npm install -g pm2
-NODE_ENV=production pm2 start server/index.js --name breakcash
-pm2 save
-pm2 startup
+# النتيجة المتوقعة:
+# {"ok":true,"db":"up","dbLatencyMs":...,"uptimeSec":...}
 ```
 
 ---
 
-## الطريقة 3: واجهة على Vercel + API منفصل
+## 5. ملاحظات مهمة
 
-لديك بالفعل `vercel.json` يعيد توجيه `/api` إلى `https://api.breakcash.cash`.
-
-- **الواجهة:** انشر المشروع على [Vercel](https://vercel.com) (ربط المستودع ثم Deploy). Vercel سيبني من `vite build` ويخدم الملفات الثابتة، والطلبات إلى `/api` ستُحوّل إلى `api.breakcash.cash`.
-- **الـ API:** انشر السيرفر (مجلد `server` + تشغيل `node server/index.js` بعد ضبط المتغيرات) على أي مضيف (Railway / Render / VPS) وربط النطاق `api.breakcash.cash` به.
-
-تأكد أن نطاق الواجهة (مثلاً `breakcash.cash`) مضبوط في Vercel، وأن `api.breakcash.cash` يشير إلى مضيف الـ API.
-
----
-
-## ملخص المتغيرات المهمة للإنتاج
-
-| المتغير | وصف |
-|--------|-----|
-| `NODE_ENV` | `production` |
-| `PORT` | منفذ التطبيق (غالباً 5174 أو ما يعطيه المضيف) |
-| `DATABASE_URL` | رابط اتصال PostgreSQL |
-| `JWT_SECRET` | سري قوي لتوقيع الجلسات |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | حساب المدير |
-| `OWNER_EMAIL` / `OWNER_PASSWORD` | حساب المالك |
-
-أبقِ `ALLOW_DEV_CODE=0` في الإنتاج. للإيميل وSMS وSentry استخدم القيم من `.env.example` حسب الحاجة.
+- **لا تستخدم** `USE_SQLITE=1` في الإنتاج
+- **استخدم** PostgreSQL مع `DATABASE_URL`
+- **فعّل** `PGSSL=true` عند الاتصال بقاعدة بيانات خارجية
+- **اضبط** `ALLOW_DEV_CODE=0` في الإنتاج
+- **احفظ** نسخة احتياطية من قاعدة البيانات بانتظام

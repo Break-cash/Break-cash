@@ -232,6 +232,24 @@ export function createOwnerGrowthRouter(db) {
     return res.json({ ok: true })
   })
 
+  router.get('/referrals/stats', async (_req, res) => {
+    const row = await get(
+      db,
+      `SELECT
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN status IN ('active', 'reward_released') THEN 1 ELSE 0 END) AS qualified_count,
+        SUM(CASE WHEN status = 'reward_released' THEN 1 ELSE 0 END) AS reward_released_count,
+        COALESCE(SUM(CASE WHEN status IN ('active', 'reward_released') THEN reward_amount ELSE 0 END), 0) AS total_rewards_value
+       FROM referrals`,
+    )
+    return res.json({
+      pendingCount: Number(row?.pending_count || 0),
+      qualifiedCount: Number(row?.qualified_count || 0),
+      rewardReleasedCount: Number(row?.reward_released_count || 0),
+      totalRewardsValue: Number(row?.total_rewards_value || 0),
+    })
+  })
+
   router.get('/referrals', async (req, res) => {
     const userId = Number(req.query.userId || 0)
     const limit = Math.min(500, Math.max(20, Number(req.query.limit) || 200))

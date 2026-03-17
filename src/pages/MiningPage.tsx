@@ -4,14 +4,15 @@ import {
   claimMiningDaily,
   emergencyWithdrawMining,
   getMiningMy,
-  getPromoBanners,
+  getAds,
   releaseMiningPrincipal,
   subscribeMining,
+  subscribeToLiveUpdates,
   type MiningConfig,
   type MiningProfile,
-  type PromoBannerItem,
+  type AdItem,
 } from '../api'
-import { PromoBanner } from '../components/ads/PromoBanner'
+import { AdBanner } from '../components/ads/AdBanner'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
 
@@ -55,13 +56,22 @@ export function MiningPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [activeMediaIndex, setActiveMediaIndex] = useState(0)
   const [autoplayOnSubscribe, setAutoplayOnSubscribe] = useState(false)
-  const [promoBanners, setPromoBanners] = useState<PromoBannerItem[]>([])
+  const [miningAds, setMiningAds] = useState<AdItem[]>([])
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   useEffect(() => {
-    getPromoBanners()
-      .then((res) => setPromoBanners(res.items || []))
-      .catch(() => setPromoBanners([]))
+    getAds('mining')
+      .then((res) => setMiningAds(res.items || []))
+      .catch(() => setMiningAds([]))
+  }, [])
+
+  useEffect(() => {
+    const unsub = subscribeToLiveUpdates((event) => {
+      if (event.type === 'home_content_updated') {
+        getAds('mining').then((res) => setMiningAds(res.items || [])).catch(() => {})
+      }
+    })
+    return unsub
   }, [])
 
   async function loadMining() {
@@ -98,29 +108,6 @@ export function MiningPage() {
   }, [config?.mediaItems])
   const activeMedia = mediaItems[activeMediaIndex] || null
   const hasVideoMedia = mediaItems.some((item) => item.type === 'video')
-
-  const mainMiningPromo: PromoBannerItem = useMemo(
-    () => ({
-      id: 'local-mining-promo',
-      title: t('mining_subscribe_title'),
-      subtitle: t('mining_media_hint'),
-      ctaLabel: t('mining_subscribe_button'),
-      to: '/mining#subscribe',
-      imageUrl: '/ads/mining-main-banner.jpg',
-      placement: 'mining',
-      enabled: true,
-      order: 0,
-    }),
-    [t],
-  )
-
-  const miningBanners = useMemo(() => {
-    const filtered = promoBanners.filter((x) => x.enabled && (x.placement === 'mining' || x.placement === 'all'))
-    const hasDefault = filtered.some(
-      (item) => item.id === mainMiningPromo.id || String(item.imageUrl || '').includes('/ads/mining-main-banner.jpg'),
-    )
-    return hasDefault ? filtered : [mainMiningPromo, ...filtered]
-  }, [mainMiningPromo, promoBanners])
 
   useEffect(() => {
     if (!mediaItems.length) return
@@ -192,12 +179,10 @@ export function MiningPage() {
     <div className="page space-y-3">
       <h1 className="page-title">{t('mining_title')}</h1>
 
-      {miningBanners.length > 0 ? (
-        <section className="rounded-2xl border border-app-border bg-app-card p-3">
-          <h2 className="mb-2 text-sm font-semibold text-white">{t('home_announcement_board')}</h2>
-          <PromoBanner className="my-0" items={miningBanners} />
-        </section>
-      ) : null}
+      <section className="rounded-2xl border border-app-border bg-app-card p-3">
+        <h2 className="mb-2 text-sm font-semibold text-white">{t('home_announcement_board')}</h2>
+        <AdBanner items={miningAds} placement="mining" className="my-0" />
+      </section>
 
       <section className="rounded-2xl border border-app-border bg-app-card p-3">
         <h2 className="text-sm font-semibold text-white">{t('mining_media_title')}</h2>

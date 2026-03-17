@@ -35,6 +35,8 @@ import {
   getOwnerGrowthSummary,
   getPartnerProfiles,
   getReferralSummary,
+  getReferralDetails,
+  getReferralStats,
   getSecurityOverview,
   getSecuritySessions,
   getHeaderIconConfig,
@@ -43,7 +45,7 @@ import {
   getLogoUrl,
   getLoginLogoVariant,
   getMobileNavConfig,
-  getPromoBanners,
+  getAdsAdmin,
   getVipTiers,
   processAutoKycReviews,
   replaceAdminStaffPermissions,
@@ -61,7 +63,12 @@ import {
   getPwaConfig,
   updatePwaConfig,
   updateMobileNavConfig,
-  updatePromoBanners,
+  uploadAdMedia,
+  createAd,
+  updateAd,
+  deleteAd,
+  toggleAd,
+  reorderAds,
   toggleDailyTradeCampaign,
   toggleKycWatchlistEntry,
   updateAdminStaffRole,
@@ -79,13 +86,15 @@ import {
   type HeaderIconConfigItem,
   type MobileNavConfigItem,
   type PartnerProfile,
-  type PromoBannerItem,
+  type AdItem,
   type SecurityOverview,
   type UserSessionItem,
   type VipTier,
   type PwaConfig,
 } from '../../api'
 import { useI18n } from '../../i18nCore'
+import { emitToast } from '../../toastBus'
+import { AD_PLACEMENTS, AD_TITLE_MAX, AD_DESCRIPTION_MAX, validateAdForm } from '../../components/ads/adConstants'
 
 type OwnerPremiumDashboardProps = {
   user: AuthUser | null
@@ -155,6 +164,9 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
   const [vipTiers, setVipTiers] = useState<VipTier[]>([])
   const [partners, setPartners] = useState<PartnerProfile[]>([])
   const [refSummary, setRefSummary] = useState<Array<Record<string, unknown>>>([])
+  const [refStats, setRefStats] = useState({ pendingCount: 0, qualifiedCount: 0, rewardReleasedCount: 0, totalRewardsValue: 0 })
+  const [selectedRefUserId, setSelectedRefUserId] = useState<number | null>(null)
+  const [refDetails, setRefDetails] = useState<Array<Record<string, unknown>>>([])
   const [contentCampaigns, setContentCampaigns] = useState<ContentCampaign[]>([])
 
   const [dailyTitle, setDailyTitle] = useState('')
@@ -225,7 +237,35 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
     { id: 'notifications', visible: true },
     { id: 'profile', visible: true },
   ])
-  const [promoBannerDraft, setPromoBannerDraft] = useState<PromoBannerItem[]>([])
+  const [adsList, setAdsList] = useState<AdItem[]>([])
+  const [adsSaving, setAdsSaving] = useState(false)
+  const [adFormOpen, setAdFormOpen] = useState(false)
+  const [adFormEdit, setAdFormEdit] = useState<AdItem | null>(null)
+  const [adFormType, setAdFormType] = useState<'image' | 'video'>('image')
+  const [adFormMediaUrl, setAdFormMediaUrl] = useState('')
+  const [adFormTitle, setAdFormTitle] = useState('')
+  const [adFormDescription, setAdFormDescription] = useState('')
+  const [adFormLinkUrl, setAdFormLinkUrl] = useState('')
+  const [adFormPlacement, setAdFormPlacement] = useState('all')
+  const [adFormFile, setAdFormFile] = useState<File | null>(null)
+  const [adFormUploading, setAdFormUploading] = useState(false)
+  const [adFormValidationError, setAdFormValidationError] = useState<string | null>(null)
+  const [adToggleLoading, setAdToggleLoading] = useState<number | null>(null)
+  const [adDeleteLoading, setAdDeleteLoading] = useState<number | null>(null)
+  const [adReorderLoading, setAdReorderLoading] = useState(false)
+  const [adDeleteConfirmId, setAdDeleteConfirmId] = useState<number | null>(null)
+  const [adFormPreviewUrl, setAdFormPreviewUrl] = useState<string | null>(null)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+
+  useEffect(() => {
+    if (!adFormFile) {
+      setAdFormPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(adFormFile)
+    setAdFormPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [adFormFile])
   const applyLinkTag = (rel: 'icon' | 'apple-touch-icon', href: string) => {
     const value = String(href || '').trim()
     if (!value) return
@@ -294,6 +334,7 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
       getVipTiers(),
       getPartnerProfiles(),
       getReferralSummary(),
+      getReferralStats(),
       getContentCampaigns(),
       getSecurityOverview(),
       getSecuritySessions(),
@@ -301,7 +342,7 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
       getOwnerKycSubmissions(),
       getKycWatchlist(),
     ])
-      .then(([u, b, t, p, gs, dt, br, vt, pp, rs, cc, so, ss, st, ks, kw]) => {
+      .then(([u, b, t, p, gs, dt, br, vt, pp, rs, refStats, cc, so, ss, st, ks, kw]) => {
         setUserStats({
           totalUsers: Number((u as UserStats).totalUsers || 0),
           approvedUsers: Number((u as UserStats).approvedUsers || 0),
@@ -324,6 +365,7 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
         setVipTiers((vt as { items: VipTier[] }).items || [])
         setPartners((pp as { items: PartnerProfile[] }).items || [])
         setRefSummary((rs as { summary: Array<Record<string, unknown>> }).summary || [])
+        setRefStats((refStats as { pendingCount: number; qualifiedCount: number; rewardReleasedCount: number; totalRewardsValue: number }) || { pendingCount: 0, qualifiedCount: 0, rewardReleasedCount: 0, totalRewardsValue: 0 })
         setContentCampaigns((cc as { items: ContentCampaign[] }).items || [])
         setSecurityOverview(so as SecurityOverview)
         setSecuritySessions((ss as { items: UserSessionItem[] }).items || [])
@@ -370,32 +412,37 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
         if (Array.isArray(res.items) && res.items.length === 4) setHeaderIconDraft(res.items)
       })
       .catch(() => {})
-    getPromoBanners()
-      .then((res) =>
-        setPromoBannerDraft(
-          (Array.isArray(res.items) ? res.items : [])
-            .slice()
-            .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-            .map((item, idx) => ({ ...item, order: Number(item.order || idx + 1) })),
-        ),
-      )
-      .catch(() => setPromoBannerDraft([]))
+    getAdsAdmin()
+      .then((res) => setAdsList(res.items || []))
+      .catch(() => setAdsList([]))
   }, [])
 
+  useEffect(() => {
+    if (!selectedRefUserId || selectedRefUserId <= 0) {
+      setRefDetails([])
+      return
+    }
+    getReferralDetails(selectedRefUserId)
+      .then((res) => setRefDetails(res.referrals || []))
+      .catch(() => setRefDetails([]))
+  }, [selectedRefUserId])
+
   async function refreshOwnerGrowthData() {
-    const [gs, dt, br, vt, pp, rs, cc, so, ss, st, ks, kw] = await Promise.all([
+    const [gs, dt, br, vt, pp, rs, refStats, cc, so, ss, st, ks, kw, adsRes] = await Promise.all([
       getOwnerGrowthSummary(),
       getDailyTradeCampaigns(),
       getBonusRules(),
       getVipTiers(),
       getPartnerProfiles(),
       getReferralSummary(),
+      getReferralStats(),
       getContentCampaigns(),
       getSecurityOverview(),
       getSecuritySessions(),
       getAdminStaffList(),
       getOwnerKycSubmissions(kycStatusFilter ? { status: kycStatusFilter } : {}),
       getKycWatchlist(),
+      getAdsAdmin(),
     ])
     setOwnerSummary(gs)
     setDailyTrades(dt.items || [])
@@ -403,12 +450,17 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
     setVipTiers(vt.items || [])
     setPartners(pp.items || [])
     setRefSummary(rs.summary || [])
+    setRefStats(refStats || { pendingCount: 0, qualifiedCount: 0, rewardReleasedCount: 0, totalRewardsValue: 0 })
+    if (selectedRefUserId) {
+      getReferralDetails(selectedRefUserId).then((res) => setRefDetails(res.referrals || [])).catch(() => setRefDetails([]))
+    }
     setContentCampaigns(cc.items || [])
     setSecurityOverview(so)
     setSecuritySessions(ss.items || [])
     setStaffList(st.items || [])
     setKycSubmissions(ks.items || [])
     setKycWatchlist(kw.items || [])
+    setAdsList(adsRes.items || [])
   }
 
   const volumeBars = useMemo(() => {
@@ -738,22 +790,90 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
           {activeSection === 'referrals' ? (
             <section className="rounded-2xl border border-app-border bg-app-card p-4">
               <h2 className="text-base font-semibold text-white">{t('owner_section_referrals')}</h2>
-              <div className="mt-3 table-card">
-                <div className="table-head">
-                  <span>{t('owner_referrals_user')}</span>
-                  <span>{t('owner_referrals_code')}</span>
-                  <span>{t('owner_referrals_metrics')}</span>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-app-border bg-app-elevated p-3 text-xs">
+                  <div className="text-app-muted">{t('owner_referrals_stats_pending')}</div>
+                  <div className="mt-1 text-lg font-semibold text-amber-300">{refStats.pendingCount}</div>
                 </div>
-                {refSummary.map((row, idx) => (
-                  <div key={idx} className="table-row">
-                    <span>{String(row.display_name || row.user_id)}</span>
-                    <span>{String(row.referral_code || '—')}</span>
-                    <span>
-                      {String(row.pending_count || 0)} / {String(row.active_count || 0)} / {String(row.reward_released_count || 0)} / {Number(row.rewards_value || 0).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
+                <div className="rounded-xl border border-app-border bg-app-elevated p-3 text-xs">
+                  <div className="text-app-muted">{t('owner_referrals_stats_qualified')}</div>
+                  <div className="mt-1 text-lg font-semibold text-emerald-300">{refStats.qualifiedCount}</div>
+                </div>
+                <div className="rounded-xl border border-app-border bg-app-elevated p-3 text-xs">
+                  <div className="text-app-muted">{t('owner_referrals_stats_reward_released')}</div>
+                  <div className="mt-1 text-lg font-semibold text-cyan-300">{refStats.rewardReleasedCount}</div>
+                </div>
+                <div className="rounded-xl border border-app-border bg-app-elevated p-3 text-xs">
+                  <div className="text-app-muted">{t('owner_referrals_stats_total_value')}</div>
+                  <div className="mt-1 text-lg font-semibold text-white">${Number(refStats.totalRewardsValue).toFixed(2)}</div>
+                </div>
               </div>
+              {selectedRefUserId ? (
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    className="mb-3 text-sm text-app-muted hover:text-white"
+                    onClick={() => setSelectedRefUserId(null)}
+                  >
+                    ← {t('owner_referrals_back_to_summary')}
+                  </button>
+                  <div className="table-card">
+                    <div className="table-head">
+                      <span>{t('owner_referrals_detail_referred_user')}</span>
+                      <span>{t('owner_referrals_detail_status')}</span>
+                      <span>{t('owner_referrals_detail_first_deposit')}</span>
+                      <span>{t('owner_referrals_detail_reward')}</span>
+                      <span>{t('owner_referrals_detail_qualified_at')}</span>
+                      <span>{t('owner_referrals_detail_reward_released_at')}</span>
+                    </div>
+                    {refDetails.map((row, idx) => {
+                      const statusKey =
+                        row.status === 'reward_released'
+                          ? 'referral_status_reward_released'
+                          : row.status === 'active'
+                            ? 'referral_status_first_deposit_qualified'
+                            : 'referral_status_pending'
+                      return (
+                        <div key={idx} className="table-row">
+                          <span>{String(row.display_name || row.email || '—')} #{String(row.referred_user_id ?? '')}</span>
+                          <span>{t(statusKey)}</span>
+                          <span>${Number(row.first_deposit_amount || 0).toFixed(2)}</span>
+                          <span>${Number(row.reward_amount || 0).toFixed(2)}</span>
+                          <span>{row.qualified_at ? new Date(String(row.qualified_at)).toLocaleString() : '—'}</span>
+                          <span>{row.reward_released_at ? new Date(String(row.reward_released_at)).toLocaleString() : '—'}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 table-card">
+                  <div className="table-head">
+                    <span>{t('owner_referrals_user')}</span>
+                    <span>{t('owner_referrals_code')}</span>
+                    <span>{t('owner_referrals_metrics')}</span>
+                    <span></span>
+                  </div>
+                  {refSummary.map((row, idx) => (
+                    <div key={idx} className="table-row">
+                      <span>{String(row.display_name || row.user_id)}</span>
+                      <span>{String(row.referral_code || '—')}</span>
+                      <span>
+                        {String(row.pending_count || 0)} / {String(row.active_count || 0)} / {String(row.reward_released_count || 0)} / ${Number(row.rewards_value || 0).toFixed(2)}
+                      </span>
+                      <span>
+                        <button
+                          type="button"
+                          className="text-xs text-cyan-400 hover:underline"
+                          onClick={() => setSelectedRefUserId(Number(row.user_id || 0))}
+                        >
+                          {t('owner_referrals_view_details')}
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           ) : null}
 
@@ -1163,28 +1283,36 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                   <button
                     type="button"
                     className="wallet-action-btn owner-set-btn"
+                    disabled={settingsSaving}
                     onClick={async () => {
-                      let nextLogo = logoUrlEdit.trim()
-                      if (logoFile) {
-                        const res = await ownerUploadSettingImage('logo_url', logoFile)
-                        nextLogo = String(res.url || '').trim()
-                        setLogoUrlEdit(nextLogo)
-                        setLogoFile(null)
-                      } else {
-                        await updateLogoUrl(nextLogo)
-                      }
-                      // Main logo now synchronizes favicon/apple-touch-icon/PWA icons on backend.
-                      if (nextLogo) {
-                        setFaviconUrlEdit(nextLogo)
-                        setAppleTouchIconUrlEdit(nextLogo)
-                        setPwaIcon192Edit(nextLogo)
-                        setPwaIcon512Edit(nextLogo)
-                        applyLinkTag('icon', nextLogo)
-                        applyLinkTag('apple-touch-icon', nextLogo)
+                      if (settingsSaving) return
+                      setSettingsSaving(true)
+                      try {
+                        let nextLogo = logoUrlEdit.trim()
+                        if (logoFile) {
+                          const res = await ownerUploadSettingImage('logo_url', logoFile)
+                          nextLogo = String(res.url || '').trim()
+                          setLogoUrlEdit(nextLogo)
+                          setLogoFile(null)
+                        } else {
+                          await updateLogoUrl(nextLogo)
+                        }
+                        if (nextLogo) {
+                          setFaviconUrlEdit(nextLogo)
+                          setAppleTouchIconUrlEdit(nextLogo)
+                          setPwaIcon192Edit(nextLogo)
+                          setPwaIcon512Edit(nextLogo)
+                          applyLinkTag('icon', nextLogo)
+                          applyLinkTag('apple-touch-icon', nextLogo)
+                        }
+                      } catch {
+                        // Error toast shown by api
+                      } finally {
+                        setSettingsSaving(false)
                       }
                     }}
                   >
-                    Save Logo
+                    {settingsSaving ? t('owner_settings_saving') : 'Save Logo'}
                   </button>
                   <button
                     type="button"
@@ -1217,21 +1345,30 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                   <button
                     type="button"
                     className="wallet-action-btn owner-set-btn"
+                    disabled={settingsSaving}
                     onClick={async () => {
-                      if (faviconFile) {
-                        const res = await ownerUploadSettingImage('favicon_url', faviconFile)
-                        setFaviconUrlEdit(res.url || '')
-                        setFaviconFile(null)
-                        await updateFaviconUrl(res.url || '')
-                        applyLinkTag('icon', res.url || '')
-                      } else {
-                        const value = faviconUrlEdit.trim()
-                        await updateFaviconUrl(value)
-                        applyLinkTag('icon', value)
+                      if (settingsSaving) return
+                      setSettingsSaving(true)
+                      try {
+                        if (faviconFile) {
+                          const res = await ownerUploadSettingImage('favicon_url', faviconFile)
+                          setFaviconUrlEdit(res.url || '')
+                          setFaviconFile(null)
+                          await updateFaviconUrl(res.url || '')
+                          applyLinkTag('icon', res.url || '')
+                        } else {
+                          const value = faviconUrlEdit.trim()
+                          await updateFaviconUrl(value)
+                          applyLinkTag('icon', value)
+                        }
+                      } catch {
+                        // Error toast shown by api
+                      } finally {
+                        setSettingsSaving(false)
                       }
                     }}
                   >
-                    {t('owner_favicon_save')}
+                    {settingsSaving ? t('owner_settings_saving') : t('owner_favicon_save')}
                   </button>
                   <button
                     type="button"
@@ -1266,21 +1403,30 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                   <button
                     type="button"
                     className="wallet-action-btn owner-set-btn"
+                    disabled={settingsSaving}
                     onClick={async () => {
-                      if (appleTouchIconFile) {
-                        const res = await ownerUploadSettingImage('apple_touch_icon_url', appleTouchIconFile)
-                        setAppleTouchIconUrlEdit(res.url || '')
-                        setAppleTouchIconFile(null)
-                        await updateAppleTouchIconUrl(res.url || '')
-                        applyLinkTag('apple-touch-icon', res.url || '')
-                      } else {
-                        const value = appleTouchIconUrlEdit.trim()
-                        await updateAppleTouchIconUrl(value)
-                        applyLinkTag('apple-touch-icon', value)
+                      if (settingsSaving) return
+                      setSettingsSaving(true)
+                      try {
+                        if (appleTouchIconFile) {
+                          const res = await ownerUploadSettingImage('apple_touch_icon_url', appleTouchIconFile)
+                          setAppleTouchIconUrlEdit(res.url || '')
+                          setAppleTouchIconFile(null)
+                          await updateAppleTouchIconUrl(res.url || '')
+                          applyLinkTag('apple-touch-icon', res.url || '')
+                        } else {
+                          const value = appleTouchIconUrlEdit.trim()
+                          await updateAppleTouchIconUrl(value)
+                          applyLinkTag('apple-touch-icon', value)
+                        }
+                      } catch {
+                        // Error toast shown by api
+                      } finally {
+                        setSettingsSaving(false)
                       }
                     }}
                   >
-                    {t('owner_apple_touch_icon_save')}
+                    {settingsSaving ? t('owner_settings_saving') : t('owner_apple_touch_icon_save')}
                   </button>
                   <button
                     type="button"
@@ -1317,15 +1463,24 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                   <button
                     type="button"
                     className="wallet-action-btn owner-set-btn"
+                    disabled={settingsSaving}
                     onClick={async () => {
-                      const normalized = /^#[0-9a-fA-F]{6}$/.test(themeColorEdit) ? themeColorEdit : '#00C853'
-                      const res = await updateThemeColor(normalized)
-                      const value = String(res.themeColor || normalized)
-                      setThemeColorEdit(value)
-                      applyThemeMeta(value)
+                      if (settingsSaving) return
+                      setSettingsSaving(true)
+                      try {
+                        const normalized = /^#[0-9a-fA-F]{6}$/.test(themeColorEdit) ? themeColorEdit : '#00C853'
+                        const res = await updateThemeColor(normalized)
+                        const value = String(res.themeColor || normalized)
+                        setThemeColorEdit(value)
+                        applyThemeMeta(value)
+                      } catch {
+                        // Error toast shown by api
+                      } finally {
+                        setSettingsSaving(false)
+                      }
                     }}
                   >
-                    {t('owner_theme_color_save')}
+                    {settingsSaving ? t('owner_settings_saving') : t('owner_theme_color_save')}
                   </button>
                   <button
                     type="button"
@@ -1424,45 +1579,54 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                   <button
                     type="button"
                     className="wallet-action-btn owner-set-btn"
+                    disabled={settingsSaving}
                     onClick={async () => {
-                      let icon192 = pwaIcon192Edit.trim() || '/break-cash-logo-premium.png'
-                      let icon512 = pwaIcon512Edit.trim() || '/break-cash-logo-premium.png'
-                      if (pwaIcon192File) {
-                        const up = await ownerUploadSettingImage('pwa_icon_192', pwaIcon192File)
-                        icon192 = up.url || icon192
-                        setPwaIcon192Edit(icon192)
-                        setPwaIcon192File(null)
+                      if (settingsSaving) return
+                      setSettingsSaving(true)
+                      try {
+                        let icon192 = pwaIcon192Edit.trim() || '/break-cash-logo-premium.png'
+                        let icon512 = pwaIcon512Edit.trim() || '/break-cash-logo-premium.png'
+                        if (pwaIcon192File) {
+                          const up = await ownerUploadSettingImage('pwa_icon_192', pwaIcon192File)
+                          icon192 = up.url || icon192
+                          setPwaIcon192Edit(icon192)
+                          setPwaIcon192File(null)
+                        }
+                        if (pwaIcon512File) {
+                          const up = await ownerUploadSettingImage('pwa_icon_512', pwaIcon512File)
+                          icon512 = up.url || icon512
+                          setPwaIcon512Edit(icon512)
+                          setPwaIcon512File(null)
+                        }
+                        const normalizedTheme = /^#[0-9a-fA-F]{6}$/.test(themeColorEdit) ? themeColorEdit : '#00C853'
+                        const normalizedBg = /^#[0-9a-fA-F]{6}$/.test(pwaBackgroundColorEdit) ? pwaBackgroundColorEdit : '#0A0E17'
+                        const res = await updatePwaConfig({
+                          name: pwaNameEdit.trim() || 'Break cash',
+                          short_name: pwaShortNameEdit.trim() || 'Break cash',
+                          description: pwaDescriptionEdit.trim() || 'Invite-only trading dashboard PWA',
+                          background_color: normalizedBg,
+                          theme_color: normalizedTheme,
+                          icon_192: icon192,
+                          icon_512: icon512,
+                        })
+                        setPwaNameEdit(res.config.name)
+                        setPwaShortNameEdit(res.config.short_name)
+                        setPwaDescriptionEdit(res.config.description)
+                        setPwaBackgroundColorEdit(res.config.background_color)
+                        setThemeColorEdit(res.config.theme_color)
+                        setPwaIcon192Edit(res.config.icon_192)
+                        setPwaIcon512Edit(res.config.icon_512)
+                        await updateThemeColor(res.config.theme_color)
+                        applyThemeMeta(res.config.theme_color)
+                        refreshManifestLink()
+                      } catch {
+                        // Error toast shown by api
+                      } finally {
+                        setSettingsSaving(false)
                       }
-                      if (pwaIcon512File) {
-                        const up = await ownerUploadSettingImage('pwa_icon_512', pwaIcon512File)
-                        icon512 = up.url || icon512
-                        setPwaIcon512Edit(icon512)
-                        setPwaIcon512File(null)
-                      }
-                      const normalizedTheme = /^#[0-9a-fA-F]{6}$/.test(themeColorEdit) ? themeColorEdit : '#00C853'
-                      const normalizedBg = /^#[0-9a-fA-F]{6}$/.test(pwaBackgroundColorEdit) ? pwaBackgroundColorEdit : '#0A0E17'
-                      const res = await updatePwaConfig({
-                        name: pwaNameEdit.trim() || 'Break cash',
-                        short_name: pwaShortNameEdit.trim() || 'Break cash',
-                        description: pwaDescriptionEdit.trim() || 'Invite-only trading dashboard PWA',
-                        background_color: normalizedBg,
-                        theme_color: normalizedTheme,
-                        icon_192: icon192,
-                        icon_512: icon512,
-                      })
-                      setPwaNameEdit(res.config.name)
-                      setPwaShortNameEdit(res.config.short_name)
-                      setPwaDescriptionEdit(res.config.description)
-                      setPwaBackgroundColorEdit(res.config.background_color)
-                      setThemeColorEdit(res.config.theme_color)
-                      setPwaIcon192Edit(res.config.icon_192)
-                      setPwaIcon512Edit(res.config.icon_512)
-                      await updateThemeColor(res.config.theme_color)
-                      applyThemeMeta(res.config.theme_color)
-                      refreshManifestLink()
                     }}
                   >
-                    {t('owner_pwa_save')}
+                    {settingsSaving ? t('owner_settings_saving') : t('owner_pwa_save')}
                   </button>
                   <button
                     type="button"
@@ -1642,185 +1806,142 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                 </button>
               </div>
               <div className="mt-3 space-y-2 rounded-xl border border-app-border bg-app-elevated p-3">
-                <div className="text-sm font-medium text-white">{t('owner_promo_banners_title')}</div>
-                <p className="text-xs text-app-muted">{t('owner_promo_banners_hint')}</p>
-                {promoBannerDraft.map((item, idx) => (
-                  <div key={`${item.id}-${idx}`} className="grid gap-2 rounded-lg border border-app-border p-2 md:grid-cols-2">
-                    <input
-                      className="field-input"
-                      value={item.title}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, title: e.target.value } : it)),
-                        )
-                      }
-                      placeholder={t('owner_banner_title')}
-                    />
-                    <input
-                      className="field-input"
-                      value={item.subtitle}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, subtitle: e.target.value } : it)),
-                        )
-                      }
-                      placeholder={t('owner_banner_subtitle')}
-                    />
-                    <input
-                      className="field-input"
-                      value={item.ctaLabel || ''}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, ctaLabel: e.target.value } : it)),
-                        )
-                      }
-                      placeholder={t('owner_banner_cta')}
-                    />
-                    <input
-                      className="field-input"
-                      value={item.to || ''}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, to: e.target.value } : it)),
-                        )
-                      }
-                      placeholder={t('owner_banner_route')}
-                    />
-                    <input
-                      className="field-input"
-                      value={item.imageUrl || ''}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, imageUrl: e.target.value } : it)),
-                        )
-                      }
-                      placeholder={t('owner_banner_image_url')}
-                    />
-                    <input
-                      className="field-input"
-                      value={item.backgroundStyle || ''}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, backgroundStyle: e.target.value } : it)),
-                        )
-                      }
-                      placeholder={t('owner_banner_background')}
-                    />
-                    <select
-                      className="field-input"
-                      value={item.placement}
-                      onChange={(e) =>
-                        setPromoBannerDraft((prev) =>
-                          prev.map((it, i) => (i === idx ? { ...it, placement: e.target.value as PromoBannerItem['placement'] } : it)),
-                        )
-                      }
+                <div className="text-sm font-medium text-white">{t('owner_ads_management_title')}</div>
+                <p className="text-xs text-app-muted">{t('owner_ads_management_hint')}</p>
+                {adsList.length === 0 && !adFormOpen ? (
+                  <div className="rounded-xl border border-dashed border-app-border bg-app-card p-6 text-center">
+                    <p className="text-sm font-medium text-white">{t('owner_ads_empty_cta')}</p>
+                    <p className="mt-1 text-xs text-app-muted">{t('owner_ads_empty_cta_hint')}</p>
+                    <button
+                      type="button"
+                      className="mt-3 wallet-action-btn wallet-action-deposit"
+                      onClick={() => { setAdFormEdit(null); setAdFormType('image'); setAdFormMediaUrl(''); setAdFormTitle(''); setAdFormDescription(''); setAdFormLinkUrl(''); setAdFormPlacement('all'); setAdFormFile(null); setAdFormValidationError(null); setAdFormOpen(true) }}
                     >
-                      <option value="all">{t('owner_banner_place_all')}</option>
-                      <option value="home">{t('owner_banner_place_home')}</option>
-                      <option value="profile">{t('owner_banner_place_profile')}</option>
-                      <option value="mining">{t('owner_banner_place_mining')}</option>
+                      {t('owner_banner_add')}
+                    </button>
+                  </div>
+                ) : null}
+                {adFormOpen ? (
+                  <div className="space-y-2 rounded-lg border border-app-border p-3">
+                    <select className="field-input" value={adFormType} onChange={(e) => { setAdFormType(e.target.value as 'image' | 'video'); setAdFormFile(null); setAdFormValidationError(null) }}>
+                      <option value="image">{t('owner_ad_type_image')}</option>
+                      <option value="video">{t('owner_ad_type_video')}</option>
                     </select>
-                    <div className="flex items-center gap-2">
+                    <input type="file" accept={adFormType === 'video' ? 'video/*' : 'image/*'} className="field-input" onChange={(e) => { setAdFormFile(e.target.files?.[0] || null); setAdFormValidationError(null) }} />
+                    <input className="field-input" value={adFormMediaUrl} onChange={(e) => { setAdFormMediaUrl(e.target.value); setAdFormValidationError(null) }} placeholder={t('owner_ad_media_url')} />
+                    {(adFormFile || adFormMediaUrl.trim()) ? (
+                      <div className="rounded-lg border border-app-border bg-black/40 p-2">
+                        <p className="mb-2 text-[10px] text-app-muted">{t('owner_ad_preview')}</p>
+                        <div className="relative aspect-[2.2/1] overflow-hidden rounded-lg">
+                          {adFormFile && adFormPreviewUrl ? (
+                            adFormType === 'video' ? (
+                              <video src={adFormPreviewUrl} muted playsInline loop className="h-full w-full object-cover" />
+                            ) : (
+                              <img src={adFormPreviewUrl} alt="" className="h-full w-full object-cover" />
+                            )
+                          ) : (
+                            adFormType === 'video' ? (
+                              <video src={adFormMediaUrl.trim()} muted playsInline loop className="h-full w-full object-cover" />
+                            ) : (
+                              <img src={adFormMediaUrl.trim()} alt="" className="h-full w-full object-cover" onError={() => {}} />
+                            )
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                    <input className="field-input" value={adFormTitle} onChange={(e) => setAdFormTitle(e.target.value.slice(0, AD_TITLE_MAX))} placeholder={t('owner_ad_title')} maxLength={AD_TITLE_MAX} />
+                    <input className="field-input" value={adFormDescription} onChange={(e) => setAdFormDescription(e.target.value.slice(0, AD_DESCRIPTION_MAX))} placeholder={t('owner_ad_description')} maxLength={AD_DESCRIPTION_MAX} />
+                    <input className="field-input" value={adFormLinkUrl} onChange={(e) => setAdFormLinkUrl(e.target.value)} placeholder={t('owner_ad_link_url')} />
+                    <select className="field-input" value={adFormPlacement} onChange={(e) => setAdFormPlacement(e.target.value)}>
+                      {AD_PLACEMENTS.map((p) => (
+                        <option key={p} value={p}>
+                          {p === 'all' ? t('owner_banner_place_all') : p === 'home' ? t('owner_banner_place_home') : p === 'profile' ? t('owner_banner_place_profile') : p === 'mining' ? t('owner_banner_place_mining') : t('owner_ad_place_deposit')}
+                        </option>
+                      ))}
+                    </select>
+                    {adFormValidationError ? <p className="text-xs text-red-400">{t(adFormValidationError)}</p> : null}
+                    <div className="flex gap-2">
                       <button
                         type="button"
                         className="wallet-action-btn owner-set-btn"
-                        disabled={idx === 0}
-                        onClick={() =>
-                          setPromoBannerDraft((prev) => {
-                            if (idx === 0) return prev
-                            const next = [...prev]
-                            const tmp = next[idx - 1]
-                            next[idx - 1] = next[idx]
-                            next[idx] = tmp
-                            return next.map((banner, i) => ({ ...banner, order: i + 1 }))
-                          })
-                        }
+                        disabled={adsSaving || adFormUploading}
+                        onClick={async () => {
+                          setAdFormValidationError(null)
+                          let url = adFormMediaUrl.trim()
+                          if (adFormFile) {
+                            setAdFormUploading(true)
+                            try {
+                              const up = await uploadAdMedia(adFormFile)
+                              url = up.url
+                              emitToast({ kind: 'success', message: t('owner_ad_uploaded'), durationMs: 2400 })
+                            } finally {
+                              setAdFormUploading(false)
+                            }
+                          }
+                          const err = validateAdForm({ mediaUrl: url, type: adFormType, title: adFormTitle, description: adFormDescription, linkUrl: adFormLinkUrl, placement: adFormPlacement })
+                          if (err) {
+                            setAdFormValidationError(err)
+                            return
+                          }
+                          setAdsSaving(true)
+                          try {
+                            if (adFormEdit) {
+                              await updateAd(adFormEdit.id, { type: adFormType, mediaUrl: url, title: adFormTitle, description: adFormDescription, linkUrl: adFormLinkUrl || undefined, placement: adFormPlacement })
+                              emitToast({ kind: 'success', message: t('owner_ad_saved'), durationMs: 2400 })
+                            } else {
+                              await createAd({ type: adFormType, mediaUrl: url, title: adFormTitle, description: adFormDescription, linkUrl: adFormLinkUrl || undefined, placement: adFormPlacement })
+                              emitToast({ kind: 'success', message: t('owner_ad_saved'), durationMs: 2400 })
+                            }
+                            setAdFormOpen(false)
+                            setAdFormEdit(null)
+                            setAdFormMediaUrl('')
+                            setAdFormTitle('')
+                            setAdFormDescription('')
+                            setAdFormLinkUrl('')
+                            setAdFormFile(null)
+                            const res = await getAdsAdmin()
+                            setAdsList(res.items || [])
+                          } finally {
+                            setAdsSaving(false)
+                          }
+                        }}
                       >
-                        ↑
+                        {adFormUploading ? t('owner_ad_uploading') : adsSaving ? t('owner_settings_saving') : (adFormEdit ? t('owner_ad_save') : t('owner_banner_add'))}
                       </button>
-                      <button
-                        type="button"
-                        className="wallet-action-btn owner-set-btn"
-                        disabled={idx === promoBannerDraft.length - 1}
-                        onClick={() =>
-                          setPromoBannerDraft((prev) => {
-                            if (idx >= prev.length - 1) return prev
-                            const next = [...prev]
-                            const tmp = next[idx + 1]
-                            next[idx + 1] = next[idx]
-                            next[idx] = tmp
-                            return next.map((banner, i) => ({ ...banner, order: i + 1 }))
-                          })
-                        }
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        className={`wallet-action-btn ${item.enabled ? 'wallet-action-deposit' : 'owner-set-btn'}`}
-                        onClick={() =>
-                          setPromoBannerDraft((prev) =>
-                            prev.map((it, i) => (i === idx ? { ...it, enabled: !it.enabled } : it)),
-                          )
-                        }
-                      >
-                        {item.enabled ? t('owner_banner_enabled') : t('owner_banner_disabled')}
-                      </button>
-                      <button
-                        type="button"
-                        className="wallet-action-btn wallet-action-withdraw"
-                        onClick={() =>
-                          setPromoBannerDraft((prev) =>
-                            prev
-                              .filter((_, i) => i !== idx)
-                              .map((banner, i) => ({ ...banner, order: i + 1 })),
-                          )
-                        }
-                      >
-                        {t('owner_banner_remove')}
+                      <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => { setAdFormOpen(false); setAdFormEdit(null); setAdFormValidationError(null) }}>
+                        {t('common_cancel')}
                       </button>
                     </div>
                   </div>
-                ))}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="wallet-action-btn owner-set-btn"
-                    onClick={() =>
-                      setPromoBannerDraft((prev) => [
-                        ...prev.map((banner, i) => ({ ...banner, order: i + 1 })),
-                        {
-                          id: `banner_${Date.now()}`,
-                          title: '',
-                          subtitle: '',
-                          ctaLabel: '',
-                          to: '/market',
-                          imageUrl: '',
-                          backgroundStyle: '',
-                          order: prev.length + 1,
-                          placement: 'all',
-                          enabled: true,
-                        },
-                      ])
-                    }
-                  >
+                ) : null}
+                {adsList.length > 0 ? (
+                  <div className="space-y-2">
+                    {adsList.map((item, idx) => (
+                      <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-app-border p-2">
+                        <span className="text-xs text-white/80">#{item.id} {item.type}</span>
+                        <span className="truncate text-xs text-white/70 max-w-[120px]">{item.title || item.mediaUrl}</span>
+                        <span className="text-[10px] text-app-muted">{item.placement}</span>
+                        <button type="button" className="wallet-action-btn owner-set-btn text-xs" onClick={() => { setAdFormEdit(item); setAdFormType(item.type); setAdFormMediaUrl(item.mediaUrl); setAdFormTitle(item.title || ''); setAdFormDescription(item.description || ''); setAdFormLinkUrl(item.linkUrl || ''); setAdFormPlacement(item.placement); setAdFormFile(null); setAdFormValidationError(null); setAdFormOpen(true) }}>{t('owner_ad_edit')}</button>
+                        <button type="button" className={`wallet-action-btn text-xs ${item.isActive ? 'wallet-action-deposit' : 'owner-set-btn'}`} disabled={adToggleLoading !== null} onClick={async () => { setAdToggleLoading(item.id); try { await toggleAd(item.id, !item.isActive); emitToast({ kind: 'success', message: t('owner_ad_toggled'), durationMs: 2000 }); const res = await getAdsAdmin(); setAdsList(res.items || []) } finally { setAdToggleLoading(null) } }}>{adToggleLoading === item.id ? '…' : (item.isActive ? t('owner_banner_enabled') : t('owner_banner_disabled'))}</button>
+                        {adDeleteConfirmId === item.id ? (
+                          <span className="flex items-center gap-1 text-xs">
+                            <button type="button" className="wallet-action-btn wallet-action-withdraw text-xs" disabled={adDeleteLoading === item.id} onClick={async () => { setAdDeleteLoading(item.id); try { await deleteAd(item.id); emitToast({ kind: 'success', message: t('owner_ad_deleted'), durationMs: 2400 }); const res = await getAdsAdmin(); setAdsList(res.items || []); setAdDeleteConfirmId(null) } finally { setAdDeleteLoading(null) } }}>{adDeleteLoading === item.id ? '…' : t('common_confirm')}</button>
+                            <button type="button" className="wallet-action-btn owner-set-btn text-xs" onClick={() => { setAdDeleteConfirmId(null) }}>{t('common_cancel')}</button>
+                          </span>
+                        ) : (
+                          <button type="button" className="wallet-action-btn wallet-action-withdraw text-xs" onClick={() => setAdDeleteConfirmId(item.id)}>{t('owner_banner_remove')}</button>
+                        )}
+                        {idx > 0 && <button type="button" className="wallet-action-btn owner-set-btn text-xs" disabled={adReorderLoading} onClick={async () => { setAdReorderLoading(true); try { const order = adsList.map((a) => a.id); const tmp = order[idx]; order[idx] = order[idx - 1]; order[idx - 1] = tmp; await reorderAds(order); emitToast({ kind: 'success', message: t('owner_ad_reordered'), durationMs: 2000 }); const res = await getAdsAdmin(); setAdsList(res.items || []) } finally { setAdReorderLoading(false) } }}>↑</button>}
+                        {idx < adsList.length - 1 && <button type="button" className="wallet-action-btn owner-set-btn text-xs" disabled={adReorderLoading} onClick={async () => { setAdReorderLoading(true); try { const order = adsList.map((a) => a.id); const tmp = order[idx]; order[idx] = order[idx + 1]; order[idx + 1] = tmp; await reorderAds(order); emitToast({ kind: 'success', message: t('owner_ad_reordered'), durationMs: 2000 }); const res = await getAdsAdmin(); setAdsList(res.items || []) } finally { setAdReorderLoading(false) } }}>↓</button>}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {!adFormOpen && adsList.length > 0 ? (
+                  <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => { setAdFormEdit(null); setAdFormType('image'); setAdFormMediaUrl(''); setAdFormTitle(''); setAdFormDescription(''); setAdFormLinkUrl(''); setAdFormPlacement('all'); setAdFormFile(null); setAdFormValidationError(null); setAdFormOpen(true) }}>
                     {t('owner_banner_add')}
                   </button>
-                  <button
-                    type="button"
-                    className="wallet-action-btn owner-set-btn"
-                    onClick={async () => {
-                      const normalized = promoBannerDraft.map((banner, i) => ({
-                        ...banner,
-                        order: i + 1,
-                      }))
-                      const res = await updatePromoBanners(normalized)
-                      setPromoBannerDraft(res.items || [])
-                    }}
-                  >
-                    {t('owner_banner_save')}
-                  </button>
-                </div>
+                ) : null}
               </div>
             </section>
           ) : null}

@@ -5,6 +5,7 @@ import {
   createWithdrawalRequest,
   getBalanceRules,
   getAssetImages,
+  getAds,
   getMyBalanceRequests,
   getWithdrawLocksMy,
   getWithdrawSummaryMy,
@@ -12,6 +13,8 @@ import {
   getMyProfile,
   getWalletLink,
   ownerUploadSettingImage,
+  subscribeToLiveUpdates,
+  type AdItem,
   type BalanceRequestStatus,
   type BalanceRules,
   type DepositRequestItem,
@@ -22,6 +25,7 @@ import {
   updateLogoUrl,
   updateWalletLink,
 } from '../api'
+import { AdBanner } from '../components/ads/AdBanner'
 import { DEPOSIT_TERMS_AR } from '../depositTerms'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
@@ -81,6 +85,7 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   const [requestMessage, setRequestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [depositSubmitting, setDepositSubmitting] = useState(false)
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false)
+  const [depositAds, setDepositAds] = useState<AdItem[]>([])
 
   const isOwner = profile?.role === 'owner'
   const isDepositPage = pageMode === 'deposit'
@@ -132,6 +137,21 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         setProofExampleBroken(false)
       })
       .catch(() => setDepositProofExampleUrl(''))
+  }, [])
+
+  useEffect(() => {
+    getAds('deposit')
+      .then((res) => setDepositAds(res.items || []))
+      .catch(() => setDepositAds([]))
+  }, [])
+
+  useEffect(() => {
+    const unsub = subscribeToLiveUpdates((event) => {
+      if (event.type === 'home_content_updated') {
+        getAds('deposit').then((res) => setDepositAds(res.items || [])).catch(() => {})
+      }
+    })
+    return unsub
   }, [])
 
   useEffect(() => {
@@ -321,8 +341,8 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         ←
       </button>
 
-      <section className="deposit-promo-banner mb-4 overflow-hidden rounded-2xl border border-app-border">
-        <img src="/ads/rewards-center.jpeg" alt={t('home_action_rewards_center')} className="w-full object-cover" loading="eager" />
+      <section className="deposit-promo-banner mb-4">
+        <AdBanner items={depositAds} placement="deposit" />
       </section>
 
       <div className="deposit-brand">

@@ -5,6 +5,15 @@ import multer from 'multer'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import {
+  getMainBalance,
+  recordTransaction,
+  createEarningEntry,
+  transferEarningToMain,
+  appendLegacyBalanceTransaction,
+  getWalletHistory,
+  getEarningHistory,
+} from '../services/wallet-ledger.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const DEFAULT_BALANCE_RULES = {
@@ -132,22 +141,11 @@ async function upsertRules(db, rules) {
 }
 
 async function getBalanceAmount(db, userId, currency) {
-  const row = await get(
-    db,
-    `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-    [userId, currency],
-  )
-  return Number(row?.amount || 0)
+  return getMainBalance(db, userId, currency)
 }
 
 async function appendBalanceTransaction(db, payload) {
-  const res = await run(
-    db,
-    `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [payload.userId, payload.adminId || null, payload.type, payload.currency, payload.amount, payload.note || null],
-  )
-  return Number(res.lastID || 0)
+  return appendLegacyBalanceTransaction(db, payload)
 }
 
 async function createAdminAuditLog(db, payload) {
@@ -366,16 +364,28 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
     return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
 
-  const referrerCurrentBalance = await getBalanceAmount(db, referrerUserId, payload.currency)
-  const referrerNextBalance = Number((referrerCurrentBalance + rewardAmount).toFixed(8))
-  await run(
+  const referralRewardRow = await get(
     db,
-    `INSERT INTO balances (user_id, currency, amount, updated_at)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-    [referrerUserId, payload.currency, referrerNextBalance],
+    `SELECT id FROM referral_rewards WHERE referred_user_id = ? LIMIT 1`,
+    [payload.userId],
   )
-  await appendBalanceTransaction(db, {
+  const referralRewardId = Number(referralRewardRow?.id || 0)
+  if (!referralRewardId) {
+    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+  }
+
+  const earningResult = await createEarningEntry(db, {
+    userId: referrerUserId,
+    sourceType: 'referrals',
+    referenceType: 'referral_reward',
+    referenceId: referralRewardId,
+    currency: payload.currency,
+    amount: rewardAmount,
+  })
+  if (earningResult?.id) {
+    await transferEarningToMain(db, earningResult.id, `referral_reward_${referralRewardId}`)
+  }
+  await appendLegacyBalanceTransaction(db, {
     userId: referrerUserId,
     adminId: payload.adminId || null,
     type: 'referral_reward',
@@ -540,6 +550,20 @@ export function createBalanceRouter(db) {
     return res.json({ history: rows })
   })
 
+  router.get('/wallet-history', async (req, res) => {
+    const currency = req.query.currency ? String(req.query.currency).trim().toUpperCase() : null
+    const limit = Math.min(Number(req.query.limit) || 100, 200)
+    const rows = await getWalletHistory(db, req.user.id, currency, limit)
+    return res.json({ transactions: rows })
+  })
+
+  router.get('/earning-history', async (req, res) => {
+    const sourceType = req.query.sourceType ? String(req.query.sourceType).trim().toLowerCase() : null
+    const limit = Math.min(Number(req.query.limit) || 100, 200)
+    const rows = await getEarningHistory(db, req.user.id, sourceType, limit)
+    return res.json({ entries: rows })
+  })
+
   router.post('/adjust', requirePermission(db, 'manage_balances'), async (req, res) => {
     const userId = Number(req.body?.userId)
     const currency = String(req.body?.currency || 'USDT').toUpperCase()
@@ -549,36 +573,31 @@ export function createBalanceRouter(db) {
     if (!userId || !amount || !['add', 'deduct'].includes(type)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
-    let nextAmount = 0
+    const delta = type === 'deduct' ? -Math.abs(amount) : Math.abs(amount)
+    const idempotencyKey = `adjust_${userId}_${currency}_${Date.now()}`
     try {
-      await withTransaction(db, async () => {
-        const existing = await get(
-          db,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-          [userId, currency],
-        )
-        const delta = type === 'deduct' ? -Math.abs(amount) : Math.abs(amount)
-        nextAmount = Number((Number(existing?.amount || 0) + delta).toFixed(8))
-        if (nextAmount < 0) {
-          throw new Error('INSUFFICIENT_BALANCE')
-        }
+      await withTransaction(db, async (tx) => {
+        await recordTransaction(tx, {
+          userId,
+          currency,
+          transactionType: 'adjust',
+          sourceType: 'system',
+          referenceType: 'admin_adjust',
+          referenceId: req.user.id,
+          amount: delta,
+          idempotencyKey,
+          createdBy: req.user.id,
+        })
+        await appendLegacyBalanceTransaction(tx, {
+          userId,
+          adminId: req.user.id,
+          type,
+          currency,
+          amount: Math.abs(amount),
+          note: note || 'Admin balance adjustment',
+        })
         await run(
-          db,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, ?, ?, datetime('now'))
-           ON CONFLICT(user_id, currency) DO UPDATE SET
-             amount = excluded.amount,
-             updated_at = excluded.updated_at`,
-          [userId, currency, nextAmount],
-        )
-        await run(
-          db,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [userId, req.user.id, type, currency, Math.abs(amount), note],
-        )
-        await run(
-          db,
+          tx,
           `INSERT INTO notifications (user_id, title, body)
            VALUES (?, 'Balance Updated', ?)`,
           [userId, `Your ${currency} balance was ${type}ed by ${Math.abs(amount)}.`],
@@ -590,6 +609,7 @@ export function createBalanceRouter(db) {
       }
       throw error
     }
+    const nextAmount = await getMainBalance(db, userId, currency)
     publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId, source: 'balance_adjust' })
     return res.json({ ok: true, balance: { userId, currency, amount: nextAmount } })
   })
@@ -750,20 +770,17 @@ export function createBalanceRouter(db) {
             payload,
           )
           requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
-          const current = await get(
-            tx,
-            `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-            [req.user.id, currency],
-          )
-          const nextAmount = Number((Number(current?.amount || 0) + amount).toFixed(8))
-          await run(
-            tx,
-            `INSERT INTO balances (user_id, currency, amount, updated_at)
-             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-            [req.user.id, currency, nextAmount],
-          )
-          const txnId = await appendBalanceTransaction(tx, {
+          await recordTransaction(tx, {
+            userId: req.user.id,
+            currency,
+            transactionType: 'deposit',
+            sourceType: 'system',
+            referenceType: 'deposit_request',
+            referenceId: requestId,
+            amount,
+            idempotencyKey: `deposit_auto_${requestId}`,
+          })
+          const legacyTxnId = await appendLegacyBalanceTransaction(tx, {
             userId: req.user.id,
             adminId: null,
             type: 'deposit',
@@ -779,7 +796,7 @@ export function createBalanceRouter(db) {
                  completed_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [txnId || null, requestId],
+            [legacyTxnId || null, requestId],
           )
           const unlockProfile = await getEffectiveUnlockProfile(tx, req.user.id, currency, rules)
           await createPrincipalLock(tx, {
@@ -865,15 +882,17 @@ export function createBalanceRouter(db) {
           const autoSummary = await unlockAllPrincipalLocksIfEligible(tx, req.user.id, currency, rules)
           const current = await getBalanceAmount(tx, req.user.id, currency)
           if (current < amount || autoSummary.withdrawable_balance < amount) throw new Error('INSUFFICIENT_BALANCE')
-          const nextAmount = Number((current - amount).toFixed(8))
-          await run(
-            tx,
-            `INSERT INTO balances (user_id, currency, amount, updated_at)
-             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-            [req.user.id, currency, nextAmount],
-          )
-          const txnId = await appendBalanceTransaction(tx, {
+          await recordTransaction(tx, {
+            userId: req.user.id,
+            currency,
+            transactionType: 'withdrawal',
+            sourceType: 'system',
+            referenceType: 'withdrawal_request',
+            referenceId: requestId,
+            amount: -amount,
+            idempotencyKey: `withdrawal_auto_${requestId}`,
+          })
+          const legacyTxId = await appendLegacyBalanceTransaction(tx, {
             userId: req.user.id,
             adminId: null,
             type: 'withdraw',
@@ -890,7 +909,7 @@ export function createBalanceRouter(db) {
                  completed_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [txnId || null, requestId],
+            [legacyTxId || null, requestId],
           )
         })
         publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'withdraw_auto_completed' })
@@ -1046,20 +1065,18 @@ export function createBalanceRouter(db) {
         )
         outcomeStatus = 'rejected'
       } else {
-        const current = await get(
-          tx,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-          [item.user_id, item.currency],
-        )
-        const nextAmount = Number((Number(current?.amount || 0) + Number(item.amount || 0)).toFixed(8))
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [item.user_id, item.currency, nextAmount],
-        )
-        const txId = await appendBalanceTransaction(tx, {
+        await recordTransaction(tx, {
+          userId: item.user_id,
+          currency: item.currency,
+          transactionType: 'deposit',
+          sourceType: 'system',
+          referenceType: 'deposit_request',
+          referenceId: requestId,
+          amount: Number(item.amount),
+          idempotencyKey: `deposit_review_${requestId}`,
+          createdBy: req.user.id,
+        })
+        const txId = await appendLegacyBalanceTransaction(tx, {
           userId: item.user_id,
           adminId: req.user.id,
           type: 'deposit',
@@ -1168,15 +1185,18 @@ export function createBalanceRouter(db) {
         if (currentAmount < requestedAmount || summary.withdrawable_balance < requestedAmount) {
           throw new Error('INSUFFICIENT_BALANCE')
         }
-        const nextAmount = Number((currentAmount - requestedAmount).toFixed(8))
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [item.user_id, item.currency, nextAmount],
-        )
-        const txId = await appendBalanceTransaction(tx, {
+        await recordTransaction(tx, {
+          userId: item.user_id,
+          currency: item.currency,
+          transactionType: 'withdrawal',
+          sourceType: 'system',
+          referenceType: 'withdrawal_request',
+          referenceId: requestId,
+          amount: -requestedAmount,
+          idempotencyKey: `withdrawal_review_${requestId}`,
+          createdBy: req.user.id,
+        })
+        const txId = await appendLegacyBalanceTransaction(tx, {
           userId: item.user_id,
           adminId: req.user.id,
           type: 'withdraw',
@@ -1268,32 +1288,33 @@ export function createBalanceRouter(db) {
     const note = String(req.body?.note || '')
     if (!userId || amount < 0) return res.status(400).json({ error: 'INVALID_INPUT' })
     const fixedAmount = Number(amount.toFixed(8))
-    let prevAmount = 0
-    await withTransaction(db, async () => {
-      const existing = await get(
-        db,
-        `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-        [userId, currency],
-      )
-      prevAmount = Number(existing?.amount || 0)
+    await withTransaction(db, async (tx) => {
+      const prevAmount = await getMainBalance(tx, userId, currency)
+      const delta = Number((fixedAmount - prevAmount).toFixed(8))
+      if (delta !== 0) {
+        await recordTransaction(tx, {
+          userId,
+          currency,
+          transactionType: 'adjust',
+          sourceType: 'system',
+          referenceType: 'owner_set',
+          referenceId: req.user.id,
+          amount: delta,
+          idempotencyKey: `owner_set_${userId}_${currency}_${Date.now()}`,
+          createdBy: req.user.id,
+        })
+        const type = delta >= 0 ? 'add' : 'deduct'
+        await appendLegacyBalanceTransaction(tx, {
+          userId,
+          adminId: req.user.id,
+          type,
+          currency,
+          amount: Math.abs(delta),
+          note: note || 'Set by owner',
+        })
+      }
       await run(
-        db,
-        `INSERT INTO balances (user_id, currency, amount, updated_at)
-         VALUES (?, ?, ?, datetime('now'))
-         ON CONFLICT(user_id, currency) DO UPDATE SET
-           amount = excluded.amount,
-           updated_at = excluded.updated_at`,
-        [userId, currency, fixedAmount],
-      )
-      const type = fixedAmount >= prevAmount ? 'add' : 'deduct'
-      await run(
-        db,
-        `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [userId, req.user.id, type, currency, Math.abs(fixedAmount - prevAmount), note || 'Set by owner'],
-      )
-      await run(
-        db,
+        tx,
         `INSERT INTO notifications (user_id, title, body)
          VALUES (?, 'Balance Updated', ?)`,
         [userId, `Your ${currency} balance was set to ${fixedAmount}.`],

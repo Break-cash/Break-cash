@@ -102,7 +102,15 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     throw error
   }
   const contentType = res.headers.get('content-type') || ''
-  const body = contentType.includes('application/json') ? await res.json() : await res.text()
+  let body: unknown
+  try {
+    const text = await res.text()
+    body = contentType.includes('application/json') ? JSON.parse(text) : text
+  } catch (parseErr) {
+    console.error('[apiFetch] JSON parse failed:', path, parseErr)
+    Sentry.captureMessage(`apiFetch parse error at ${path}: ${res.status}`)
+    body = { error: 'REQUEST_FAILED' }
+  }
 
   if (!res.ok) {
     const code = resolveErrorCodeFromBody(body)
@@ -382,28 +390,86 @@ export async function updateHeaderIconConfig(items: HeaderIconConfigItem[]) {
   }) as Promise<{ ok: boolean; items: HeaderIconConfigItem[] }>
 }
 
-export type PromoBannerItem = {
-  id: string
-  title: string
-  subtitle: string
-  ctaLabel?: string
-  to?: string
-  imageUrl?: string
-  backgroundStyle?: string
-  order?: number
-  placement: 'all' | 'home' | 'profile' | 'mining'
-  enabled: boolean
+export type AdItem = {
+  id: number
+  type: 'image' | 'video'
+  mediaUrl: string
+  title?: string
+  description?: string
+  linkUrl?: string
+  placement: string
+  sortOrder: number
+  isActive: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
-export async function getPromoBanners() {
-  return apiFetch('/api/settings/promo-banners') as Promise<{ items: PromoBannerItem[]; customized?: boolean }>
+export async function getAds(placement: string) {
+  return apiFetch(`/api/ads?placement=${encodeURIComponent(placement)}`) as Promise<{ items: AdItem[] }>
 }
 
-export async function updatePromoBanners(items: PromoBannerItem[]) {
-  return apiFetch('/api/settings/promo-banners', {
+export async function getAdsAdmin() {
+  return apiFetch('/api/ads/admin') as Promise<{ items: AdItem[] }>
+}
+
+export async function uploadAdMedia(file: File) {
+  const token = getToken()
+  const form = new FormData()
+  form.append('media', file)
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  let res: Response
+  try {
+    res = await fetch('/api/ads/upload', { method: 'POST', headers, body: form })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Upload failed'
+    emitApiErrorToast('NETWORK_ERROR', msg)
+    throw err
+  }
+  let body: unknown
+  try {
+    body = await res.json()
+  } catch {
+    throw new Error('Invalid response')
+  }
+  if (!res.ok) {
+    const msg = typeof body === 'object' && body && 'message' in body ? String((body as { message?: string }).message) : 'Upload failed'
+    emitApiErrorToast(res.status === 400 ? 'INVALID_INPUT' : 'REQUEST_FAILED', msg)
+    throw new Error(msg)
+  }
+  return body as { ok: boolean; url: string; type: 'image' | 'video' }
+}
+
+export async function createAd(payload: Partial<AdItem> & { mediaUrl: string; type: 'image' | 'video' }) {
+  return apiFetch('/api/ads', {
     method: 'POST',
-    body: JSON.stringify({ items }),
-  }) as Promise<{ ok: boolean; items: PromoBannerItem[] }>
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean; ad: AdItem }>
+}
+
+export async function updateAd(id: number, payload: Partial<AdItem>) {
+  return apiFetch(`/api/ads/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean; ad: AdItem }>
+}
+
+export async function deleteAd(id: number) {
+  return apiFetch(`/api/ads/${id}`, { method: 'DELETE' }) as Promise<{ ok: boolean }>
+}
+
+export async function toggleAd(id: number, isActive: boolean) {
+  return apiFetch(`/api/ads/${id}/toggle`, {
+    method: 'PUT',
+    body: JSON.stringify({ isActive }),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function reorderAds(order: number[]) {
+  return apiFetch('/api/ads/reorder', {
+    method: 'PUT',
+    body: JSON.stringify({ order }),
+  }) as Promise<{ ok: boolean }>
 }
 
 export async function getAssetImages() {
@@ -421,14 +487,36 @@ export async function ownerUploadSettingImage(key: string, file: File) {
   const headers: Record<string, string> = {}
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const res = await fetch('/api/settings/asset-image', {
-    method: 'POST',
-    headers,
-    body: form,
-  })
-  const body = await res.json()
+  let res: Response
+  try {
+    res = await fetch('/api/settings/asset-image', {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Load failed'
+    console.error('[ownerUploadSettingImage] fetch failed:', msg)
+    Sentry.captureException(err)
+    emitApiErrorToast('NETWORK_ERROR', msg)
+    throw err
+  }
+
+  const contentType = res.headers.get('content-type') || ''
+  let body: unknown
+  try {
+    const text = await res.text()
+    body = contentType.includes('application/json') ? JSON.parse(text) : { error: 'REQUEST_FAILED', raw: text.slice(0, 200) }
+  } catch (parseErr) {
+    console.error('[ownerUploadSettingImage] response parse failed:', parseErr)
+    Sentry.captureMessage(`asset-image non-JSON response: ${res.status} ${res.statusText}`)
+    body = { error: 'REQUEST_FAILED' }
+  }
+
   if (!res.ok) {
     const code = resolveErrorCodeFromBody(body)
+    console.error('[ownerUploadSettingImage] error:', res.status, code, body)
+    Sentry.captureMessage(`asset-image ${res.status}: ${code}`)
     throw createApiError(code, body)
   }
   return body as { ok: boolean; key: string; url: string }
@@ -443,12 +531,32 @@ export async function ownerUploadUserAvatar(userId: number, file: File) {
   const headers: Record<string, string> = {}
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const res = await fetch('/api/profile/avatar/user', {
-    method: 'POST',
-    headers,
-    body: form,
-  })
-  const body = await res.json()
+  let res: Response
+  try {
+    res = await fetch('/api/profile/avatar/user', {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Load failed'
+    console.error('[ownerUploadUserAvatar] fetch failed:', msg)
+    Sentry.captureException(err)
+    emitApiErrorToast('NETWORK_ERROR', msg)
+    throw err
+  }
+
+  const contentType = res.headers.get('content-type') || ''
+  let body: unknown
+  try {
+    const text = await res.text()
+    body = contentType.includes('application/json') ? JSON.parse(text) : { error: 'REQUEST_FAILED', raw: text.slice(0, 200) }
+  } catch (parseErr) {
+    console.error('[ownerUploadUserAvatar] response parse failed:', parseErr)
+    Sentry.captureMessage(`avatar/user non-JSON response: ${res.status}`)
+    body = { error: 'REQUEST_FAILED' }
+  }
+
   if (!res.ok) {
     const code = resolveErrorCodeFromBody(body)
     throw createApiError(code, body)
@@ -1177,6 +1285,15 @@ export async function upsertPartnerProfile(payload: {
 
 export async function getReferralSummary() {
   return apiFetch('/api/owner-growth/referrals') as Promise<{ summary: Array<Record<string, unknown>> }>
+}
+
+export async function getReferralStats() {
+  return apiFetch('/api/owner-growth/referrals/stats') as Promise<{
+    pendingCount: number
+    qualifiedCount: number
+    rewardReleasedCount: number
+    totalRewardsValue: number
+  }>
 }
 
 export async function getReferralDetails(userId: number) {

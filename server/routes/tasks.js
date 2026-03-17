@@ -1,6 +1,12 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
+import {
+  getMainBalance,
+  createEarningEntry,
+  transferEarningToMain,
+  appendLegacyBalanceTransaction,
+} from '../services/wallet-ledger.js'
 
 const TASK_PERMISSION = 'انشاء مهام'
 
@@ -142,12 +148,7 @@ export function createTasksRouter(db) {
         )
         if (existing) throw new Error('CODE_ALREADY_USED')
 
-        const balanceRow = await get(
-          tx,
-          `SELECT COALESCE(SUM(amount), 0) AS total_amount FROM balances WHERE user_id = ?`,
-          [req.user.id],
-        )
-        const balanceSnapshot = Number(balanceRow?.total_amount || 0)
+        const balanceSnapshot = await getMainBalance(tx, req.user.id, 'USDT')
         let tiers = []
         try {
           tiers = normalizeTiers(JSON.parse(String(rewardCode.tiers_json || '[]')))
@@ -168,26 +169,30 @@ export function createTasksRouter(db) {
            VALUES (?, ?, ?, ?, ?)`,
           [rewardCode.id, req.user.id, balanceSnapshot, rewardPercent, rewardAmount],
         )
+        const redemptionRow = await get(tx, `SELECT id FROM task_reward_redemptions WHERE code_id = ? AND user_id = ? LIMIT 1`, [rewardCode.id, req.user.id])
+        const redemptionId = Number(redemptionRow?.id ?? 0)
+        if (!redemptionId) throw new Error('REDEMPTION_FAILED')
 
-        const currentUsdc = await get(
-          tx,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = 'USDT' LIMIT 1`,
-          [req.user.id],
-        )
-        const nextAmount = Number((Number(currentUsdc?.amount || 0) + rewardAmount).toFixed(8))
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, 'USDT', ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [req.user.id, nextAmount],
-        )
-        await run(
-          tx,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, NULL, 'task_code_bonus', 'USDT', ?, ?)`,
-          [req.user.id, rewardAmount, `Redeemed task code ${code}`],
-        )
+        const earningResult = await createEarningEntry(tx, {
+          userId: req.user.id,
+          sourceType: 'tasks',
+          referenceType: 'task_redemption',
+          referenceId: redemptionId,
+          currency: 'USDT',
+          amount: rewardAmount,
+        })
+        const entryId = earningResult?.id ?? (await get(tx, `SELECT id FROM earning_entries WHERE source_type = 'tasks' AND reference_type = 'task_redemption' AND reference_id = ? LIMIT 1`, [redemptionId]))?.id
+        if (entryId) {
+          await transferEarningToMain(tx, entryId, `task_redemption_${redemptionId}`)
+        }
+        await appendLegacyBalanceTransaction(tx, {
+          userId: req.user.id,
+          adminId: null,
+          type: 'task_code_bonus',
+          currency: 'USDT',
+          amount: rewardAmount,
+          note: `Redeemed task code ${code}`,
+        })
         await run(
           tx,
           `INSERT INTO notifications (user_id, title, body)

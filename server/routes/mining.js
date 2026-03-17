@@ -5,6 +5,13 @@ import multer from 'multer'
 import { get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import {
+  getMainBalance,
+  recordTransaction,
+  createEarningEntry,
+  transferEarningToMain,
+  appendLegacyBalanceTransaction,
+} from '../services/wallet-ledger.js'
 
 const MINING_PERMISSION = 'تعدين'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -192,8 +199,7 @@ function computeAccrual(profile, nowMs) {
 }
 
 async function getUserTotalBalance(tx, userId) {
-  const row = await get(tx, `SELECT COALESCE(SUM(amount), 0) AS total_amount FROM balances WHERE user_id = ?`, [userId])
-  return Number(row?.total_amount || 0)
+  return getMainBalance(tx, userId, 'USDT')
 }
 
 export function createMiningRouter(db) {
@@ -223,12 +229,7 @@ export function createMiningRouter(db) {
     )
     const nowMs = Date.now()
     const accrual = computeAccrual(profile, nowMs)
-    const balanceRow = await get(
-      db,
-      `SELECT amount FROM balances WHERE user_id = ? AND currency = 'USDT' LIMIT 1`,
-      [req.user.id],
-    )
-    const personalBalance = Number(balanceRow?.amount || 0)
+    const personalBalance = await getMainBalance(db, req.user.id, 'USDT')
     const releaseAtMs = parseDateTime(profile?.principal_release_at)
     const monthlyLockUntilMs = parseDateTime(profile?.monthly_lock_until)
     const canReleasePrincipal =
@@ -291,12 +292,7 @@ export function createMiningRouter(db) {
           throw new Error('MINING_ALREADY_ACTIVE')
         }
 
-        const personalBalanceRow = await get(
-          tx,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`,
-          [req.user.id, currency],
-        )
-        const currentBalance = Number(personalBalanceRow?.amount || 0)
+        const currentBalance = await getMainBalance(tx, req.user.id, currency)
         if (currentBalance < amount) throw new Error('INSUFFICIENT_BALANCE')
 
         const totalBalance = await getUserTotalBalance(tx, req.user.id)
@@ -306,21 +302,25 @@ export function createMiningRouter(db) {
         const nowMs = Date.now()
         const monthlyLockUntil = toIso(nowMs + MONTH_MS)
         const nowIso = toIso(nowMs)
-        const nextBalance = Number((currentBalance - amount).toFixed(8))
 
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [req.user.id, currency, nextBalance],
-        )
-        await run(
-          tx,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, NULL, 'mining_subscribe', ?, ?, ?)`,
-          [req.user.id, currency, amount, `Mining subscription amount ${amount.toFixed(2)}`],
-        )
+        await recordTransaction(tx, {
+          userId: req.user.id,
+          currency,
+          transactionType: 'lock',
+          sourceType: 'mining',
+          referenceType: 'mining_subscription',
+          referenceId: req.user.id,
+          amount: -amount,
+          idempotencyKey: `mining_subscribe_${req.user.id}_${Math.floor(nowMs / 1000)}`,
+        })
+        await appendLegacyBalanceTransaction(tx, {
+          userId: req.user.id,
+          adminId: null,
+          type: 'mining_subscribe',
+          currency,
+          amount,
+          note: `Mining subscription amount ${amount.toFixed(2)}`,
+        })
         await run(
           tx,
           `INSERT INTO mining_profiles (
@@ -369,7 +369,8 @@ export function createMiningRouter(db) {
             [req.user.id, miningNoticeBody],
           )
         }
-        return { amount, dailyPercent, monthlyPercent, emergencyFeePercent, monthlyLockUntil, balanceAfter: nextBalance }
+        const balanceAfter = Number((currentBalance - amount).toFixed(8))
+        return { amount, dailyPercent, monthlyPercent, emergencyFeePercent, monthlyLockUntil, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_subscribe' })
       return res.json({ ok: true, ...payload })
@@ -391,19 +392,19 @@ export function createMiningRouter(db) {
         const { dailyClaimable } = computeAccrual(profile, nowMs)
         if (!dailyClaimable || dailyClaimable <= 0) throw new Error('NO_DAILY_PROFIT')
 
-        const currentUsdc = await get(
-          tx,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = 'USDT' LIMIT 1`,
-          [req.user.id],
-        )
-        const nextAmount = Number((Number(currentUsdc?.amount || 0) + dailyClaimable).toFixed(8))
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, 'USDT', ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [req.user.id, nextAmount],
-        )
+        const refId = Number(profile.id || 0) * 100000 + Math.floor(nowMs / 86400000)
+        const earningResult = await createEarningEntry(tx, {
+          userId: req.user.id,
+          sourceType: 'mining',
+          referenceType: 'mining_daily_claim',
+          referenceId: refId,
+          currency: 'USDT',
+          amount: dailyClaimable,
+        })
+        const entryId = earningResult?.id ?? (await get(tx, `SELECT id FROM earning_entries WHERE source_type = 'mining' AND reference_type = 'mining_daily_claim' AND reference_id = ? LIMIT 1`, [refId]))?.id
+        if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
+        await transferEarningToMain(tx, entryId, `mining_daily_${req.user.id}_${refId}`)
+
         await run(
           tx,
           `UPDATE mining_profiles
@@ -414,13 +415,16 @@ export function createMiningRouter(db) {
            WHERE user_id = ?`,
           [dailyClaimable, dailyClaimable, req.user.id],
         )
-        await run(
-          tx,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, NULL, 'mining_daily_claim', 'USDT', ?, 'Daily mining profit claim')`,
-          [req.user.id, dailyClaimable],
-        )
-        return { claimedAmount: dailyClaimable, balanceAfter: nextAmount }
+        await appendLegacyBalanceTransaction(tx, {
+          userId: req.user.id,
+          adminId: null,
+          type: 'mining_daily_claim',
+          currency: 'USDT',
+          amount: dailyClaimable,
+          note: 'Daily mining profit claim',
+        })
+        const balanceAfter = await getMainBalance(tx, req.user.id, 'USDT')
+        return { claimedAmount: dailyClaimable, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_claim' })
       return res.json({ ok: true, ...result })
@@ -473,19 +477,16 @@ export function createMiningRouter(db) {
         const principal = Number(profile.principal_amount || 0)
         if (principal <= 0) throw new Error('PRINCIPAL_NOT_READY')
 
-        const currentUsdc = await get(
-          tx,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = 'USDT' LIMIT 1`,
-          [req.user.id],
-        )
-        const nextAmount = Number((Number(currentUsdc?.amount || 0) + principal).toFixed(8))
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, 'USDT', ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [req.user.id, nextAmount],
-        )
+        await recordTransaction(tx, {
+          userId: req.user.id,
+          currency: 'USDT',
+          transactionType: 'unlock',
+          sourceType: 'mining',
+          referenceType: 'mining_principal_release',
+          referenceId: profile.id,
+          amount: principal,
+          idempotencyKey: `mining_release_${req.user.id}`,
+        })
         await run(
           tx,
           `UPDATE mining_profiles
@@ -496,13 +497,16 @@ export function createMiningRouter(db) {
            WHERE user_id = ?`,
           [req.user.id],
         )
-        await run(
-          tx,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, NULL, 'mining_principal_release', 'USDT', ?, 'Mining principal released after lock')`,
-          [req.user.id, principal],
-        )
-        return { releasedAmount: principal, balanceAfter: nextAmount }
+        await appendLegacyBalanceTransaction(tx, {
+          userId: req.user.id,
+          adminId: null,
+          type: 'mining_principal_release',
+          currency: 'USDT',
+          amount: principal,
+          note: 'Mining principal released after lock',
+        })
+        const balanceAfter = await getMainBalance(tx, req.user.id, 'USDT')
+        return { releasedAmount: principal, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_release_principal' })
       return res.json({ ok: true, ...payload })
@@ -528,19 +532,17 @@ export function createMiningRouter(db) {
         const feeAmount = Number(((principal * feePercent) / 100).toFixed(8))
         const netAmount = Number(Math.max(0, principal - feeAmount).toFixed(8))
 
-        const currentUsdc = await get(
-          tx,
-          `SELECT amount FROM balances WHERE user_id = ? AND currency = 'USDT' LIMIT 1`,
-          [req.user.id],
-        )
-        const nextAmount = Number((Number(currentUsdc?.amount || 0) + netAmount).toFixed(8))
-        await run(
-          tx,
-          `INSERT INTO balances (user_id, currency, amount, updated_at)
-           VALUES (?, 'USDT', ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-          [req.user.id, nextAmount],
-        )
+        await recordTransaction(tx, {
+          userId: req.user.id,
+          currency: 'USDT',
+          transactionType: 'transfer',
+          sourceType: 'mining',
+          referenceType: 'mining_emergency_withdraw',
+          referenceId: profile.id,
+          amount: principal,
+          feeAmount,
+          idempotencyKey: `mining_emergency_${req.user.id}`,
+        })
         await run(
           tx,
           `UPDATE mining_profiles
@@ -552,13 +554,16 @@ export function createMiningRouter(db) {
            WHERE user_id = ?`,
           [req.user.id],
         )
-        await run(
-          tx,
-          `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-           VALUES (?, NULL, 'mining_emergency_withdraw', 'USDT', ?, ?)`,
-          [req.user.id, netAmount, `Emergency withdraw with fee ${feePercent}%`],
-        )
-        return { principal, feePercent, feeAmount, netAmount, balanceAfter: nextAmount }
+        await appendLegacyBalanceTransaction(tx, {
+          userId: req.user.id,
+          adminId: null,
+          type: 'mining_emergency_withdraw',
+          currency: 'USDT',
+          amount: netAmount,
+          note: `Emergency withdraw with fee ${feePercent}%`,
+        })
+        const balanceAfter = await getMainBalance(tx, req.user.id, 'USDT')
+        return { principal, feePercent, feeAmount, netAmount, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_emergency_withdraw' })
       return res.json({ ok: true, ...payload })

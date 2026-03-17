@@ -24,6 +24,7 @@ import { createOwnerGrowthRouter } from './routes/owner-growth.js'
 import { createTasksRouter } from './routes/tasks.js'
 import { createMiningRouter } from './routes/mining.js'
 import { createRewardsRouter } from './routes/rewards.js'
+import { createAdsRouter } from './routes/ads.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -127,6 +128,7 @@ async function bootstrap() {
   app.use('/api/tasks', createTasksRouter(db))
   app.use('/api/mining', createMiningRouter(db))
   app.use('/api/rewards', createRewardsRouter(db))
+  app.use('/api/ads', createAdsRouter(db))
 
   app.get('/manifest.json', async (_req, res) => {
     const defaults = {

@@ -715,6 +715,159 @@ async function ensureSchema(db) {
       referral_percent = excluded.referral_percent,
       is_active = 1`,
   )
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS ads (
+      id SERIAL PRIMARY KEY,
+      type TEXT NOT NULL CHECK (type IN ('image', 'video')),
+      media_url TEXT NOT NULL,
+      title TEXT,
+      description TEXT,
+      link_url TEXT,
+      placement TEXT NOT NULL DEFAULT 'all',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_ads_placement ON ads(placement)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_ads_is_active ON ads(is_active)`)
+
+  // Multi-source financial architecture
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS earning_sources (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      config_json TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_sources_code ON earning_sources(code)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_sources_active ON earning_sources(is_active)`)
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS wallet_accounts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL DEFAULT 'USDT',
+      account_type TEXT NOT NULL DEFAULT 'main',
+      source_type TEXT NOT NULL DEFAULT 'system',
+      balance_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, currency, account_type, source_type)
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_accounts_user ON wallet_accounts(user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_accounts_user_currency ON wallet_accounts(user_id, currency)`)
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS wallet_transactions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL DEFAULT 'USDT',
+      transaction_type TEXT NOT NULL,
+      source_type TEXT NOT NULL DEFAULT 'system',
+      reference_type TEXT,
+      reference_id INTEGER,
+      amount DOUBLE PRECISION NOT NULL,
+      fee_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      net_amount DOUBLE PRECISION NOT NULL,
+      balance_before DOUBLE PRECISION,
+      balance_after DOUBLE PRECISION,
+      account_type_before TEXT,
+      account_type_after TEXT,
+      metadata TEXT,
+      idempotency_key TEXT UNIQUE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user ON wallet_transactions(user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_created ON wallet_transactions(user_id, created_at DESC)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference ON wallet_transactions(reference_type, reference_id)`)
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_transactions_idempotency ON wallet_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL`)
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS earning_entries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source_type TEXT NOT NULL,
+      reference_type TEXT NOT NULL,
+      reference_id INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USDT',
+      amount DOUBLE PRECISION NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      transferred_at TIMESTAMP,
+      transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(source_type, reference_type, reference_id)
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_user ON earning_entries(user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_status ON earning_entries(status)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_reference ON earning_entries(reference_type, reference_id)`)
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS mining_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL DEFAULT 'USDT',
+      status TEXT NOT NULL DEFAULT 'inactive',
+      principal_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      daily_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+      monthly_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+      emergency_fee_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+      started_at TIMESTAMP,
+      ended_at TIMESTAMP,
+      monthly_lock_until TIMESTAMP,
+      last_daily_claim_at TIMESTAMP,
+      daily_profit_claimed_total DOUBLE PRECISION NOT NULL DEFAULT 0,
+      monthly_profit_accrued_total DOUBLE PRECISION NOT NULL DEFAULT 0,
+      returned_principal DOUBLE PRECISION NOT NULL DEFAULT 0,
+      penalty_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      closure_reason TEXT,
+      cancel_requested_at TIMESTAMP,
+      principal_release_at TIMESTAMP,
+      principal_released_at TIMESTAMP,
+      emergency_withdrawn_at TIMESTAMP,
+      video_access_unlocked INTEGER NOT NULL DEFAULT 0,
+      video_access_unlocked_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_mining_subscriptions_status ON mining_subscriptions(status)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_mining_subscriptions_user ON mining_subscriptions(user_id)`)
+
+  // Seed earning sources (extensible registry)
+  await db.query(`
+    INSERT INTO earning_sources (code, name, description, is_active, sort_order)
+    VALUES
+      ('mining', 'Mining', 'Mining subscription earnings', 1, 1),
+      ('tasks', 'Tasks', 'Task reward redemptions', 1, 2),
+      ('referrals', 'Referrals', 'Referral rewards', 1, 3),
+      ('deposits', 'Deposits', 'Deposit-based bonuses', 1, 4)
+    ON CONFLICT(code) DO NOTHING
+  `).catch(() => {})
+
+  // Sync legacy balances to wallet_accounts (main+system) for backward compatibility
+  await db.query(`
+    INSERT INTO wallet_accounts (user_id, currency, account_type, source_type, balance_amount)
+    SELECT user_id, currency, 'main', 'system', amount
+    FROM balances b
+    WHERE NOT EXISTS (
+      SELECT 1 FROM wallet_accounts wa
+      WHERE wa.user_id = b.user_id AND wa.currency = b.currency
+        AND wa.account_type = 'main' AND wa.source_type = 'system'
+    )
+  `).catch(() => {})
+
   // IMPORTANT: first 3000 IDs are reserved. New auto IDs start from 3001+.
   await reserveFirst3000IdsPg(db)
 }
