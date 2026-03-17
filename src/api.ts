@@ -623,11 +623,36 @@ export async function getBalanceHistory(userId?: number) {
   }>
 }
 
+export type WalletOverview = {
+  total_assets: number
+  by_currency: Record<string, number>
+  by_source: { source_type: string; currency: string; balance: number }[]
+  main_balance: number
+  locked_balance: number
+  withdrawable_balance: number
+  withdraw_summary: WithdrawalSummary
+}
+
+export async function getWalletOverview(currency = 'USDT') {
+  return apiFetch(`/api/balance/overview?currency=${encodeURIComponent(currency)}`) as Promise<WalletOverview>
+}
+
 /** Wallet transaction history (source of truth: wallet_transactions) */
-export async function getWalletHistory(currency?: string, limit = 100) {
+export async function getWalletHistory(opts?: {
+  currency?: string
+  sourceType?: string
+  transactionType?: string
+  dateFrom?: string
+  dateTo?: string
+  limit?: number
+}) {
   const params = new URLSearchParams()
-  if (currency) params.set('currency', currency)
-  params.set('limit', String(limit))
+  if (opts?.currency) params.set('currency', opts.currency)
+  if (opts?.sourceType) params.set('sourceType', opts.sourceType)
+  if (opts?.transactionType) params.set('transactionType', opts.transactionType)
+  if (opts?.dateFrom) params.set('dateFrom', opts.dateFrom)
+  if (opts?.dateTo) params.set('dateTo', opts.dateTo)
+  params.set('limit', String(opts?.limit ?? 100))
   return apiFetch(`/api/balance/wallet-history?${params}`) as Promise<{
     transactions: {
       id: number
@@ -641,29 +666,81 @@ export async function getWalletHistory(currency?: string, limit = 100) {
       net_amount: number
       balance_before: number
       balance_after: number
+      metadata: string | null
       created_at: string
+      label_key?: string
+      source_label_key?: string
     }[]
   }>
 }
 
+export type EarningEntry = {
+  id: number
+  source_type: string
+  reference_type: string
+  reference_id: number
+  currency: string
+  amount: number
+  status: string
+  transferred_at: string | null
+  transferred_wallet_txn_id: number | null
+  created_at: string
+  label_key?: string
+  status_label_key?: string
+}
+
+export type EarningGroup = {
+  source_type: string
+  entries: EarningEntry[]
+  total_amount: number
+  transferred_count: number
+  pending_count: number
+}
+
 /** Earning entries history (source of truth: earning_entries) */
-export async function getEarningHistory(sourceType?: string, limit = 100) {
+export async function getEarningHistory(opts?: {
+  sourceType?: string
+  limit?: number
+  grouped?: boolean
+}) {
   const params = new URLSearchParams()
-  if (sourceType) params.set('sourceType', sourceType)
-  params.set('limit', String(limit))
+  if (opts?.sourceType) params.set('sourceType', opts.sourceType)
+  params.set('limit', String(opts?.limit ?? 100))
+  if (opts?.grouped) params.set('grouped', '1')
   return apiFetch(`/api/balance/earning-history?${params}`) as Promise<{
-    entries: {
+    entries: EarningEntry[]
+    grouped?: EarningGroup[]
+  }>
+}
+
+export async function getAdminUserWallet(userId: number, currency = 'USDT', limit = 50) {
+  const params = new URLSearchParams()
+  params.set('userId', String(userId))
+  params.set('currency', currency)
+  params.set('limit', String(limit))
+  return apiFetch(`/api/balance/admin/user-wallet?${params}`) as Promise<{
+    user: { id: number; email: string | null; phone: string | null; display_name: string | null } | null
+    overview: {
+      total_assets: number
+      by_currency: Record<string, number>
+      by_source: { source_type: string; currency: string; balance: number }[]
+      main_balance: number
+      locked_balance: number
+      withdrawable_balance: number
+    }
+    withdraw_summary: WithdrawalSummary
+    transactions: {
       id: number
-      source_type: string
-      reference_type: string
-      reference_id: number
       currency: string
+      transaction_type: string
+      source_type: string
+      reference_type: string | null
+      reference_id: number | null
       amount: number
-      status: string
-      transferred_at: string | null
-      transferred_wallet_txn_id: number | null
+      net_amount: number
       created_at: string
     }[]
+    earning_entries: EarningEntry[]
   }>
 }
 

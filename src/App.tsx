@@ -37,6 +37,7 @@ const FuturesPage = lazy(() => import('./pages/FuturesPage').then((m) => ({ defa
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })))
 const MiningPage = lazy(() => import('./pages/MiningPage').then((m) => ({ default: m.MiningPage })))
 const DepositPage = lazy(() => import('./pages/DepositPage').then((m) => ({ default: m.DepositPage })))
+const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })))
 const FriendsPage = lazy(() => import('./pages/FriendsPage').then((m) => ({ default: m.FriendsPage })))
 const VipPage = lazy(() => import('./pages/VipPage').then((m) => ({ default: m.VipPage })))
 const ReferralPage = lazy(() => import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })))
@@ -364,6 +365,7 @@ function App() {
                 <Suspense fallback={<div className="login-wrapper">Loading...</div>}>
                   <Routes>
                     <Route path="/portfolio" element={<Profile />} />
+                    <Route path="/wallet" element={<WalletPage />} />
                     <Route path="/deposit" element={<DepositPage user={user as AuthUser} />} />
                     <Route path="/withdraw" element={<DepositPage user={user as AuthUser} pageMode="withdraw" />} />
                     <Route path="/friends" element={<FriendsPage />} />

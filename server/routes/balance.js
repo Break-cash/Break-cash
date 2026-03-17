@@ -14,6 +14,7 @@ import {
   adjustBalance,
   createReferralReward,
 } from '../services/wallet-service.js'
+import { getWalletAccountsOverview } from '../services/wallet-ledger.js'
 import {
   reconcileUserCurrency,
   reconcileAll,
@@ -564,18 +565,80 @@ export function createBalanceRouter(db) {
     return res.json({ history, source: 'wallet_transactions' })
   })
 
+  router.get('/overview', async (req, res) => {
+    const currency = normalizeCurrency(req.query.currency || 'USDT')
+    const [accountsOverview, rules] = await Promise.all([
+      getWalletAccountsOverview(db, req.user.id),
+      getRules(db),
+    ])
+    const withdrawSummary = await calculateWithdrawalSummary(db, req.user.id, currency, rules)
+    return res.json({
+      total_assets: accountsOverview.total_assets,
+      by_currency: accountsOverview.by_currency,
+      by_source: accountsOverview.by_source,
+      main_balance: withdrawSummary.current_balance,
+      locked_balance: withdrawSummary.locked_balance,
+      withdrawable_balance: withdrawSummary.withdrawable_balance,
+      withdraw_summary: withdrawSummary,
+    })
+  })
+
   router.get('/wallet-history', async (req, res) => {
     const currency = req.query.currency ? String(req.query.currency).trim().toUpperCase() : null
+    const sourceType = req.query.sourceType ? String(req.query.sourceType).trim().toLowerCase() : null
+    const transactionType = req.query.transactionType ? String(req.query.transactionType).trim().toLowerCase() : null
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).trim().slice(0, 10) : null
+    const dateTo = req.query.dateTo ? String(req.query.dateTo).trim().slice(0, 10) : null
     const limit = Math.min(Number(req.query.limit) || 100, 200)
-    const rows = await getWalletHistory(db, req.user.id, currency, limit)
+    const rows = await getWalletHistory(db, req.user.id, {
+      currency,
+      sourceType,
+      transactionType,
+      dateFrom,
+      dateTo,
+      limit,
+    })
     return res.json({ transactions: rows })
   })
 
   router.get('/earning-history', async (req, res) => {
     const sourceType = req.query.sourceType ? String(req.query.sourceType).trim().toLowerCase() : null
     const limit = Math.min(Number(req.query.limit) || 100, 200)
-    const rows = await getEarningHistory(db, req.user.id, sourceType, limit)
-    return res.json({ entries: rows })
+    const grouped = req.query.grouped === 'true' || req.query.grouped === '1'
+    const result = await getEarningHistory(db, req.user.id, { sourceType, limit, grouped })
+    if (grouped && result && typeof result === 'object' && 'grouped' in result) {
+      return res.json({ entries: result.entries, grouped: result.grouped })
+    }
+    return res.json({ entries: Array.isArray(result) ? result : [] })
+  })
+
+  router.get('/admin/user-wallet', requirePermission(db, 'manage_balances'), async (req, res) => {
+    const userId = Number(req.query.userId || 0)
+    const currency = normalizeCurrency(req.query.currency || 'USDT')
+    const limit = Math.min(Number(req.query.limit) || 50, 100)
+    if (!userId || userId <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const [accountsOverview, rules, walletTxns, earningEntries] = await Promise.all([
+      getWalletAccountsOverview(db, userId),
+      getRules(db),
+      getWalletHistory(db, userId, { currency, limit }),
+      getEarningHistory(db, userId, { limit }),
+    ])
+    const withdrawSummary = await calculateWithdrawalSummary(db, userId, currency, rules)
+    const userRow = await get(db, `SELECT id, email, phone, display_name FROM users WHERE id = ? LIMIT 1`, [userId])
+    return res.json({
+      user: userRow ? { id: userRow.id, email: userRow.email, phone: userRow.phone, display_name: userRow.display_name } : null,
+      overview: {
+        total_assets: accountsOverview.total_assets,
+        by_currency: accountsOverview.by_currency,
+        by_source: accountsOverview.by_source,
+        main_balance: withdrawSummary.current_balance,
+        locked_balance: withdrawSummary.locked_balance,
+        withdrawable_balance: withdrawSummary.withdrawable_balance,
+      },
+      withdraw_summary: withdrawSummary,
+      transactions: walletTxns,
+      earning_entries: Array.isArray(earningEntries) ? earningEntries : [],
+    })
   })
 
   router.get('/admin/reconcile', requireRole('owner'), async (req, res) => {

@@ -53,6 +53,45 @@ export async function getOrCreateWalletAccount(db, userId, currency, accountType
 }
 
 /**
+ * Get all wallet account balances for user, aggregated by source_type per currency.
+ * @returns {Promise<{ total_assets: number, by_currency: Record<string, number>, by_source: Array<{ source_type, currency, balance }> }>}
+ */
+export async function getWalletAccountsOverview(db, userId) {
+  const rows = await all(
+    db,
+    `SELECT currency, account_type, source_type, balance_amount
+     FROM wallet_accounts WHERE user_id = ?`,
+    [userId],
+  )
+  let totalAssets = 0
+  const byCurrency = {}
+  const bySource = []
+  for (const r of rows) {
+    const amt = Number(r.balance_amount || 0)
+    totalAssets = Number((totalAssets + amt).toFixed(8))
+    const curr = String(r.currency || 'USDT').toUpperCase()
+    byCurrency[curr] = Number((Number(byCurrency[curr] || 0) + amt).toFixed(8))
+    bySource.push({
+      source_type: String(r.source_type || 'system'),
+      currency: curr,
+      account_type: String(r.account_type || 'main'),
+      balance: amt,
+    })
+  }
+  const bySourceAgg = {}
+  for (const s of bySource) {
+    const key = `${s.source_type}:${s.currency}`
+    if (!bySourceAgg[key]) bySourceAgg[key] = { source_type: s.source_type, currency: s.currency, balance: 0 }
+    bySourceAgg[key].balance = Number((Number(bySourceAgg[key].balance) + s.balance).toFixed(8))
+  }
+  return {
+    total_assets: totalAssets,
+    by_currency: byCurrency,
+    by_source: Object.values(bySourceAgg).filter((x) => x.balance > 0),
+  }
+}
+
+/**
  * Get main balance for user (sum of main+system account).
  * Source of truth: wallet_accounts.
  */
@@ -201,52 +240,154 @@ export async function transferEarningToMain(db, earningEntryId, idempotencyKey =
   return txn
 }
 
+/** Human-readable labels for transaction types */
+export const TRANSACTION_TYPE_LABELS = Object.freeze({
+  deposit: 'deposit',
+  withdrawal: 'withdrawal',
+  transfer: 'transfer',
+  earning_credit: 'earning_credit',
+  lock: 'lock',
+  unlock: 'unlock',
+  adjust: 'adjust',
+  fee: 'fee',
+})
+
+/** Human-readable labels for source types */
+export const SOURCE_TYPE_LABELS = Object.freeze({
+  system: 'system',
+  mining: 'mining',
+  tasks: 'tasks',
+  referrals: 'referrals',
+  deposits: 'deposits',
+})
+
 /**
  * Get wallet transaction history for user (audit-safe)
+ * @param {object} opts - { currency?, sourceType?, transactionType?, dateFrom?, dateTo?, limit? } or (currency, limit) for backward compat
  */
-export async function getWalletHistory(db, userId, currency = null, limit = 100) {
+export async function getWalletHistory(db, userId, optsOrCurrency = {}, maybeLimit = null) {
+  let currency = null
+  let sourceType = null
+  let transactionType = null
+  let dateFrom = null
+  let dateTo = null
+  let limit = 100
+  if (optsOrCurrency != null && typeof optsOrCurrency === 'object' && !Array.isArray(optsOrCurrency)) {
+    currency = optsOrCurrency.currency ?? null
+    sourceType = optsOrCurrency.sourceType ?? null
+    transactionType = optsOrCurrency.transactionType ?? null
+    dateFrom = optsOrCurrency.dateFrom ?? null
+    dateTo = optsOrCurrency.dateTo ?? null
+    limit = optsOrCurrency.limit ?? 100
+  } else if (typeof optsOrCurrency === 'string') {
+    currency = optsOrCurrency
+    limit = typeof maybeLimit === 'number' ? maybeLimit : 100
+  }
+
   const curr = currency ? String(currency).trim().toUpperCase() : null
-  const rows = curr
-    ? await all(
-        db,
-        `SELECT id, currency, transaction_type, source_type, reference_type, reference_id,
-                amount, fee_amount, net_amount, balance_before, balance_after, created_at
-         FROM wallet_transactions WHERE user_id = ? AND currency = ?
-         ORDER BY created_at DESC LIMIT ?`,
-        [userId, curr, limit],
-      )
-    : await all(
-        db,
-        `SELECT id, currency, transaction_type, source_type, reference_type, reference_id,
-                amount, fee_amount, net_amount, balance_before, balance_after, created_at
-         FROM wallet_transactions WHERE user_id = ?
-         ORDER BY created_at DESC LIMIT ?`,
-        [userId, limit],
-      )
-  return rows
+  const src = sourceType ? String(sourceType).trim().toLowerCase() : null
+  const txnType = transactionType ? String(transactionType).trim().toLowerCase() : null
+  const fromDate = dateFrom ? String(dateFrom).trim().slice(0, 10) : null
+  const toDate = dateTo ? String(dateTo).trim().slice(0, 10) : null
+  const lim = Math.min(Number(limit) || 100, 200)
+
+  const conditions = ['user_id = ?']
+  const params = [userId]
+  if (curr) {
+    conditions.push('currency = ?')
+    params.push(curr)
+  }
+  if (src) {
+    conditions.push('source_type = ?')
+    params.push(src)
+  }
+  if (txnType) {
+    conditions.push('transaction_type = ?')
+    params.push(txnType)
+  }
+  if (fromDate) {
+    conditions.push("DATE(created_at) >= ?")
+    params.push(fromDate)
+  }
+  if (toDate) {
+    conditions.push("DATE(created_at) <= ?")
+    params.push(toDate)
+  }
+  params.push(lim)
+
+  const whereClause = conditions.join(' AND ')
+  const rows = await all(
+    db,
+    `SELECT id, currency, transaction_type, source_type, reference_type, reference_id,
+            amount, fee_amount, net_amount, balance_before, balance_after, metadata, created_at
+     FROM wallet_transactions
+     WHERE ${whereClause}
+     ORDER BY created_at DESC LIMIT ?`,
+    params,
+  )
+  return rows.map((r) => ({
+    ...r,
+    label_key: `wallet_txn_${r.transaction_type}`,
+    source_label_key: `wallet_source_${r.source_type}`,
+  }))
 }
 
 /**
  * Get earning entries history for user (audit-safe)
+ * Returns flat list with label keys; optionally grouped by source_type.
+ * @param {object} opts - { sourceType?, limit?, grouped? } or (sourceType, limit) for backward compat
  */
-export async function getEarningHistory(db, userId, sourceType = null, limit = 100) {
+export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybeLimit = null) {
+  let sourceType = null
+  let limit = 100
+  let grouped = false
+  if (typeof optsOrSourceType === 'string') {
+    sourceType = optsOrSourceType
+    limit = typeof maybeLimit === 'number' ? maybeLimit : 100
+  } else if (optsOrSourceType != null && typeof optsOrSourceType === 'object') {
+    sourceType = optsOrSourceType.sourceType ?? null
+    limit = optsOrSourceType.limit ?? 100
+    grouped = optsOrSourceType.grouped ?? false
+  }
+
   const src = sourceType ? String(sourceType).trim().toLowerCase() : null
-  const rows = src
-    ? await all(
-        db,
-        `SELECT id, source_type, reference_type, reference_id, currency, amount, status,
-                transferred_at, transferred_wallet_txn_id, created_at
-         FROM earning_entries WHERE user_id = ? AND source_type = ?
-         ORDER BY created_at DESC LIMIT ?`,
-        [userId, src, limit],
-      )
-    : await all(
-        db,
-        `SELECT id, source_type, reference_type, reference_id, currency, amount, status,
-                transferred_at, transferred_wallet_txn_id, created_at
-         FROM earning_entries WHERE user_id = ?
-         ORDER BY created_at DESC LIMIT ?`,
-        [userId, limit],
-      )
-  return rows
+  const lim = Math.min(Number(limit) || 100, 200)
+
+  const conditions = ['user_id = ?']
+  const params = [userId]
+  if (src) {
+    conditions.push('source_type = ?')
+    params.push(src)
+  }
+  params.push(lim)
+
+  const whereClause = conditions.join(' AND ')
+  const rows = await all(
+    db,
+    `SELECT id, source_type, reference_type, reference_id, currency, amount, status,
+            transferred_at, transferred_wallet_txn_id, created_at
+     FROM earning_entries
+     WHERE ${whereClause}
+     ORDER BY created_at DESC LIMIT ?`,
+    params,
+  )
+
+  const entries = rows.map((r) => ({
+    ...r,
+    label_key: `earning_source_${r.source_type}`,
+    status_label_key: r.status === 'transferred' ? 'earning_status_transferred' : 'earning_status_pending',
+  }))
+
+  if (!grouped) return entries
+
+  const bySource = {}
+  for (const e of entries) {
+    const key = String(e.source_type || 'system')
+    if (!bySource[key]) bySource[key] = { source_type: key, entries: [], total_amount: 0, transferred_count: 0, pending_count: 0 }
+    bySource[key].entries.push(e)
+    bySource[key].total_amount = Number((Number(bySource[key].total_amount) + Number(e.amount || 0)).toFixed(8))
+    if (e.status === 'transferred') bySource[key].transferred_count += 1
+    else bySource[key].pending_count += 1
+  }
+  return { entries, grouped: Object.values(bySource) }
 }

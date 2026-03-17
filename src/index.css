@@ -4628,6 +4628,143 @@ button:focus-visible,
   background: rgba(59, 130, 246, 0.16);
 }
 
+/* Admin wallet traceability */
+.admin-trace-result {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-trace-overview {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-trace-user {
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 8px 0;
+}
+
+.admin-trace-balances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.admin-trace-section {
+  margin-top: 16px;
+}
+
+.admin-trace-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 4px 0;
+}
+
+.admin-trace-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0 0 8px 0;
+}
+
+.admin-trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.admin-trace-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+}
+
+.admin-trace-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.admin-trace-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.admin-trace-pos {
+  color: #4ade80;
+}
+
+.admin-trace-neg {
+  color: #f87171;
+}
+
+.admin-trace-transferred {
+  color: #4ade80;
+}
+
+.admin-trace-pending {
+  color: #fbbf24;
+}
+
+.admin-trace-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #60a5fa;
+}
+
+.admin-trace-nolink {
+  color: #64748b;
+}
+
+.admin-trace-date {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.admin-trace-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.admin-trace-copy:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+}
+
+.admin-trace-copied {
+  font-size: 10px;
+  color: #4ade80;
+}
+
 /* Desktop closer to mobile layout */
 @media (min-width: 1024px) {
   .app-root {

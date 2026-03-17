@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   createDepositRequest,
   createWithdrawalRequest,
@@ -434,6 +434,9 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         </h2>
         <p className="deposit-welcome" style={{ marginTop: 0 }}>
           {t('wallet_requests_balance')}: {balanceUSDT.toFixed(2)} USDT
+          <Link to="/wallet" className="deposit-wallet-link" style={{ marginLeft: 8, fontSize: '0.9em' }}>
+            ({t('wallet_overview_link')})
+          </Link>
         </p>
         {withdrawSummary ? (
           <div className="owner-history-card" style={{ marginBottom: 12 }}>

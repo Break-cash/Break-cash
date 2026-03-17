@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { Copy } from 'lucide-react'
 import {
   apiFetch,
   completeAdminWithdrawalRequest,
   getAdminUnlockOverride,
   getAdminDepositRequests,
   getAdminWithdrawalRequests,
+  getAdminUserWallet,
   getBalanceRules,
   reviewAdminDepositRequest,
   reviewAdminWithdrawalRequest,
@@ -17,6 +19,32 @@ import {
   updateBalanceRules,
 } from '../../api'
 import { useI18n } from '../../i18nCore'
+
+function CopyButton({ value, label }: { value: string; label?: string }) {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // ignore
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="admin-trace-copy"
+      title={label || t('admin_copy_id')}
+      aria-label={t('admin_copy_id')}
+    >
+      <Copy size={14} />
+      {copied ? <span className="admin-trace-copied"> {t('admin_copied')}</span> : null}
+    </button>
+  )
+}
 
 export function AdminBalancesPage() {
   const { t } = useI18n()
@@ -49,6 +77,9 @@ export function AdminBalancesPage() {
   const [overrideCustomMinProfit, setOverrideCustomMinProfit] = useState('')
   const [overrideNote, setOverrideNote] = useState('')
   const [overrideSummary, setOverrideSummary] = useState<WithdrawalSummary | null>(null)
+  const [traceUserId, setTraceUserId] = useState('')
+  const [traceLoading, setTraceLoading] = useState(false)
+  const [traceData, setTraceData] = useState<Awaited<ReturnType<typeof getAdminUserWallet>> | null>(null)
 
   async function adjust(type: 'add' | 'deduct') {
     setMessage(null)
@@ -421,6 +452,116 @@ export function AdminBalancesPage() {
         <button type="button" className="wallet-action-btn owner-set-btn" onClick={saveOverride} disabled={overrideSaving}>
           {overrideSaving ? t('common_loading') : t('admin_wallet_save_rules')}
         </button>
+      </div>
+
+      <div className="card login-form">
+        <h3 className="owner-wallet-heading">{t('admin_wallet_trace_title')}</h3>
+        <p className="owner-hint">{t('admin_wallet_trace_links')}</p>
+        <div className="owner-form-row">
+          <input
+            className="field-input"
+            placeholder={t('admin_wallet_trace_user_id')}
+            value={traceUserId}
+            onChange={(e) => setTraceUserId(e.target.value)}
+          />
+          <button
+            type="button"
+            className="wallet-action-btn owner-set-btn"
+            onClick={async () => {
+              const uid = Number(traceUserId)
+              if (!uid || !Number.isFinite(uid)) {
+                setMessage({ type: 'error', text: t('wallet_requests_invalid_input') })
+                return
+              }
+              setTraceLoading(true)
+              setMessage(null)
+              try {
+                const data = await getAdminUserWallet(uid)
+                setTraceData(data)
+              } catch (e) {
+                setMessage({ type: 'error', text: e instanceof Error ? e.message : t('admin_wallet_action_failed') })
+                setTraceData(null)
+              } finally {
+                setTraceLoading(false)
+              }
+            }}
+            disabled={traceLoading}
+          >
+            {traceLoading ? t('common_loading') : t('admin_wallet_trace_load')}
+          </button>
+        </div>
+        {traceData ? (
+          <div className="admin-trace-result">
+            <div className="admin-trace-overview">
+              <p className="admin-trace-user">
+                {traceData.user?.display_name || traceData.user?.email || traceData.user?.phone || `User #${traceData.user?.id}`}
+              </p>
+              <div className="admin-trace-balances">
+                <span>Main: {traceData.overview.main_balance.toFixed(2)} USDT</span>
+                <span>Locked: {traceData.overview.locked_balance.toFixed(2)}</span>
+                <span>Withdrawable: {traceData.overview.withdrawable_balance.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="admin-trace-section">
+              <h4>Wallet Transactions ({traceData.transactions.length})</h4>
+              <p className="admin-trace-hint">{t('admin_wallet_trace_links')}</p>
+              <ul className="admin-trace-list">
+                {traceData.transactions.map((tx) => (
+                  <li key={tx.id} className="admin-trace-item">
+                    <span className="admin-trace-id">
+                      #{tx.id}
+                      <CopyButton value={String(tx.id)} />
+                    </span>
+                    <span>{tx.transaction_type}</span>
+                    <span>{tx.source_type}</span>
+                    <span className="admin-trace-ref">
+                      {tx.reference_type}#{tx.reference_id ?? '—'}
+                      {(tx.reference_type || tx.reference_id) && (
+                        <CopyButton value={`${tx.reference_type || ''}#${tx.reference_id ?? ''}`} />
+                      )}
+                    </span>
+                    <span className={tx.net_amount >= 0 ? 'admin-trace-pos' : 'admin-trace-neg'}>
+                      {tx.net_amount} {tx.currency}
+                    </span>
+                    <span className="admin-trace-date">{new Date(tx.created_at).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="admin-trace-section">
+              <h4>Earning Entries ({traceData.earning_entries.length})</h4>
+              <p className="admin-trace-hint">{t('admin_wallet_trace_earning_hint')}</p>
+              <ul className="admin-trace-list">
+                {traceData.earning_entries.map((e) => (
+                  <li key={e.id} className="admin-trace-item">
+                    <span className="admin-trace-id">
+                      #{e.id}
+                      <CopyButton value={String(e.id)} />
+                    </span>
+                    <span>{e.source_type}</span>
+                    <span className="admin-trace-ref">
+                      {e.reference_type}#{e.reference_id}
+                      <CopyButton value={`${e.reference_type}#${e.reference_id}`} />
+                    </span>
+                    <span>{e.amount} {e.currency}</span>
+                    <span className={e.status === 'transferred' ? 'admin-trace-transferred' : 'admin-trace-pending'}>
+                      {e.status}
+                    </span>
+                    {e.transferred_wallet_txn_id ? (
+                      <span className="admin-trace-link">
+                        → txn#{e.transferred_wallet_txn_id}
+                        <CopyButton value={String(e.transferred_wallet_txn_id)} />
+                      </span>
+                    ) : (
+                      <span className="admin-trace-nolink">—</span>
+                    )}
+                    <span className="admin-trace-date">{new Date(e.created_at).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="card login-form">
