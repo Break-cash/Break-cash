@@ -2,17 +2,13 @@
  * Centralized wallet service - the ONLY entry point for financial operations.
  * All balance-changing actions MUST go through these functions.
  * Source of truth: wallet_accounts + wallet_transactions + earning_entries.
- * Legacy balances/balance_transactions: one-way sync only (transition layer).
  */
 import { get } from '../db.js'
 import {
   getMainBalance,
-  getOrCreateWalletAccount,
   recordTransaction,
   createEarningEntry,
   transferEarningToMain,
-  syncToLegacyBalances,
-  appendLegacyBalanceTransaction,
   getWalletHistory,
   getEarningHistory,
 } from './wallet-ledger.js'
@@ -24,7 +20,7 @@ export { getMainBalance, getWalletHistory, getEarningHistory }
  * Create deposit (credit main balance). Idempotent.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, currency, amount, referenceType, referenceId, idempotencyKey, createdBy }
- * @returns {{ walletTxnId, legacyTxnId, balanceAfter }}
+ * @returns {{ walletTxnId, balanceAfter }}
  */
 export async function createDeposit(db, opts) {
   const { userId, currency = 'USDT', amount, referenceType = 'deposit_request', referenceId, idempotencyKey, createdBy } = opts
@@ -40,16 +36,8 @@ export async function createDeposit(db, opts) {
     idempotencyKey,
     createdBy,
   })
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: createdBy || null,
-    type: 'deposit',
-    currency,
-    amount,
-    note: opts.note || `Deposit ${referenceType} #${referenceId || ''}`,
-  })
   const balanceAfter = await getMainBalance(db, userId, currency)
-  return { walletTxnId: txn.id, legacyTxnId: legacyId, balanceAfter }
+  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -63,7 +51,7 @@ export async function approveDeposit(db, opts) {
  * Create withdrawal (debit main balance). Idempotent.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, currency, amount, referenceType, referenceId, idempotencyKey, createdBy }
- * @returns {{ walletTxnId, legacyTxnId, balanceAfter }}
+ * @returns {{ walletTxnId, balanceAfter }}
  */
 export async function createWithdrawal(db, opts) {
   const { userId, currency = 'USDT', amount, referenceType = 'withdrawal_request', referenceId, idempotencyKey, createdBy } = opts
@@ -81,16 +69,8 @@ export async function createWithdrawal(db, opts) {
     idempotencyKey,
     createdBy,
   })
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: createdBy || null,
-    type: 'withdraw',
-    currency,
-    amount,
-    note: opts.note || `Withdrawal ${referenceType} #${referenceId || ''}`,
-  })
   const balanceAfter = await getMainBalance(db, userId, currency)
-  return { walletTxnId: txn.id, legacyTxnId: legacyId, balanceAfter }
+  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -104,7 +84,7 @@ export async function approveWithdrawal(db, opts) {
  * Create mining subscription - lock principal from main balance. Idempotent.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, currency, amount, idempotencyKey }
- * @returns {{ walletTxnId, legacyTxnId, balanceAfter }}
+ * @returns {{ walletTxnId, balanceAfter }}
  */
 export async function createMiningSubscription(db, opts) {
   const { userId, currency = 'USDT', amount, idempotencyKey } = opts
@@ -121,23 +101,15 @@ export async function createMiningSubscription(db, opts) {
     amount: -amount,
     idempotencyKey: idempotencyKey || `mining_subscribe_${userId}_${Math.floor(Date.now() / 1000)}`,
   })
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: null,
-    type: 'mining_subscribe',
-    currency,
-    amount,
-    note: `Mining subscription ${amount}`,
-  })
   const balanceAfter = await getMainBalance(db, userId, currency)
-  return { walletTxnId: txn.id, legacyTxnId: legacyId, balanceAfter }
+  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
  * Record mining daily profit as earning entry, then transfer to main. Idempotent.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, amount, profileId, referenceId (unique per claim) }
- * @returns {{ earningEntryId, walletTxnId, legacyTxnId, balanceAfter }}
+ * @returns {{ earningEntryId, walletTxnId, balanceAfter }}
  */
 export async function recordMiningDailyProfit(db, opts) {
   const { userId, amount, profileId, referenceId } = opts
@@ -155,16 +127,8 @@ export async function recordMiningDailyProfit(db, opts) {
   if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
   const txn = await transferEarningToMain(db, entryId, `mining_daily_${userId}_${referenceId}`)
   if (!txn) return null
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: null,
-    type: 'mining_daily_claim',
-    currency: 'USDT',
-    amount,
-    note: 'Daily mining profit claim',
-  })
   const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { earningEntryId: entryId, walletTxnId: txn.id, legacyTxnId: legacyId, balanceAfter }
+  return { earningEntryId: entryId, walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -189,7 +153,7 @@ export async function transferSourceEarningsToMain(db, opts) {
  * Invariant: principal cannot be returned twice.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, principal, profileId, idempotencyKey }
- * @returns {{ walletTxnId, legacyTxnId, balanceAfter }}
+ * @returns {{ walletTxnId, balanceAfter }}
  */
 export async function settleMiningAtMaturity(db, opts) {
   const { userId, principal, profileId, idempotencyKey } = opts
@@ -205,16 +169,8 @@ export async function settleMiningAtMaturity(db, opts) {
     amount: principal,
     idempotencyKey: key,
   })
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: null,
-    type: 'mining_principal_release',
-    currency: 'USDT',
-    amount: principal,
-    note: 'Mining principal released at maturity',
-  })
   const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { walletTxnId: txn.id, legacyTxnId: legacyId, balanceAfter }
+  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -222,7 +178,7 @@ export async function settleMiningAtMaturity(db, opts) {
  * Invariant: cannot run after maturity settlement; subscription must be closed.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, principal, feeAmount, profileId, idempotencyKey }
- * @returns {{ walletTxnId, legacyTxnId, netAmount, balanceAfter }}
+ * @returns {{ walletTxnId, netAmount, balanceAfter }}
  */
 export async function executeMiningEmergencyWithdrawal(db, opts) {
   const { userId, principal, feeAmount = 0, profileId, idempotencyKey } = opts
@@ -240,23 +196,15 @@ export async function executeMiningEmergencyWithdrawal(db, opts) {
     feeAmount,
     idempotencyKey: key,
   })
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: null,
-    type: 'mining_emergency_withdraw',
-    currency: 'USDT',
-    amount: netAmount,
-    note: `Emergency withdraw, fee ${feeAmount}`,
-  })
   const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { walletTxnId: txn.id, legacyTxnId: legacyId, netAmount, balanceAfter }
+  return { walletTxnId: txn.id, netAmount, balanceAfter }
 }
 
 /**
  * Admin/owner balance adjustment. Idempotent.
  * @param {object} db - Database handle
  * @param {object} opts - { userId, currency, delta, referenceType, referenceId, idempotencyKey, createdBy }
- * @returns {{ walletTxnId, legacyTxnId, balanceAfter }}
+ * @returns {{ walletTxnId, balanceAfter }}
  */
 export async function adjustBalance(db, opts) {
   const { userId, currency = 'USDT', delta, referenceType = 'admin_adjust', referenceId, idempotencyKey, createdBy } = opts
@@ -276,16 +224,7 @@ export async function adjustBalance(db, opts) {
     idempotencyKey: key,
     createdBy,
   })
-  const type = delta >= 0 ? 'add' : 'deduct'
-  const legacyId = await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: createdBy || null,
-    type,
-    currency,
-    amount: Math.abs(delta),
-    note: opts.note || 'Balance adjustment',
-  })
-  return { walletTxnId: txn.id, legacyTxnId: legacyId, balanceAfter }
+  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -305,14 +244,6 @@ export async function createReferralReward(db, opts) {
   if (!earningResult?.id) return null
   const txn = await transferEarningToMain(db, earningResult.id, `referral_reward_${referralRewardId}`)
   if (!txn) return null
-  await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: null,
-    type: 'referral_reward',
-    currency,
-    amount,
-    note: opts.note || `Referral reward #${referralRewardId}`,
-  })
   return { walletTxnId: txn.id, balanceAfter: await getMainBalance(db, userId, currency) }
 }
 
@@ -334,13 +265,5 @@ export async function createTaskReward(db, opts) {
   if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
   const txn = await transferEarningToMain(db, entryId, `task_redemption_${redemptionId}`)
   if (!txn) return null
-  await appendLegacyBalanceTransaction(db, {
-    userId,
-    adminId: null,
-    type: 'task_code_bonus',
-    currency,
-    amount,
-    note: opts.note || `Task redemption #${redemptionId}`,
-  })
   return { walletTxnId: txn.id, balanceAfter: await getMainBalance(db, userId, currency) }
 }

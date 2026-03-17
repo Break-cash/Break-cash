@@ -116,4 +116,5 @@ Complete reconciliation service and integrity tests, then proceed to Phase 2.
 - [x] Phase 0: Financial freeze
 - [x] Phase 1: Reconciliation + integrity tests
 - [x] Phase 2: Legacy read migration
-- [ ] Phase 3: Full cutover
+- [x] Phase 3A: Full cutover (legacy writes disabled)
+- [x] Phase 3B: Legacy retirement preparation

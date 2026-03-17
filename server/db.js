@@ -798,6 +798,9 @@ async function ensureSchema(db) {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_wallet_txn ON deposit_requests(wallet_transaction_id) WHERE wallet_transaction_id IS NOT NULL`).catch(() => {})
   await db.query(`CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_wallet_txn ON withdrawal_requests(wallet_transaction_id) WHERE wallet_transaction_id IS NOT NULL`).catch(() => {})
 
+  await db.query(`ALTER TABLE deposit_requests DROP COLUMN IF EXISTS processed_txn_id`).catch(() => {})
+  await db.query(`ALTER TABLE withdrawal_requests DROP COLUMN IF EXISTS processed_txn_id`).catch(() => {})
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS earning_entries (
       id SERIAL PRIMARY KEY,
@@ -859,18 +862,6 @@ async function ensureSchema(db) {
       ('referrals', 'Referrals', 'Referral rewards', 1, 3),
       ('deposits', 'Deposits', 'Deposit-based bonuses', 1, 4)
     ON CONFLICT(code) DO NOTHING
-  `).catch(() => {})
-
-  // Sync legacy balances to wallet_accounts (main+system) for backward compatibility
-  await db.query(`
-    INSERT INTO wallet_accounts (user_id, currency, account_type, source_type, balance_amount)
-    SELECT user_id, currency, 'main', 'system', amount
-    FROM balances b
-    WHERE NOT EXISTS (
-      SELECT 1 FROM wallet_accounts wa
-      WHERE wa.user_id = b.user_id AND wa.currency = b.currency
-        AND wa.account_type = 'main' AND wa.source_type = 'system'
-    )
   `).catch(() => {})
 
   // IMPORTANT: first 3000 IDs are reserved. New auto IDs start from 3001+.

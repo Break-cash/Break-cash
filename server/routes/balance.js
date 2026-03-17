@@ -14,11 +14,12 @@ import {
   adjustBalance,
   createReferralReward,
 } from '../services/wallet-service.js'
-import { appendLegacyBalanceTransaction } from '../services/wallet-ledger.js'
 import {
   reconcileUserCurrency,
   reconcileAll,
   verifyEarningTransfers,
+  verifyDepositWithdrawalLinkage,
+  verifyUnexpectedZeroBalances,
 } from '../services/wallet-reconciliation.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
@@ -148,10 +149,6 @@ async function upsertRules(db, rules) {
 
 async function getBalanceAmount(db, userId, currency) {
   return getMainBalance(db, userId, currency)
-}
-
-async function appendBalanceTransaction(db, payload) {
-  return appendLegacyBalanceTransaction(db, payload)
 }
 
 async function createAdminAuditLog(db, payload) {
@@ -592,12 +589,18 @@ export function createBalanceRouter(db) {
       }
       const discrepancies = await reconcileAll(db, limit)
       const earningCheck = await verifyEarningTransfers(db, 100)
+      const linkageCheck = await verifyDepositWithdrawalLinkage(db, 200)
+      const zeroCheck = await verifyUnexpectedZeroBalances(db, 100)
       return res.json({
         discrepancies,
         earningTransferCheck: earningCheck,
+        depositWithdrawalLinkage: linkageCheck,
+        unexpectedZeroBalances: zeroCheck,
         summary: {
           totalDiscrepancies: discrepancies.length,
           earningIssues: earningCheck.issues.length,
+          linkageIssues: linkageCheck.issues.length,
+          zeroBalanceMismatches: zeroCheck.issues.length,
         },
       })
     } catch (error) {
@@ -800,7 +803,7 @@ export function createBalanceRouter(db) {
             payload,
           )
           requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
-          const { walletTxnId, legacyTxnId } = await createDeposit(tx, {
+          const { walletTxnId } = await createDeposit(tx, {
             userId: req.user.id,
             currency,
             amount,
@@ -814,11 +817,10 @@ export function createBalanceRouter(db) {
             `UPDATE deposit_requests
              SET request_status = 'approved',
                  wallet_transaction_id = ?,
-                 processed_txn_id = ?,
                  completed_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [walletTxnId || null, legacyTxnId || null, requestId],
+            [walletTxnId || null, requestId],
           )
           const unlockProfile = await getEffectiveUnlockProfile(tx, req.user.id, currency, rules)
           await createPrincipalLock(tx, {
@@ -904,7 +906,7 @@ export function createBalanceRouter(db) {
           const autoSummary = await unlockAllPrincipalLocksIfEligible(tx, req.user.id, currency, rules)
           const current = await getBalanceAmount(tx, req.user.id, currency)
           if (current < amount || autoSummary.withdrawable_balance < amount) throw new Error('INSUFFICIENT_BALANCE')
-          const { walletTxnId, legacyTxnId } = await createWithdrawal(tx, {
+          const { walletTxnId } = await createWithdrawal(tx, {
             userId: req.user.id,
             currency,
             amount,
@@ -918,12 +920,11 @@ export function createBalanceRouter(db) {
             `UPDATE withdrawal_requests
              SET request_status = 'completed',
                  wallet_transaction_id = ?,
-                 processed_txn_id = ?,
                  reviewed_at = CURRENT_TIMESTAMP,
                  completed_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [walletTxnId || null, legacyTxnId || null, requestId],
+            [walletTxnId || null, requestId],
           )
         })
         publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'withdraw_auto_completed' })
@@ -1079,7 +1080,7 @@ export function createBalanceRouter(db) {
         )
         outcomeStatus = 'rejected'
       } else {
-        const { walletTxnId, legacyTxnId } = await createDeposit(tx, {
+        const { walletTxnId } = await createDeposit(tx, {
           userId: item.user_id,
           currency: item.currency,
           amount: Number(item.amount),
@@ -1110,10 +1111,9 @@ export function createBalanceRouter(db) {
                reviewed_at = CURRENT_TIMESTAMP,
                completed_at = CURRENT_TIMESTAMP,
                wallet_transaction_id = ?,
-               processed_txn_id = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND request_status = 'pending'`,
-          [adminNote || null, req.user.id, walletTxnId || null, legacyTxnId || null, requestId],
+          [adminNote || null, req.user.id, walletTxnId || null, requestId],
         )
         if (!updateRes.changes) throw new Error('ALREADY_PROCESSED')
         const vipResult = await applyVipAndReferralAfterDeposit(tx, {
@@ -1191,7 +1191,7 @@ export function createBalanceRouter(db) {
         if (currentAmount < requestedAmount || summary.withdrawable_balance < requestedAmount) {
           throw new Error('INSUFFICIENT_BALANCE')
         }
-        const { walletTxnId, legacyTxnId } = await createWithdrawal(tx, {
+        const { walletTxnId } = await createWithdrawal(tx, {
           userId: item.user_id,
           currency: item.currency,
           amount: requestedAmount,
@@ -1209,10 +1209,9 @@ export function createBalanceRouter(db) {
                reviewed_by = ?,
                reviewed_at = CURRENT_TIMESTAMP,
                wallet_transaction_id = ?,
-               processed_txn_id = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND request_status = 'pending'`,
-          [adminNote || null, req.user.id, walletTxnId || null, legacyTxnId || null, requestId],
+          [adminNote || null, req.user.id, walletTxnId || null, requestId],
         )
         if (!updateRes.changes) throw new Error('ALREADY_PROCESSED')
         await run(

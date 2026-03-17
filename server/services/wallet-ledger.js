@@ -1,9 +1,7 @@
 /**
  * Unified wallet ledger service.
  * Every balance-changing operation should go through this service.
- * Supports idempotency, multi-source accounting, and extensible earning sources.
- * Source of truth: wallet_accounts + wallet_transactions.
- * Legacy balances/balance_transactions: transition layer only (dual-write for compatibility).
+ * Source of truth: wallet_accounts + wallet_transactions + earning_entries.
  */
 import { all, get, run } from '../db.js'
 
@@ -56,7 +54,7 @@ export async function getOrCreateWalletAccount(db, userId, currency, accountType
 
 /**
  * Get main balance for user (sum of main+system account).
- * Source of truth: wallet_accounts. Phase 2: no legacy fallback.
+ * Source of truth: wallet_accounts.
  */
 export async function getMainBalance(db, userId, currency) {
   const curr = String(currency || 'USDT').trim().toUpperCase()
@@ -67,36 +65,13 @@ export async function getMainBalance(db, userId, currency) {
      LIMIT 1`,
     [userId, curr],
   )
-  return row != null ? Number(row.balance || 0) : 0
-}
-
-/**
- * Sync wallet_accounts main balance to legacy balances table (transition layer).
- * LEGACY: One-way write only. Phase 3: remove when legacy tables retired.
- */
-export async function syncToLegacyBalances(db, userId, currency, amount) {
-  const curr = String(currency || 'USDT').trim().toUpperCase()
-  await run(
-    db,
-    `INSERT INTO balances (user_id, currency, amount, updated_at)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(user_id, currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
-    [userId, curr, Number(amount)],
-  )
-}
-
-/**
- * Append to legacy balance_transactions (transition layer). Returns txn id for processed_txn_id FK.
- * LEGACY: One-way write only. Phase 3: remove when processed_txn_id deprecated.
- */
-export async function appendLegacyBalanceTransaction(db, payload) {
-  const res = await run(
-    db,
-    `INSERT INTO balance_transactions (user_id, admin_id, type, currency, amount, note)
-     VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-    [payload.userId, payload.adminId || null, payload.type, payload.currency, payload.amount, payload.note || null],
-  )
-  return Number(res.rows?.[0]?.id ?? res.lastID ?? 0)
+  if (row == null) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`[wallet] Missing wallet_accounts row for user=${userId} currency=${curr}`)
+    }
+    return 0
+  }
+  return Number(row.balance || 0)
 }
 
 /**
@@ -176,10 +151,6 @@ export async function recordTransaction(db, payload) {
      WHERE user_id = ? AND currency = ? AND account_type = ? AND source_type = ?`,
     [balanceAfter, userId, curr, accountType, sourceType],
   )
-
-  if (accountType === 'main' && sourceType === 'system') {
-    await syncToLegacyBalances(db, userId, curr, balanceAfter)
-  }
 
   return { id: txnId, isExisting: false }
 }

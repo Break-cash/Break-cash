@@ -63,6 +63,15 @@ export async function reconcileUserCurrency(db, userId, currency = 'USDT') {
   const walletVsLegacy = Math.abs(walletBalance - legacyBalance) < 0.00000001
   const walletVsLedger = Math.abs(walletBalance - ledgerSum) < 0.00000001
 
+  const ok = walletVsLegacy && walletVsLedger
+  if (!ok) {
+    console.warn(
+      `[wallet-reconciliation] Integrity mismatch user=${userId} currency=${currency}: ` +
+        (walletVsLegacy ? '' : `legacy drift=${(walletBalance - legacyBalance).toFixed(8)} `) +
+        (walletVsLedger ? '' : `ledger sum=${ledgerSum} wallet=${walletBalance}`),
+    )
+  }
+
   return {
     userId,
     currency,
@@ -71,9 +80,9 @@ export async function reconcileUserCurrency(db, userId, currency = 'USDT') {
     ledgerSum,
     walletVsLegacyOk: walletVsLegacy,
     walletVsLedgerOk: walletVsLedger,
-    ok: walletVsLegacy && walletVsLedger,
+    ok,
     drift: walletVsLegacy ? 0 : Number((walletBalance - legacyBalance).toFixed(8)),
-    message: walletVsLegacy && walletVsLedger
+    message: ok
       ? 'OK'
       : !walletVsLegacy
         ? `Legacy drift: ${(walletBalance - legacyBalance).toFixed(8)}`
@@ -141,6 +150,67 @@ export async function verifyEarningTransfers(db, limit = 100) {
     } else if (Math.abs(Number(txn.net_amount) - Number(r.amount)) > 0.00000001) {
       issues.push({ earningEntryId: r.id, issue: 'Amount mismatch', txnAmount: txn.net_amount, entryAmount: r.amount })
     }
+  }
+  if (issues.length > 0) {
+    console.warn(`[wallet-reconciliation] Failed earning transfers: ${issues.length} issue(s)`, issues.slice(0, 5))
+  }
+  return { checked: rows.length, issues }
+}
+
+/**
+ * Verify approved/completed deposit and withdrawal requests have wallet_transaction_id.
+ */
+export async function verifyDepositWithdrawalLinkage(db, limit = 200) {
+  const deposits = await all(
+    db,
+    `SELECT id, user_id, amount, currency, request_status, wallet_transaction_id
+     FROM deposit_requests
+     WHERE request_status IN ('approved', 'completed') AND wallet_transaction_id IS NULL
+     ORDER BY id DESC LIMIT ?`,
+    [limit],
+  )
+  const withdrawals = await all(
+    db,
+    `SELECT id, user_id, amount, currency, request_status, wallet_transaction_id
+     FROM withdrawal_requests
+     WHERE request_status IN ('approved', 'completed') AND wallet_transaction_id IS NULL
+     ORDER BY id DESC LIMIT ?`,
+    [limit],
+  )
+  const issues = [
+    ...deposits.map((r) => ({ type: 'deposit', id: r.id, userId: r.user_id, amount: r.amount, status: r.request_status })),
+    ...withdrawals.map((r) => ({ type: 'withdrawal', id: r.id, userId: r.user_id, amount: r.amount, status: r.request_status })),
+  ]
+  if (issues.length > 0) {
+    console.warn(`[wallet-reconciliation] Failed deposit/withdrawal linkage: ${issues.length} request(s) missing wallet_transaction_id`, issues.slice(0, 5))
+  }
+  return { depositIssues: deposits.length, withdrawalIssues: withdrawals.length, issues }
+}
+
+/**
+ * Verify users with positive ledger sum have matching wallet_accounts balance.
+ */
+export async function verifyUnexpectedZeroBalances(db, limit = 100) {
+  const rows = await all(
+    db,
+    `SELECT user_id, currency, SUM(net_amount) AS ledger_sum
+     FROM wallet_transactions
+     WHERE COALESCE(account_type_before, 'main') = 'main' AND source_type = 'system'
+     GROUP BY user_id, currency
+     HAVING SUM(net_amount) > 0.00000001
+     LIMIT ?`,
+    [limit],
+  )
+  const issues = []
+  for (const r of rows) {
+    const wallet = await getWalletAccountBalance(db, r.user_id, r.currency)
+    const ledgerSum = Number(r.ledger_sum || 0)
+    if (Math.abs(wallet - ledgerSum) > 0.00000001) {
+      issues.push({ userId: r.user_id, currency: r.currency, ledgerSum, walletBalance: wallet })
+    }
+  }
+  if (issues.length > 0) {
+    console.warn(`[wallet-reconciliation] Unexpected zero/mismatch: ${issues.length} user(s)`, issues.slice(0, 5))
   }
   return { checked: rows.length, issues }
 }

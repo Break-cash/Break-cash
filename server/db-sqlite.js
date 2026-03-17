@@ -814,8 +814,10 @@ async function ensureSchema(db) {
   await ensureDepositCol('reviewed_by', `ALTER TABLE deposit_requests ADD COLUMN reviewed_by INTEGER`)
   await ensureDepositCol('reviewed_at', `ALTER TABLE deposit_requests ADD COLUMN reviewed_at TEXT`)
   await ensureDepositCol('completed_at', `ALTER TABLE deposit_requests ADD COLUMN completed_at TEXT`)
-  await ensureDepositCol('processed_txn_id', `ALTER TABLE deposit_requests ADD COLUMN processed_txn_id INTEGER`)
   await ensureDepositCol('wallet_transaction_id', `ALTER TABLE deposit_requests ADD COLUMN wallet_transaction_id INTEGER REFERENCES wallet_transactions(id)`)
+  try {
+    await runAsync(db, `ALTER TABLE deposit_requests DROP COLUMN processed_txn_id`)
+  } catch (_) {}
   await ensureDepositCol('idempotency_key', `ALTER TABLE deposit_requests ADD COLUMN idempotency_key TEXT`)
   await ensureDepositCol('updated_at', `ALTER TABLE deposit_requests ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`)
   const withdrawalCols = await allAsync(db, `PRAGMA table_info(withdrawal_requests)`)
@@ -829,8 +831,10 @@ async function ensureSchema(db) {
   await ensureWithdrawalCol('reviewed_by', `ALTER TABLE withdrawal_requests ADD COLUMN reviewed_by INTEGER`)
   await ensureWithdrawalCol('reviewed_at', `ALTER TABLE withdrawal_requests ADD COLUMN reviewed_at TEXT`)
   await ensureWithdrawalCol('completed_at', `ALTER TABLE withdrawal_requests ADD COLUMN completed_at TEXT`)
-  await ensureWithdrawalCol('processed_txn_id', `ALTER TABLE withdrawal_requests ADD COLUMN processed_txn_id INTEGER`)
   await ensureWithdrawalCol('wallet_transaction_id', `ALTER TABLE withdrawal_requests ADD COLUMN wallet_transaction_id INTEGER REFERENCES wallet_transactions(id)`)
+  try {
+    await runAsync(db, `ALTER TABLE withdrawal_requests DROP COLUMN processed_txn_id`)
+  } catch (_) {}
   await ensureWithdrawalCol('idempotency_key', `ALTER TABLE withdrawal_requests ADD COLUMN idempotency_key TEXT`)
   await ensureWithdrawalCol('updated_at', `ALTER TABLE withdrawal_requests ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`)
   const miningCols = await allAsync(db, `PRAGMA table_info(mining_profiles)`)
@@ -918,12 +922,6 @@ async function ensureSchema(db) {
       ['deposits', 'Deposits', 'Deposit-based bonuses', 4],
     ]) {
       await runAsync(db, `INSERT OR IGNORE INTO earning_sources (code, name, description, is_active, sort_order) VALUES (?, ?, ?, 1, ?)`, [code, name, desc, sortOrder])
-    }
-  } catch (_) {}
-  try {
-    const rows = await allAsync(db, `SELECT user_id, currency, amount FROM balances`)
-    for (const r of rows || []) {
-      await runAsync(db, `INSERT OR IGNORE INTO wallet_accounts (user_id, currency, account_type, source_type, balance_amount) VALUES (?, ?, 'main', 'system', ?)`, [r.user_id, r.currency, r.amount])
     }
   } catch (_) {}
   // IMPORTANT: first 3000 IDs are reserved. New auto IDs start from 3001+.
