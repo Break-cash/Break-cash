@@ -18,7 +18,6 @@ import {
   getEarningHistory,
   subscribeToLiveUpdates,
   type WalletOverview,
-  type EarningEntry,
   type EarningGroup,
 } from '../api'
 import { useI18n } from '../i18nCore'
@@ -71,7 +70,6 @@ export function WalletPage() {
   const [tab, setTab] = useState<TabId>('overview')
   const [overview, setOverview] = useState<WalletOverview | null>(null)
   const [transactions, setTransactions] = useState<WalletTxn[]>([])
-  const [earningEntries, setEarningEntries] = useState<EarningEntry[]>([])
   const [earningGrouped, setEarningGrouped] = useState<EarningGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -102,18 +100,6 @@ export function WalletPage() {
       .catch(() => setTransactions([]))
   }
 
-  function loadEarnings() {
-    getEarningHistory({ limit: 100, grouped: true })
-      .then((res) => {
-        setEarningEntries(res.entries || [])
-        setEarningGrouped(res.grouped || [])
-      })
-      .catch(() => {
-        setEarningEntries([])
-        setEarningGrouped([])
-      })
-  }
-
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -124,7 +110,6 @@ export function WalletPage() {
       .then(([ov, hist, earn]) => {
         setOverview(ov)
         setTransactions((hist.transactions || []) as WalletTxn[])
-        setEarningEntries(earn.entries || [])
         setEarningGrouped(earn.grouped || [])
       })
       .catch(() => {})
