@@ -1963,6 +1963,7 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                 {t('owner_control_panel_hint')}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
+                <Link to="/wallet" className="rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-3 py-1.5 text-sm font-medium text-brand-blue">{t('owner_nav_my_wallet')}</Link>
                 <Link to="/admin/users" className="rounded-xl border border-app-border bg-app-elevated px-3 py-1.5 text-sm text-white/90">{t('owner_quick_users')}</Link>
                 <Link to="/admin/balances" className="rounded-xl border border-app-border bg-app-elevated px-3 py-1.5 text-sm text-white/90">{t('owner_quick_wallets')}</Link>
                 <Link to="/admin/invites" className="rounded-xl border border-app-border bg-app-elevated px-3 py-1.5 text-sm text-white/90">{t('owner_quick_referrals')}</Link>

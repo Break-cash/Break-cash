@@ -42,6 +42,13 @@ export function OwnerUnifiedControlPage({ user }: OwnerUnifiedControlPageProps) 
   const executableFeatures = useMemo<FeatureItem[]>(
     () => [
       {
+        id: 'my-wallet',
+        titleKey: 'owner_nav_my_wallet',
+        descKey: 'owner_unified_feature_my_wallet_desc',
+        status: 'ready',
+        route: '/wallet',
+      },
+      {
         id: 'users',
         titleKey: 'owner_unified_feature_users_title',
         descKey: 'owner_unified_feature_users_desc',
