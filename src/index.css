@@ -643,7 +643,7 @@ button {
 }
 
 .table-row:nth-child(2n) {
-  background: rgba(22, 28, 45, 0.6);
+  background: rgba(55, 60, 71, 0.28);
 }
 
 .pair {
@@ -2762,7 +2762,7 @@ button:focus-visible,
   border: 1px solid #00e676;
   color: #00e676;
   box-shadow: none;
-  transition: transform 0.12s ease, filter 0.12s ease;
+  transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
 }
 
 .wallet-receive-btn:hover {
@@ -3206,7 +3206,8 @@ button:focus-visible,
   .wallet-brand-wrap,
   .wallet-balance-card,
   .wallet-quick-actions,
-  .wallet-promo-card {
+  .wallet-promo-card,
+  .wallet-assets-panel {
     grid-column: 1 / 3;
   }
 
