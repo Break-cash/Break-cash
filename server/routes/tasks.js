@@ -1,12 +1,7 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
-import {
-  getMainBalance,
-  createEarningEntry,
-  transferEarningToMain,
-  appendLegacyBalanceTransaction,
-} from '../services/wallet-ledger.js'
+import { getMainBalance, createTaskReward } from '../services/wallet-service.js'
 
 const TASK_PERMISSION = 'انشاء مهام'
 
@@ -173,24 +168,11 @@ export function createTasksRouter(db) {
         const redemptionId = Number(redemptionRow?.id ?? 0)
         if (!redemptionId) throw new Error('REDEMPTION_FAILED')
 
-        const earningResult = await createEarningEntry(tx, {
+        await createTaskReward(tx, {
           userId: req.user.id,
-          sourceType: 'tasks',
-          referenceType: 'task_redemption',
-          referenceId: redemptionId,
-          currency: 'USDT',
           amount: rewardAmount,
-        })
-        const entryId = earningResult?.id ?? (await get(tx, `SELECT id FROM earning_entries WHERE source_type = 'tasks' AND reference_type = 'task_redemption' AND reference_id = ? LIMIT 1`, [redemptionId]))?.id
-        if (entryId) {
-          await transferEarningToMain(tx, entryId, `task_redemption_${redemptionId}`)
-        }
-        await appendLegacyBalanceTransaction(tx, {
-          userId: req.user.id,
-          adminId: null,
-          type: 'task_code_bonus',
+          redemptionId,
           currency: 'USDT',
-          amount: rewardAmount,
           note: `Redeemed task code ${code}`,
         })
         await run(

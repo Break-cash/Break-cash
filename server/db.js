@@ -793,6 +793,11 @@ async function ensureSchema(db) {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference ON wallet_transactions(reference_type, reference_id)`)
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_transactions_idempotency ON wallet_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL`)
 
+  await db.query(`ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS wallet_transaction_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS wallet_transaction_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_wallet_txn ON deposit_requests(wallet_transaction_id) WHERE wallet_transaction_id IS NOT NULL`).catch(() => {})
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_wallet_txn ON withdrawal_requests(wallet_transaction_id) WHERE wallet_transaction_id IS NOT NULL`).catch(() => {})
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS earning_entries (
       id SERIAL PRIMARY KEY,

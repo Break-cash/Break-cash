@@ -56,7 +56,7 @@ export async function getOrCreateWalletAccount(db, userId, currency, accountType
 
 /**
  * Get main balance for user (sum of main+system account).
- * Source of truth: wallet_accounts. Falls back to legacy balances if no wallet row.
+ * Source of truth: wallet_accounts. Phase 2: no legacy fallback.
  */
 export async function getMainBalance(db, userId, currency) {
   const curr = String(currency || 'USDT').trim().toUpperCase()
@@ -67,13 +67,12 @@ export async function getMainBalance(db, userId, currency) {
      LIMIT 1`,
     [userId, curr],
   )
-  if (row != null) return Number(row.balance || 0)
-  const legacy = await get(db, `SELECT amount FROM balances WHERE user_id = ? AND currency = ? LIMIT 1`, [userId, curr])
-  return Number(legacy?.amount || 0)
+  return row != null ? Number(row.balance || 0) : 0
 }
 
 /**
  * Sync wallet_accounts main balance to legacy balances table (transition layer).
+ * LEGACY: One-way write only. Phase 3: remove when legacy tables retired.
  */
 export async function syncToLegacyBalances(db, userId, currency, amount) {
   const curr = String(currency || 'USDT').trim().toUpperCase()
@@ -88,6 +87,7 @@ export async function syncToLegacyBalances(db, userId, currency, amount) {
 
 /**
  * Append to legacy balance_transactions (transition layer). Returns txn id for processed_txn_id FK.
+ * LEGACY: One-way write only. Phase 3: remove when processed_txn_id deprecated.
  */
 export async function appendLegacyBalanceTransaction(db, payload) {
   const res = await run(

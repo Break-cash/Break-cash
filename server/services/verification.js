@@ -62,13 +62,13 @@ export async function refreshVerificationStatus(db, userId) {
 
 /**
  * Mark a referral as verified (active) if they have completed verification
- * and made at least one real deposit (type = 'deposit')
+ * and made at least one real deposit.
  */
 export async function markReferralAsVerifiedIfDeposited(db, userId) {
   const hasDeposit = await get(
     db,
-    `SELECT 1 FROM balance_transactions
-     WHERE user_id = ? AND type = 'deposit'
+    `SELECT 1 FROM wallet_transactions
+     WHERE user_id = ? AND transaction_type = 'deposit'
      LIMIT 1`,
     [userId],
   )

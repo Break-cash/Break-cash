@@ -623,6 +623,50 @@ export async function getBalanceHistory(userId?: number) {
   }>
 }
 
+/** Wallet transaction history (source of truth: wallet_transactions) */
+export async function getWalletHistory(currency?: string, limit = 100) {
+  const params = new URLSearchParams()
+  if (currency) params.set('currency', currency)
+  params.set('limit', String(limit))
+  return apiFetch(`/api/balance/wallet-history?${params}`) as Promise<{
+    transactions: {
+      id: number
+      currency: string
+      transaction_type: string
+      source_type: string
+      reference_type: string | null
+      reference_id: number | null
+      amount: number
+      fee_amount: number
+      net_amount: number
+      balance_before: number
+      balance_after: number
+      created_at: string
+    }[]
+  }>
+}
+
+/** Earning entries history (source of truth: earning_entries) */
+export async function getEarningHistory(sourceType?: string, limit = 100) {
+  const params = new URLSearchParams()
+  if (sourceType) params.set('sourceType', sourceType)
+  params.set('limit', String(limit))
+  return apiFetch(`/api/balance/earning-history?${params}`) as Promise<{
+    entries: {
+      id: number
+      source_type: string
+      reference_type: string
+      reference_id: number
+      currency: string
+      amount: number
+      status: string
+      transferred_at: string | null
+      transferred_wallet_txn_id: number | null
+      created_at: string
+    }[]
+  }>
+}
+
 export async function adjustBalance(payload: {
   userId: number
   currency: string

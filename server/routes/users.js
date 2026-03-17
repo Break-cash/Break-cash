@@ -3,11 +3,7 @@ import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { hashPassword } from '../auth.js'
 import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
-import {
-  getMainBalance,
-  recordTransaction,
-  appendLegacyBalanceTransaction,
-} from '../services/wallet-ledger.js'
+import { getMainBalance, adjustBalance } from '../services/wallet-service.js'
 
 async function withTransaction(db, fn) {
   await run(db, 'BEGIN')
@@ -83,14 +79,14 @@ export function createUsersRouter(db) {
       clauses.push(
         hasDeposit
           ? `EXISTS (
-              SELECT 1 FROM balance_transactions bt_dep
-              WHERE bt_dep.user_id = u.id
-                AND bt_dep.type IN ('add', 'deposit', 'bonus_add')
+              SELECT 1 FROM wallet_transactions wt_dep
+              WHERE wt_dep.user_id = u.id
+                AND wt_dep.transaction_type = 'deposit'
             )`
           : `NOT EXISTS (
-              SELECT 1 FROM balance_transactions bt_dep
-              WHERE bt_dep.user_id = u.id
-                AND bt_dep.type IN ('add', 'deposit', 'bonus_add')
+              SELECT 1 FROM wallet_transactions wt_dep
+              WHERE wt_dep.user_id = u.id
+                AND wt_dep.transaction_type = 'deposit'
             )`,
       )
     }
@@ -98,14 +94,12 @@ export function createUsersRouter(db) {
       clauses.push(
         hasPendingWithdrawal
           ? `EXISTS (
-              SELECT 1 FROM balance_transactions bt_wd
-              WHERE bt_wd.user_id = u.id
-                AND bt_wd.type = 'withdraw_pending'
+              SELECT 1 FROM withdrawal_requests wr
+              WHERE wr.user_id = u.id AND wr.request_status = 'pending'
             )`
           : `NOT EXISTS (
-              SELECT 1 FROM balance_transactions bt_wd
-              WHERE bt_wd.user_id = u.id
-                AND bt_wd.type = 'withdraw_pending'
+              SELECT 1 FROM withdrawal_requests wr
+              WHERE wr.user_id = u.id AND wr.request_status = 'pending'
             )`,
       )
     }
@@ -145,18 +139,21 @@ export function createUsersRouter(db) {
       COALESCE(pw.pending_withdrawals, 0) AS pending_withdrawals
     FROM users u
     LEFT JOIN (
-      SELECT user_id, SUM(amount) AS total_balance FROM balances GROUP BY user_id
+      SELECT user_id, SUM(balance_amount) AS total_balance
+      FROM wallet_accounts
+      WHERE account_type = 'main' AND source_type = 'system'
+      GROUP BY user_id
     ) bal ON bal.user_id = u.id
     LEFT JOIN (
       SELECT user_id, SUM(amount) AS total_deposits
-      FROM balance_transactions
-      WHERE type IN ('add', 'deposit', 'bonus_add')
+      FROM wallet_transactions
+      WHERE transaction_type = 'deposit'
       GROUP BY user_id
     ) dep ON dep.user_id = u.id
     LEFT JOIN (
-      SELECT user_id, SUM(amount) AS total_withdrawals
-      FROM balance_transactions
-      WHERE type IN ('deduct', 'withdraw', 'bonus_deduct')
+      SELECT user_id, SUM(ABS(amount)) AS total_withdrawals
+      FROM wallet_transactions
+      WHERE transaction_type = 'withdrawal'
       GROUP BY user_id
     ) wd ON wd.user_id = u.id
     LEFT JOIN (
@@ -198,14 +195,18 @@ export function createUsersRouter(db) {
         COALESCE(rf.referrals_count, 0) AS referrals_count,
         COALESCE(rf.referrals_earnings, 0) AS referrals_earnings
       FROM users u
-      LEFT JOIN (SELECT user_id, SUM(amount) AS total_balance FROM balances GROUP BY user_id) bal ON bal.user_id = u.id
       LEFT JOIN (
-        SELECT user_id, SUM(amount) AS total_deposits FROM balance_transactions
-        WHERE type IN ('add', 'deposit', 'bonus_add') GROUP BY user_id
+        SELECT user_id, SUM(balance_amount) AS total_balance
+        FROM wallet_accounts WHERE account_type = 'main' AND source_type = 'system'
+        GROUP BY user_id
+      ) bal ON bal.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, SUM(amount) AS total_deposits FROM wallet_transactions
+        WHERE transaction_type = 'deposit' GROUP BY user_id
       ) dep ON dep.user_id = u.id
       LEFT JOIN (
-        SELECT user_id, SUM(amount) AS total_withdrawals FROM balance_transactions
-        WHERE type IN ('deduct', 'withdraw', 'bonus_deduct') GROUP BY user_id
+        SELECT user_id, SUM(ABS(amount)) AS total_withdrawals FROM wallet_transactions
+        WHERE transaction_type = 'withdrawal' GROUP BY user_id
       ) wd ON wd.user_id = u.id
       LEFT JOIN (
         SELECT referrer_user_id, COUNT(*) AS referrals_count, COALESCE(SUM(reward_amount), 0) AS referrals_earnings
@@ -333,23 +334,13 @@ export function createUsersRouter(db) {
     const delta = type === 'add' ? amount : -amount
     try {
       await withTransaction(db, async () => {
-        await recordTransaction(db, {
+        await adjustBalance(db, {
           userId,
           currency,
-          transactionType: 'adjust',
-          sourceType: 'system',
+          delta,
           referenceType: 'admin_bonus',
           referenceId: req.user.id,
-          amount: delta,
-          idempotencyKey: `bonus_${userId}_${currency}_${Date.now()}`,
           createdBy: req.user.id,
-        })
-        await appendLegacyBalanceTransaction(db, {
-          userId,
-          adminId: req.user.id,
-          type: type === 'add' ? 'bonus_add' : 'bonus_deduct',
-          currency,
-          amount,
           note: 'owner bonus action',
         })
       })

@@ -34,8 +34,9 @@ export function createFriendsRouter(db) {
               COALESCE(bal.total_balance, 0) AS trading_balance
        FROM users u
        LEFT JOIN (
-         SELECT user_id, SUM(amount) AS total_balance
-         FROM balances
+         SELECT user_id, SUM(balance_amount) AS total_balance
+         FROM wallet_accounts
+         WHERE account_type = 'main' AND source_type = 'system'
          GROUP BY user_id
        ) bal ON bal.user_id = u.id
        WHERE CAST(u.id AS TEXT) LIKE ? AND u.id != ? AND u.is_banned = 0

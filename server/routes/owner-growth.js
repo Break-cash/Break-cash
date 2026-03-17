@@ -264,8 +264,8 @@ export function createOwnerGrowthRouter(db) {
          LEFT JOIN users u ON u.id = r.referred_user_id
          LEFT JOIN (
            SELECT user_id, SUM(amount) AS total_deposits
-           FROM balance_transactions
-           WHERE type IN ('add', 'deposit', 'bonus_add')
+           FROM wallet_transactions
+           WHERE transaction_type = 'deposit'
            GROUP BY user_id
          ) dep ON dep.user_id = r.referred_user_id
          WHERE r.referrer_user_id = ?
@@ -325,8 +325,8 @@ export function createOwnerGrowthRouter(db) {
          FROM users u
          LEFT JOIN (
            SELECT user_id, SUM(amount) AS total_deposits
-           FROM balance_transactions
-           WHERE type IN ('add', 'deposit', 'bonus_add')
+           FROM wallet_transactions
+           WHERE transaction_type = 'deposit'
            GROUP BY user_id
          ) dep ON dep.user_id = u.id
          WHERE u.is_banned = 0 AND u.is_frozen = 0`,

@@ -8,21 +8,19 @@ The new multi-source wallet architecture uses `wallet_accounts`, `wallet_transac
 
 All balance-changing operations below now write to `wallet_transactions` first and dual-write to legacy tables.
 
-| Flow | Route/Service | Idempotency Key | Ledger Entry |
-|------|---------------|-----------------|--------------|
-| **Deposit (auto-approve)** | `POST /api/balance/deposit-requests` | `deposit_auto_{requestId}` | `recordTransaction` (deposit) |
-| **Deposit (admin review)** | `POST /api/balance/admin/deposit-requests/:id/review` | `deposit_review_{requestId}` | `recordTransaction` (deposit) |
-| **Withdrawal (auto-approve)** | `POST /api/balance/withdrawal-requests` | `withdrawal_auto_{requestId}` | `recordTransaction` (withdrawal, negative) |
-| **Withdrawal (admin review)** | `POST /api/balance/admin/withdrawal-requests/:id/review` | `withdrawal_review_{requestId}` | `recordTransaction` (withdrawal, negative) |
-| **Referral reward** | `applyVipAndReferralAfterDeposit` | `referral_reward_{referralRewardId}` | `createEarningEntry` + `transferEarningToMain` |
-| **Mining subscribe** | `POST /api/mining/subscribe` | `mining_subscribe_{userId}_{timestamp}` | `recordTransaction` (lock, negative) |
-| **Mining daily claim** | `POST /api/mining/claim-daily` | `mining_daily_{userId}_{refId}` | `createEarningEntry` + `transferEarningToMain` |
-| **Mining emergency withdraw** | `POST /api/mining/emergency-withdraw` | `mining_emergency_{userId}` | `recordTransaction` (transfer, principal - fee) |
-| **Mining principal release** | `POST /api/mining/release-principal` | `mining_release_{userId}` | `recordTransaction` (unlock) |
-| **Task code redeem** | `POST /api/tasks/codes/redeem` | `task_redemption_{redemptionId}` | `createEarningEntry` + `transferEarningToMain` |
-| **Admin balance adjust** | `POST /api/balance/adjust` | `adjust_{userId}_{currency}_{ts}` | `recordTransaction` (adjust) |
-| **Owner balance set** | `POST /api/balance/set` | `owner_set_{userId}_{currency}_{ts}` | `recordTransaction` (adjust) |
-| **Admin bonus** | `POST /api/users/bonus` | `bonus_{userId}_{currency}_{ts}` | `recordTransaction` (adjust) |
+| Flow | Service Function | Idempotency Key |
+|------|------------------|-----------------|
+| **Deposit (auto + admin)** | `createDeposit()` | `deposit_auto_{id}` / `deposit_review_{id}` |
+| **Withdrawal (auto + admin)** | `createWithdrawal()` | `withdrawal_auto_{id}` / `withdrawal_review_{id}` |
+| **Referral reward** | `createReferralReward()` | `referral_reward_{id}` |
+| **Mining subscribe** | `createMiningSubscription()` | `mining_subscribe_{userId}_{ts}` |
+| **Mining daily claim** | `recordMiningDailyProfit()` | `(source_type, reference_type, reference_id)` |
+| **Mining emergency** | `executeMiningEmergencyWithdrawal()` | `mining_emergency_{userId}` |
+| **Mining maturity** | `settleMiningAtMaturity()` | `mining_release_{userId}` |
+| **Task redeem** | `createTaskReward()` | `task_redemption_{id}` |
+| **Admin adjust / Owner set / Bonus** | `adjustBalance()` | `adjust_*` / `owner_set_*` / `bonus_*` |
+
+All flows go through `server/services/wallet-service.js` → `wallet-ledger.js`.
 
 ## Earning Flow (Earning-First Rule)
 
@@ -49,17 +47,17 @@ When `recordTransaction` updates `main` + `system` account:
 
 | Flow | Location | Notes |
 |------|----------|-------|
-| **Read-only balance display** | `GET /api/balance/my`, `GET /api/balance/getUser` | Reads from `balances` (synced by dual-write). Can migrate to `wallet_accounts` later. |
-| **Legacy history** | `GET /api/balance/history` | Reads from `balance_transactions`. Use `wallet-history` for new audit trail. |
-| **Reporting/analytics** | `owner-growth.js`, `stats.js`, `users.js` | Read from `balance_transactions` / `balances` for aggregates. Data is consistent via dual-write. |
-| **Mining monthly aggregate** | `mining.js` `/my` | Reads `balance_transactions` for `mining_daily_claim` in current month. Dual-write keeps it correct. |
+| **Read-only balance** | `GET /api/balance/my`, `GET /api/balance/getUser` | Prefer `wallet_accounts` when present; fallback to `balances`. |
+| **Legacy history** | `GET /api/balance/history` | Reads from `balance_transactions`. Use `wallet-history` for audit. |
+| **Reporting/analytics** | `owner-growth.js`, `stats.js`, `users.js` | Read from `balance_transactions` / `balances`. Data consistent via dual-write. |
+| **Mining monthly aggregate** | `mining.js` `/my` | Reads `balance_transactions` for `mining_daily_claim`. Dual-write keeps it correct. |
 
-**No balance-changing flows bypass the ledger.** All writes go through `wallet_transactions`.
+**No balance-changing flows bypass the ledger.** All writes go through `wallet-service.js` → `wallet_transactions`.
 
 ## Migration Path to Phase Out Legacy
 
-1. **Phase 1 (current)**: Dual-write to `balances` and `balance_transactions`. `wallet_transactions` is source of truth.
-2. **Phase 2**: Migrate read endpoints (`/my`, `/getUser`) to read from `wallet_accounts` when present, fallback to `balances`.
+1. **Phase 1** ✅: Dual-write to `balances` and `balance_transactions`. `wallet_transactions` is source of truth.
+2. **Phase 2** ✅: `/my` and `/getUser` read from `wallet_accounts` when present, fallback to `balances`.
 3. **Phase 3**: Backfill `wallet_accounts` for users who have `balances` but no `wallet_accounts` row (run once).
 4. **Phase 4**: Remove `processed_txn_id` FK dependency by storing `wallet_transaction_id` on requests.
 5. **Phase 5**: Stop dual-write to `balance_transactions`; keep `balances` sync only for legacy clients.

@@ -7,13 +7,19 @@ import { requireAuth, requirePermission, requireRole } from '../middleware/auth.
 import { publishLiveUpdate } from '../services/live-updates.js'
 import {
   getMainBalance,
-  recordTransaction,
-  createEarningEntry,
-  transferEarningToMain,
-  appendLegacyBalanceTransaction,
   getWalletHistory,
   getEarningHistory,
-} from '../services/wallet-ledger.js'
+  createDeposit,
+  createWithdrawal,
+  adjustBalance,
+  createReferralReward,
+} from '../services/wallet-service.js'
+import { appendLegacyBalanceTransaction } from '../services/wallet-ledger.js'
+import {
+  reconcileUserCurrency,
+  reconcileAll,
+  verifyEarningTransfers,
+} from '../services/wallet-reconciliation.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const DEFAULT_BALANCE_RULES = {
@@ -374,23 +380,11 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
     return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
 
-  const earningResult = await createEarningEntry(db, {
+  await createReferralReward(db, {
     userId: referrerUserId,
-    sourceType: 'referrals',
-    referenceType: 'referral_reward',
-    referenceId: referralRewardId,
-    currency: payload.currency,
     amount: rewardAmount,
-  })
-  if (earningResult?.id) {
-    await transferEarningToMain(db, earningResult.id, `referral_reward_${referralRewardId}`)
-  }
-  await appendLegacyBalanceTransaction(db, {
-    userId: referrerUserId,
-    adminId: payload.adminId || null,
-    type: 'referral_reward',
+    referralRewardId,
     currency: payload.currency,
-    amount: rewardAmount,
     note: `Referral reward from user #${payload.userId} first deposit #${payload.depositRequestId || 0}`,
   })
   await run(
@@ -519,18 +513,24 @@ export function createBalanceRouter(db) {
   router.use(requireAuth(db))
 
   router.get('/my', async (req, res) => {
-    const rows = await all(db, `SELECT currency, amount, updated_at FROM balances WHERE user_id = ?`, [
-      req.user.id,
-    ])
-    return res.json({ balances: rows })
+    const walletRows = await all(
+      db,
+      `SELECT currency, balance_amount AS amount, updated_at FROM wallet_accounts
+       WHERE user_id = ? AND account_type = 'main' AND source_type = 'system'`,
+      [req.user.id],
+    )
+    return res.json({ balances: walletRows, source: 'wallet_accounts' })
   })
 
   router.get('/getUser', requirePermission(db, 'manage_balances'), async (req, res) => {
     const userId = Number(req.query.userId)
-    const rows = await all(db, `SELECT currency, amount, updated_at FROM balances WHERE user_id = ?`, [
-      userId,
-    ])
-    return res.json({ userId, balances: rows })
+    const walletRows = await all(
+      db,
+      `SELECT currency, balance_amount AS amount, updated_at FROM wallet_accounts
+       WHERE user_id = ? AND account_type = 'main' AND source_type = 'system'`,
+      [userId],
+    )
+    return res.json({ userId, balances: walletRows, source: 'wallet_accounts' })
   })
 
   router.get('/history', requirePermission(db, 'manage_balances'), async (req, res) => {
@@ -538,16 +538,33 @@ export function createBalanceRouter(db) {
     const rows = userId
       ? await all(
           db,
-          `SELECT id, user_id, admin_id, type, currency, amount, note, created_at
-           FROM balance_transactions WHERE user_id = ? ORDER BY id DESC LIMIT 300`,
+          `SELECT id, user_id, created_by AS admin_id,
+                  transaction_type AS type, currency, amount,
+                  metadata AS note, created_at
+           FROM wallet_transactions
+           WHERE user_id = ?
+           ORDER BY id DESC LIMIT 300`,
           [userId],
         )
       : await all(
           db,
-          `SELECT id, user_id, admin_id, type, currency, amount, note, created_at
-           FROM balance_transactions ORDER BY id DESC LIMIT 200`,
+          `SELECT id, user_id, created_by AS admin_id,
+                  transaction_type AS type, currency, amount,
+                  metadata AS note, created_at
+           FROM wallet_transactions
+           ORDER BY id DESC LIMIT 200`,
         )
-    return res.json({ history: rows })
+    const history = rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      admin_id: r.admin_id,
+      type: r.type === 'withdrawal' ? 'withdraw' : r.type,
+      currency: r.currency,
+      amount: r.amount,
+      note: typeof r.note === 'string' ? r.note : null,
+      created_at: r.created_at,
+    }))
+    return res.json({ history, source: 'wallet_transactions' })
   })
 
   router.get('/wallet-history', async (req, res) => {
@@ -564,6 +581,30 @@ export function createBalanceRouter(db) {
     return res.json({ entries: rows })
   })
 
+  router.get('/admin/reconcile', requireRole('owner'), async (req, res) => {
+    const userId = Number(req.query.userId || 0)
+    const currency = req.query.currency ? String(req.query.currency).trim().toUpperCase() : 'USDT'
+    const limit = Math.min(Number(req.query.limit) || 500, 1000)
+    try {
+      if (userId > 0) {
+        const result = await reconcileUserCurrency(db, userId, currency)
+        return res.json({ reconciliation: result })
+      }
+      const discrepancies = await reconcileAll(db, limit)
+      const earningCheck = await verifyEarningTransfers(db, 100)
+      return res.json({
+        discrepancies,
+        earningTransferCheck: earningCheck,
+        summary: {
+          totalDiscrepancies: discrepancies.length,
+          earningIssues: earningCheck.issues.length,
+        },
+      })
+    } catch (error) {
+      return res.status(500).json({ error: 'RECONCILIATION_FAILED', message: String(error?.message || '') })
+    }
+  })
+
   router.post('/adjust', requirePermission(db, 'manage_balances'), async (req, res) => {
     const userId = Number(req.body?.userId)
     const currency = String(req.body?.currency || 'USDT').toUpperCase()
@@ -574,26 +615,15 @@ export function createBalanceRouter(db) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
     const delta = type === 'deduct' ? -Math.abs(amount) : Math.abs(amount)
-    const idempotencyKey = `adjust_${userId}_${currency}_${Date.now()}`
     try {
       await withTransaction(db, async (tx) => {
-        await recordTransaction(tx, {
+        await adjustBalance(tx, {
           userId,
           currency,
-          transactionType: 'adjust',
-          sourceType: 'system',
+          delta,
           referenceType: 'admin_adjust',
           referenceId: req.user.id,
-          amount: delta,
-          idempotencyKey,
           createdBy: req.user.id,
-        })
-        await appendLegacyBalanceTransaction(tx, {
-          userId,
-          adminId: req.user.id,
-          type,
-          currency,
-          amount: Math.abs(amount),
           note: note || 'Admin balance adjustment',
         })
         await run(
@@ -770,33 +800,25 @@ export function createBalanceRouter(db) {
             payload,
           )
           requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
-          await recordTransaction(tx, {
+          const { walletTxnId, legacyTxnId } = await createDeposit(tx, {
             userId: req.user.id,
             currency,
-            transactionType: 'deposit',
-            sourceType: 'system',
+            amount,
             referenceType: 'deposit_request',
             referenceId: requestId,
-            amount,
             idempotencyKey: `deposit_auto_${requestId}`,
-          })
-          const legacyTxnId = await appendLegacyBalanceTransaction(tx, {
-            userId: req.user.id,
-            adminId: null,
-            type: 'deposit',
-            currency,
-            amount,
             note: `Auto-approved deposit request #${requestId}`,
           })
           await run(
             tx,
             `UPDATE deposit_requests
              SET request_status = 'approved',
+                 wallet_transaction_id = ?,
                  processed_txn_id = ?,
                  completed_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [legacyTxnId || null, requestId],
+            [walletTxnId || null, legacyTxnId || null, requestId],
           )
           const unlockProfile = await getEffectiveUnlockProfile(tx, req.user.id, currency, rules)
           await createPrincipalLock(tx, {
@@ -882,34 +904,26 @@ export function createBalanceRouter(db) {
           const autoSummary = await unlockAllPrincipalLocksIfEligible(tx, req.user.id, currency, rules)
           const current = await getBalanceAmount(tx, req.user.id, currency)
           if (current < amount || autoSummary.withdrawable_balance < amount) throw new Error('INSUFFICIENT_BALANCE')
-          await recordTransaction(tx, {
+          const { walletTxnId, legacyTxnId } = await createWithdrawal(tx, {
             userId: req.user.id,
-            currency,
-            transactionType: 'withdrawal',
-            sourceType: 'system',
-            referenceType: 'withdrawal_request',
-            referenceId: requestId,
-            amount: -amount,
-            idempotencyKey: `withdrawal_auto_${requestId}`,
-          })
-          const legacyTxId = await appendLegacyBalanceTransaction(tx, {
-            userId: req.user.id,
-            adminId: null,
-            type: 'withdraw',
             currency,
             amount,
+            referenceType: 'withdrawal_request',
+            referenceId: requestId,
+            idempotencyKey: `withdrawal_auto_${requestId}`,
             note: `Auto-approved withdrawal request #${requestId}`,
           })
           await run(
             tx,
             `UPDATE withdrawal_requests
              SET request_status = 'completed',
+                 wallet_transaction_id = ?,
                  processed_txn_id = ?,
                  reviewed_at = CURRENT_TIMESTAMP,
                  completed_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [legacyTxId || null, requestId],
+            [walletTxnId || null, legacyTxnId || null, requestId],
           )
         })
         publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'withdraw_auto_completed' })
@@ -1065,23 +1079,14 @@ export function createBalanceRouter(db) {
         )
         outcomeStatus = 'rejected'
       } else {
-        await recordTransaction(tx, {
+        const { walletTxnId, legacyTxnId } = await createDeposit(tx, {
           userId: item.user_id,
           currency: item.currency,
-          transactionType: 'deposit',
-          sourceType: 'system',
+          amount: Number(item.amount),
           referenceType: 'deposit_request',
           referenceId: requestId,
-          amount: Number(item.amount),
           idempotencyKey: `deposit_review_${requestId}`,
           createdBy: req.user.id,
-        })
-        const txId = await appendLegacyBalanceTransaction(tx, {
-          userId: item.user_id,
-          adminId: req.user.id,
-          type: 'deposit',
-          currency: item.currency,
-          amount: Number(item.amount),
           note: adminNote || `Approved deposit request #${requestId}`,
         })
         const rules = await getRules(tx)
@@ -1104,10 +1109,11 @@ export function createBalanceRouter(db) {
                reviewed_by = ?,
                reviewed_at = CURRENT_TIMESTAMP,
                completed_at = CURRENT_TIMESTAMP,
+               wallet_transaction_id = ?,
                processed_txn_id = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND request_status = 'pending'`,
-          [adminNote || null, req.user.id, txId || null, requestId],
+          [adminNote || null, req.user.id, walletTxnId || null, legacyTxnId || null, requestId],
         )
         if (!updateRes.changes) throw new Error('ALREADY_PROCESSED')
         const vipResult = await applyVipAndReferralAfterDeposit(tx, {
@@ -1185,23 +1191,14 @@ export function createBalanceRouter(db) {
         if (currentAmount < requestedAmount || summary.withdrawable_balance < requestedAmount) {
           throw new Error('INSUFFICIENT_BALANCE')
         }
-        await recordTransaction(tx, {
+        const { walletTxnId, legacyTxnId } = await createWithdrawal(tx, {
           userId: item.user_id,
-          currency: item.currency,
-          transactionType: 'withdrawal',
-          sourceType: 'system',
-          referenceType: 'withdrawal_request',
-          referenceId: requestId,
-          amount: -requestedAmount,
-          idempotencyKey: `withdrawal_review_${requestId}`,
-          createdBy: req.user.id,
-        })
-        const txId = await appendLegacyBalanceTransaction(tx, {
-          userId: item.user_id,
-          adminId: req.user.id,
-          type: 'withdraw',
           currency: item.currency,
           amount: requestedAmount,
+          referenceType: 'withdrawal_request',
+          referenceId: requestId,
+          idempotencyKey: `withdrawal_review_${requestId}`,
+          createdBy: req.user.id,
           note: adminNote || `Approved withdrawal request #${requestId}`,
         })
         const updateRes = await run(
@@ -1211,10 +1208,11 @@ export function createBalanceRouter(db) {
                admin_note = ?,
                reviewed_by = ?,
                reviewed_at = CURRENT_TIMESTAMP,
+               wallet_transaction_id = ?,
                processed_txn_id = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND request_status = 'pending'`,
-          [adminNote || null, req.user.id, txId || null, requestId],
+          [adminNote || null, req.user.id, walletTxnId || null, legacyTxnId || null, requestId],
         )
         if (!updateRes.changes) throw new Error('ALREADY_PROCESSED')
         await run(
@@ -1292,24 +1290,13 @@ export function createBalanceRouter(db) {
       const prevAmount = await getMainBalance(tx, userId, currency)
       const delta = Number((fixedAmount - prevAmount).toFixed(8))
       if (delta !== 0) {
-        await recordTransaction(tx, {
+        await adjustBalance(tx, {
           userId,
           currency,
-          transactionType: 'adjust',
-          sourceType: 'system',
+          delta,
           referenceType: 'owner_set',
           referenceId: req.user.id,
-          amount: delta,
-          idempotencyKey: `owner_set_${userId}_${currency}_${Date.now()}`,
           createdBy: req.user.id,
-        })
-        const type = delta >= 0 ? 'add' : 'deduct'
-        await appendLegacyBalanceTransaction(tx, {
-          userId,
-          adminId: req.user.id,
-          type,
-          currency,
-          amount: Math.abs(delta),
           note: note || 'Set by owner',
         })
       }

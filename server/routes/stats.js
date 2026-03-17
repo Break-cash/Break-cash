@@ -1,21 +1,18 @@
 import { Router } from 'express'
 import { all, get } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
+import { getPlatformWalletTotals, getTransactionStats } from '../services/wallet-reads.js'
 
 export function createStatsRouter(db) {
   const router = Router()
   router.use(requireAuth(db), requirePermission(db, 'view_reports'))
 
   router.get('/balanceStats', async (_req, res) => {
-    const totals = await get(
-      db,
-      `SELECT COUNT(*) AS balancesCount, COALESCE(SUM(amount), 0) AS totalAmount FROM balances`,
-    )
-    const txCount = await get(db, `SELECT COUNT(*) AS count FROM balance_transactions`)
+    const totals = await getPlatformWalletTotals(db)
     return res.json({
-      balancesCount: Number(totals?.balancesCount || 0),
-      totalAmount: Number(totals?.totalAmount || 0),
-      transactionsCount: Number(txCount?.count || 0),
+      balancesCount: totals.balancesCount,
+      totalAmount: totals.totalAmount,
+      transactionsCount: totals.transactionsCount,
     })
   })
 
@@ -33,16 +30,10 @@ export function createStatsRouter(db) {
   })
 
   router.get('/transactionStats', async (_req, res) => {
-    const rows = await get(
-      db,
-      `SELECT
-        SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END) AS depositsTotal,
-        SUM(CASE WHEN type = 'deduct' THEN amount ELSE 0 END) AS withdrawTotal
-      FROM balance_transactions`,
-    )
+    const rows = await getTransactionStats(db)
     return res.json({
-      depositsTotal: Number(rows?.depositsTotal || 0),
-      withdrawTotal: Number(rows?.withdrawTotal || 0),
+      depositsTotal: rows.depositsTotal,
+      withdrawTotal: rows.withdrawTotal,
     })
   })
 

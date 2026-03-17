@@ -7,11 +7,11 @@ import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import {
   getMainBalance,
-  recordTransaction,
-  createEarningEntry,
-  transferEarningToMain,
-  appendLegacyBalanceTransaction,
-} from '../services/wallet-ledger.js'
+  createMiningSubscription,
+  recordMiningDailyProfit,
+  settleMiningAtMaturity,
+  executeMiningEmergencyWithdrawal,
+} from '../services/wallet-service.js'
 
 const MINING_PERMISSION = 'تعدين'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -243,9 +243,10 @@ export function createMiningRouter(db) {
       const monthlyRow = await get(
         db,
         `SELECT COALESCE(SUM(amount), 0) AS total
-         FROM balance_transactions
+         FROM wallet_transactions
          WHERE user_id = ?
-           AND type = 'mining_daily_claim'
+           AND transaction_type = 'earning_credit'
+           AND source_type = 'mining'
            AND created_at >= ?
            AND created_at < ?`,
         [req.user.id, monthRange.startIso, monthRange.endIso],
@@ -303,23 +304,11 @@ export function createMiningRouter(db) {
         const monthlyLockUntil = toIso(nowMs + MONTH_MS)
         const nowIso = toIso(nowMs)
 
-        await recordTransaction(tx, {
+        await createMiningSubscription(tx, {
           userId: req.user.id,
-          currency,
-          transactionType: 'lock',
-          sourceType: 'mining',
-          referenceType: 'mining_subscription',
-          referenceId: req.user.id,
-          amount: -amount,
-          idempotencyKey: `mining_subscribe_${req.user.id}_${Math.floor(nowMs / 1000)}`,
-        })
-        await appendLegacyBalanceTransaction(tx, {
-          userId: req.user.id,
-          adminId: null,
-          type: 'mining_subscribe',
           currency,
           amount,
-          note: `Mining subscription amount ${amount.toFixed(2)}`,
+          idempotencyKey: `mining_subscribe_${req.user.id}_${Math.floor(nowMs / 1000)}`,
         })
         await run(
           tx,
@@ -393,17 +382,14 @@ export function createMiningRouter(db) {
         if (!dailyClaimable || dailyClaimable <= 0) throw new Error('NO_DAILY_PROFIT')
 
         const refId = Number(profile.id || 0) * 100000 + Math.floor(nowMs / 86400000)
-        const earningResult = await createEarningEntry(tx, {
+        const result = await recordMiningDailyProfit(tx, {
           userId: req.user.id,
-          sourceType: 'mining',
-          referenceType: 'mining_daily_claim',
-          referenceId: refId,
-          currency: 'USDT',
           amount: dailyClaimable,
+          profileId: profile.id,
+          referenceId: refId,
         })
-        const entryId = earningResult?.id ?? (await get(tx, `SELECT id FROM earning_entries WHERE source_type = 'mining' AND reference_type = 'mining_daily_claim' AND reference_id = ? LIMIT 1`, [refId]))?.id
-        if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
-        await transferEarningToMain(tx, entryId, `mining_daily_${req.user.id}_${refId}`)
+        if (!result) throw new Error('EARNING_ENTRY_FAILED')
+        const { balanceAfter } = result
 
         await run(
           tx,
@@ -415,15 +401,6 @@ export function createMiningRouter(db) {
            WHERE user_id = ?`,
           [dailyClaimable, dailyClaimable, req.user.id],
         )
-        await appendLegacyBalanceTransaction(tx, {
-          userId: req.user.id,
-          adminId: null,
-          type: 'mining_daily_claim',
-          currency: 'USDT',
-          amount: dailyClaimable,
-          note: 'Daily mining profit claim',
-        })
-        const balanceAfter = await getMainBalance(tx, req.user.id, 'USDT')
         return { claimedAmount: dailyClaimable, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_claim' })
@@ -477,14 +454,10 @@ export function createMiningRouter(db) {
         const principal = Number(profile.principal_amount || 0)
         if (principal <= 0) throw new Error('PRINCIPAL_NOT_READY')
 
-        await recordTransaction(tx, {
+        const { balanceAfter } = await settleMiningAtMaturity(tx, {
           userId: req.user.id,
-          currency: 'USDT',
-          transactionType: 'unlock',
-          sourceType: 'mining',
-          referenceType: 'mining_principal_release',
-          referenceId: profile.id,
-          amount: principal,
+          principal,
+          profileId: profile.id,
           idempotencyKey: `mining_release_${req.user.id}`,
         })
         await run(
@@ -497,15 +470,6 @@ export function createMiningRouter(db) {
            WHERE user_id = ?`,
           [req.user.id],
         )
-        await appendLegacyBalanceTransaction(tx, {
-          userId: req.user.id,
-          adminId: null,
-          type: 'mining_principal_release',
-          currency: 'USDT',
-          amount: principal,
-          note: 'Mining principal released after lock',
-        })
-        const balanceAfter = await getMainBalance(tx, req.user.id, 'USDT')
         return { releasedAmount: principal, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_release_principal' })
@@ -530,17 +494,12 @@ export function createMiningRouter(db) {
         if (principal <= 0) throw new Error('MINING_NOT_ACTIVE')
         const feePercent = Number(profile.emergency_fee_percent || 0)
         const feeAmount = Number(((principal * feePercent) / 100).toFixed(8))
-        const netAmount = Number(Math.max(0, principal - feeAmount).toFixed(8))
 
-        await recordTransaction(tx, {
+        const { netAmount, balanceAfter } = await executeMiningEmergencyWithdrawal(tx, {
           userId: req.user.id,
-          currency: 'USDT',
-          transactionType: 'transfer',
-          sourceType: 'mining',
-          referenceType: 'mining_emergency_withdraw',
-          referenceId: profile.id,
-          amount: principal,
+          principal,
           feeAmount,
+          profileId: profile.id,
           idempotencyKey: `mining_emergency_${req.user.id}`,
         })
         await run(
@@ -554,15 +513,6 @@ export function createMiningRouter(db) {
            WHERE user_id = ?`,
           [req.user.id],
         )
-        await appendLegacyBalanceTransaction(tx, {
-          userId: req.user.id,
-          adminId: null,
-          type: 'mining_emergency_withdraw',
-          currency: 'USDT',
-          amount: netAmount,
-          note: `Emergency withdraw with fee ${feePercent}%`,
-        })
-        const balanceAfter = await getMainBalance(tx, req.user.id, 'USDT')
         return { principal, feePercent, feeAmount, netAmount, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_emergency_withdraw' })
