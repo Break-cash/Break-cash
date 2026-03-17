@@ -33,7 +33,7 @@ export async function scheduleVerificationIfEligible(db, userId) {
 export async function refreshVerificationStatus(db, userId) {
   const user = await get(
     db,
-    `SELECT id, verification_status, verification_ready_at, blue_badge
+    `SELECT id, verification_status, verification_ready_at, blue_badge, invited_by
      FROM users WHERE id = ? LIMIT 1`,
     [userId],
   )
@@ -51,7 +51,36 @@ export async function refreshVerificationStatus(db, userId) {
          WHERE id = ?`,
         [userId],
       )
+      
+      // Mark as active referral if they have invited_by and made a deposit
+      if (user.invited_by) {
+        await markReferralAsVerifiedIfDeposited(db, userId)
+      }
     }
+  }
+}
+
+/**
+ * Mark a referral as verified (active) if they have completed verification
+ * and made at least one real deposit (type = 'deposit')
+ */
+export async function markReferralAsVerifiedIfDeposited(db, userId) {
+  const hasDeposit = await get(
+    db,
+    `SELECT 1 FROM balance_transactions
+     WHERE user_id = ? AND type = 'deposit'
+     LIMIT 1`,
+    [userId],
+  )
+  
+  if (hasDeposit) {
+    await run(
+      db,
+      `UPDATE users
+       SET referral_verified_at = COALESCE(referral_verified_at, CURRENT_TIMESTAMP)
+       WHERE id = ? AND referral_verified_at IS NULL`,
+      [userId],
+    )
   }
 }
 

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { hashPassword } from '../auth.js'
+import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
 
 async function withTransaction(db, fn) {
   await run(db, 'BEGIN')
@@ -158,6 +159,12 @@ export function createUsersRouter(db) {
       FROM users u
       LEFT JOIN referral_rewards rr ON rr.referred_user_id = u.id
       WHERE u.invited_by IS NOT NULL
+        AND (u.verification_status = 'verified' OR u.is_approved = 1)
+        AND EXISTS (
+          SELECT 1 FROM balance_transactions bt
+          WHERE bt.user_id = u.id
+            AND bt.type = 'deposit'
+        )
       GROUP BY u.invited_by
     ) rf ON rf.invited_by = u.id
     LEFT JOIN (
@@ -208,6 +215,12 @@ export function createUsersRouter(db) {
         FROM users u
         LEFT JOIN referral_rewards rr ON rr.referred_user_id = u.id
         WHERE u.invited_by IS NOT NULL
+          AND (u.verification_status = 'verified' OR u.is_approved = 1)
+          AND EXISTS (
+            SELECT 1 FROM balance_transactions bt
+            WHERE bt.user_id = u.id
+              AND bt.type = 'deposit'
+          )
         GROUP BY u.invited_by
       ) rf ON rf.invited_by = u.id
       WHERE u.id = ?
@@ -253,6 +266,12 @@ export function createUsersRouter(db) {
        WHERE id = ?`,
       [isApproved, isApproved, isApproved, userId],
     )
+    
+    // If approving and user was referred, mark as active referral if they made a deposit
+    if (isApproved === 1) {
+      await markReferralAsVerifiedIfDeposited(db, userId)
+    }
+    
     await logAdminAction(db, req.user.id, 'users', 'approve_toggle', userId, { isApproved })
     return res.json({ ok: true })
   })

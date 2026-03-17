@@ -204,6 +204,12 @@ export function createOwnerGrowthRouter(db) {
          SELECT invited_by, COUNT(*) AS referrals_count
          FROM users
          WHERE invited_by IS NOT NULL
+           AND (verification_status = 'verified' OR is_approved = 1)
+           AND EXISTS (
+             SELECT 1 FROM balance_transactions bt
+             WHERE bt.user_id = users.id
+               AND bt.type = 'deposit'
+           )
          GROUP BY invited_by
        ) r ON r.invited_by = p.user_id
        ORDER BY p.id DESC
@@ -249,6 +255,12 @@ export function createOwnerGrowthRouter(db) {
            GROUP BY user_id
          ) dep ON dep.user_id = u.id
          WHERE u.invited_by = ?
+           AND (u.verification_status = 'verified' OR u.is_approved = 1)
+           AND EXISTS (
+             SELECT 1 FROM balance_transactions bt
+             WHERE bt.user_id = u.id
+               AND bt.type = 'deposit'
+           )
          ORDER BY u.id DESC
          LIMIT ?`,
         [userId, limit],
@@ -260,10 +272,19 @@ export function createOwnerGrowthRouter(db) {
       db,
       `SELECT u.id AS user_id, u.display_name, u.referral_code,
               COUNT(r.id) AS registered_count,
-              SUM(CASE WHEN COALESCE(dep.total_deposits, 0) > 0 THEN 1 ELSE 0 END) AS depositors_count,
-              COALESCE(SUM(dep.total_deposits), 0) AS deposits_value
+              SUM(CASE WHEN COALESCE(dep.total_deposits, 0) > 0 AND COALESCE(r.has_deposit, 0) = 1 THEN 1 ELSE 0 END) AS depositors_count,
+              COALESCE(SUM(CASE WHEN COALESCE(r.has_deposit, 0) = 1 THEN dep.total_deposits ELSE 0 END), 0) AS deposits_value
        FROM users u
-       LEFT JOIN users r ON r.invited_by = u.id
+       LEFT JOIN (
+         SELECT id, invited_by, verification_status, is_approved,
+                CASE WHEN EXISTS (
+                  SELECT 1 FROM balance_transactions bt
+                  WHERE bt.user_id = users.id AND bt.type = 'deposit'
+                ) THEN 1 ELSE 0 END AS has_deposit
+         FROM users
+         WHERE invited_by IS NOT NULL
+           AND (verification_status = 'verified' OR is_approved = 1)
+       ) r ON r.invited_by = u.id
        LEFT JOIN (
          SELECT user_id, SUM(amount) AS total_deposits
          FROM balance_transactions
