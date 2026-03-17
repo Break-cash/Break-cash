@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../api'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
 import { useI18n } from '../i18nCore'
@@ -17,27 +17,30 @@ export function Market() {
   const [candles, setCandles] = useState<Candle[]>([])
   const [candlesLoading, setCandlesLoading] = useState(false)
   const [quotesLoading, setQuotesLoading] = useState(true)
+  const [quotesError, setQuotesError] = useState<string | null>(null)
+  const [candlesError, setCandlesError] = useState<string | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  const loadQuotes = useCallback(async () => {
+    setQuotesError(null)
+    setQuotesLoading(true)
+    try {
+      const res = (await apiFetch('/api/market/quotes')) as { items: Quote[] }
+      setMarketData(res.items || [])
+      setQuotesError(null)
+    } catch {
+      setMarketData([])
+      setQuotesError(t('market_quotes_error'))
+    } finally {
+      setQuotesLoading(false)
+    }
+  }, [t])
 
   useEffect(() => {
-    let active = true
-    setQuotesLoading(true)
-    async function load() {
-      try {
-        const res = (await apiFetch('/api/market/quotes')) as { items: Quote[] }
-        if (active) setMarketData(res.items || [])
-      } catch {
-        if (active) setMarketData([])
-      } finally {
-        if (active) setQuotesLoading(false)
-      }
-    }
-    load().catch(() => setQuotesLoading(false))
-    const id = window.setInterval(() => load().catch(() => {}), 3000)
-    return () => {
-      active = false
-      window.clearInterval(id)
-    }
-  }, [])
+    loadQuotes().catch(() => setQuotesLoading(false))
+    const id = window.setInterval(() => loadQuotes().catch(() => {}), 3000)
+    return () => window.clearInterval(id)
+  }, [loadQuotes])
 
   const filtered = useMemo(() => {
     const q = query.trim().toUpperCase()
@@ -55,14 +58,19 @@ export function Market() {
     if (!q) return
     const symbol = q.endsWith('USDT') ? q : `${q}USDT`
     setCustomQuote(null)
+    setSearchError(null)
     try {
       const res = (await apiFetch(`/api/market/quote?symbol=${encodeURIComponent(symbol)}`)) as { item: Quote }
       if (res.item) {
         setCustomQuote(res.item)
         setSelectedSymbol(res.item.symbol)
+        setSearchError(null)
+      } else {
+        setSearchError(t('market_symbol_not_found'))
       }
     } catch {
       setCustomQuote(null)
+      setSearchError(t('market_symbol_not_found'))
     }
   }
 
@@ -73,28 +81,28 @@ export function Market() {
       ? selectedSymbol
       : filtered[0].symbol
 
-  useEffect(() => {
-    let active = true
+  const loadCandles = useCallback(async () => {
+    setCandlesError(null)
     setCandlesLoading(true)
-    async function loadCandles() {
-      try {
-        const res = (await apiFetch(
-          `/api/market/candles?symbol=${encodeURIComponent(effectiveSelectedSymbol)}&interval=${selectedInterval}&limit=120`,
-        )) as { candles: Candle[] }
-        if (active) setCandles(res.candles || [])
-      } catch {
-        if (active) setCandles([])
-      } finally {
-        if (active) setCandlesLoading(false)
-      }
+    try {
+      const res = (await apiFetch(
+        `/api/market/candles?symbol=${encodeURIComponent(effectiveSelectedSymbol)}&interval=${selectedInterval}&limit=120`,
+      )) as { candles: Candle[] }
+      setCandles(res.candles || [])
+      setCandlesError(null)
+    } catch {
+      setCandles([])
+      setCandlesError(t('market_candles_error'))
+    } finally {
+      setCandlesLoading(false)
     }
+  }, [effectiveSelectedSymbol, selectedInterval, t])
+
+  useEffect(() => {
     loadCandles().catch(() => setCandlesLoading(false))
     const id = window.setInterval(() => loadCandles().catch(() => {}), 5000)
-    return () => {
-      active = false
-      window.clearInterval(id)
-    }
-  }, [effectiveSelectedSymbol, selectedInterval])
+    return () => window.clearInterval(id)
+  }, [loadCandles])
 
   return (
     <div className="page market-page">
@@ -107,7 +115,10 @@ export function Market() {
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
-              if (!e.target.value.trim()) setCustomQuote(null)
+              if (!e.target.value.trim()) {
+                setCustomQuote(null)
+                setSearchError(null)
+              }
             }}
             onKeyDown={(e) => e.key === 'Enter' && searchCustomSymbol()}
           />
@@ -119,6 +130,18 @@ export function Market() {
             {t('common_search')}
           </button>
         </div>
+        {searchError ? (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            <span>{searchError}</span>
+            <button
+              type="button"
+              className="text-xs font-medium text-red-300 underline"
+              onClick={() => setSearchError(null)}
+            >
+              {t('common_cancel')}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="elite-panel market-candles-card p-3">
@@ -137,7 +160,18 @@ export function Market() {
             ))}
           </div>
         </div>
-        {candlesLoading && candles.length === 0 ? (
+        {candlesError ? (
+          <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-app-muted">
+            <p className="text-sm text-red-400">{candlesError}</p>
+            <button
+              type="button"
+              className="rounded-lg border border-brand-blue/40 bg-brand-blue/20 px-4 py-2 text-sm font-medium text-white"
+              onClick={() => loadCandles()}
+            >
+              {t('common_retry')}
+            </button>
+          </div>
+        ) : candlesLoading && candles.length === 0 ? (
           <div className="flex h-[300px] items-center justify-center text-app-muted">{t('common_loading')}</div>
         ) : candles.length === 0 ? (
           <div className="flex h-[300px] items-center justify-center text-app-muted">{t('market_candles_empty')}</div>
@@ -152,7 +186,18 @@ export function Market() {
           <span>{t('home_last_price')}</span>
           <span>{t('home_change_24h')}</span>
         </div>
-        {quotesLoading && marketData.length === 0 ? (
+        {quotesError ? (
+          <div className="flex flex-col gap-2 border border-red-500/30 bg-red-500/10 p-4">
+            <p className="text-sm text-red-400">{quotesError}</p>
+            <button
+              type="button"
+              className="w-fit rounded-lg border border-brand-blue/40 bg-brand-blue/20 px-4 py-2 text-sm font-medium text-white"
+              onClick={() => loadQuotes()}
+            >
+              {t('common_retry')}
+            </button>
+          </div>
+        ) : quotesLoading && marketData.length === 0 ? (
           <div className="table-row">{t('common_loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="table-row text-app-muted">{t('market_no_results')}</div>

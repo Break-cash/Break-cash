@@ -110,9 +110,9 @@ export function createRewardsRouter(db) {
     const invited = await get(
       db,
       `SELECT COUNT(*) AS total
-       FROM users
-       WHERE referred_by = ? OR invited_by = ?`,
-      [req.user.id, req.user.id],
+       FROM referrals
+       WHERE referrer_user_id = ? AND status IN ('active', 'reward_released')`,
+      [req.user.id],
     )
     const earnings = await get(
       db,
@@ -124,18 +124,21 @@ export function createRewardsRouter(db) {
     const historyRows = await all(
       db,
       `SELECT
-         rr.id,
-         rr.referred_user_id,
-         rr.deposit_request_id,
-         rr.source_amount,
-         rr.reward_percent,
-         rr.reward_amount,
-         rr.created_at,
+         r.id,
+         r.referred_user_id,
+         r.status,
+         r.created_at,
+         r.qualified_at,
+         r.reward_released_at,
+         r.qualifying_deposit_request_id AS deposit_request_id,
+         r.first_deposit_amount AS source_amount,
+         r.reward_percent,
+         r.reward_amount,
          u.display_name AS referred_display_name
-       FROM referral_rewards rr
-       LEFT JOIN users u ON u.id = rr.referred_user_id
-       WHERE rr.referrer_user_id = ?
-       ORDER BY rr.id DESC
+       FROM referrals r
+       LEFT JOIN users u ON u.id = r.referred_user_id
+       WHERE r.referrer_user_id = ?
+       ORDER BY r.id DESC
        LIMIT 200`,
       [req.user.id],
     )
@@ -150,11 +153,14 @@ export function createRewardsRouter(db) {
         id: Number(row.id),
         referred_user_id: Number(row.referred_user_id || 0),
         referred_display_name: row.referred_display_name || null,
+        status: String(row.status || 'pending'),
         deposit_request_id: row.deposit_request_id ? Number(row.deposit_request_id) : null,
         source_amount: toFiniteNumber(row.source_amount, 0),
         reward_percent: toFiniteNumber(row.reward_percent, 0),
         reward_amount: toFiniteNumber(row.reward_amount, 0),
         created_at: row.created_at,
+        qualified_at: row.qualified_at || null,
+        reward_released_at: row.reward_released_at || null,
       })),
     })
   })

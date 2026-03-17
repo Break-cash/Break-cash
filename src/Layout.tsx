@@ -76,6 +76,7 @@ export function Layout({
   const ownerLinks = isOwner
     ? [
         { title: t('nav_owner'), route: '/owner' },
+        { title: t('owner_premium_dashboard'), route: '/owner/premium' },
         { title: t('owner_quick_operations'), route: '/owner/operations' },
       ]
     : []

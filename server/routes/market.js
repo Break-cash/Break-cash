@@ -17,7 +17,10 @@ export function createMarketRouter() {
     const cached = items.find((q) => q.symbol === symbol)
     if (cached) return res.json({ item: cached })
     try {
-      const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`)
+      const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`, {
+        headers: { 'User-Agent': 'BreakCash/1.0 (Market Data)' },
+        signal: AbortSignal.timeout(8000),
+      })
       if (!r.ok) return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
       const row = await r.json()
       const item = {
@@ -28,7 +31,7 @@ export function createMarketRouter() {
       }
       return res.json({ item })
     } catch {
-      return res.status(502).json({ error: 'UPSTREAM_UNREACHABLE' })
+      return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
     }
   })
 
@@ -62,10 +65,16 @@ export function createMarketRouter() {
       `&interval=${encodeURIComponent(interval)}&limit=${limit}`
 
     try {
-      const r = await fetch(endpoint)
-      if (!r.ok) return res.status(502).json({ error: 'UPSTREAM_FAILED' })
+      const r = await fetch(endpoint, {
+        headers: { 'User-Agent': 'BreakCash/1.0 (Market Data)' },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!r.ok) {
+        const fallback = { symbol, interval, candles: [], refreshedAt: new Date().toISOString(), upstreamFailed: true }
+        return res.status(200).json(fallback)
+      }
       const rows = await r.json()
-      const candles = rows.map((row) => ({
+      const candles = (Array.isArray(rows) ? rows : []).map((row) => ({
         time: Math.floor(Number(row[0]) / 1000),
         open: Number(row[1]),
         high: Number(row[2]),
@@ -74,7 +83,8 @@ export function createMarketRouter() {
       }))
       return res.json({ symbol, interval, candles, refreshedAt: new Date().toISOString() })
     } catch {
-      return res.status(502).json({ error: 'UPSTREAM_UNREACHABLE' })
+      const fallback = { symbol, interval, candles: [], refreshedAt: new Date().toISOString(), upstreamFailed: true }
+      return res.status(200).json(fallback)
     }
   })
 

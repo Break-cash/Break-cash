@@ -391,7 +391,7 @@ export type PromoBannerItem = {
   imageUrl?: string
   backgroundStyle?: string
   order?: number
-  placement: 'all' | 'home' | 'profile'
+  placement: 'all' | 'home' | 'profile' | 'mining'
   enabled: boolean
 }
 
@@ -1030,11 +1030,14 @@ export type ReferralRewardHistoryItem = {
   id: number
   referred_user_id: number
   referred_display_name: string | null
+  status: 'pending' | 'active' | 'reward_released'
   deposit_request_id: number | null
   source_amount: number
   reward_percent: number
   reward_amount: number
   created_at: string
+  qualified_at: string | null
+  reward_released_at: string | null
 }
 
 export type ReferralSummary = {

@@ -1,5 +1,55 @@
 # نشر Break cash للإنتاج
 
+## البنية الحالية: Vercel (الواجهة) + Railway (التطبيق/API)
+
+| العنصر | المضيف | القيمة |
+|--------|--------|--------|
+| **الواجهة** | Vercel | https://breakcash.cash |
+| **API** | Railway | https://api.breakcash.cash |
+
+### أوامر النشر
+
+```powershell
+# 1. الواجهة على Vercel
+cd breakcash.cash
+vercel --prod
+
+# 2. التطبيق/API على Railway
+railway up --service break-cash-api
+```
+
+### ربط المشروع بـ Vercel (أول مرة)
+
+```powershell
+# ثبّت Vercel CLI
+npm install -g vercel
+
+# سجّل الدخول
+vercel login
+
+# ادخل لمجلد المشروع
+cd breakcash.cash
+
+# ربط المشروع (اختر المشروع أو أنشئ جديداً)
+vercel link
+
+# نشر للإنتاج
+vercel --prod
+```
+
+### ربط من GitHub (Vercel)
+
+1. ادخل إلى [vercel.com](https://vercel.com) وسجّل الدخول.
+2. **Add New** → **Project** → اختر المستودع من GitHub.
+3. إعدادات البناء (يُكتشف تلقائياً لمشاريع Vite):
+   - **Framework Preset:** Vite
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+4. أضف النطاق `breakcash.cash` من **Settings** → **Domains**.
+5. كل دفع (push) إلى الفرع الرئيسي سينشر تلقائياً.
+
+---
+
 ## الطريقة 1: سيرفر واحد (Docker) — موصى بها
 
 يعمل الواجهة والـ API من نفس السيرفر. مناسب لـ VPS أو Railway أو Render أو أي مضيف يدعم Docker.

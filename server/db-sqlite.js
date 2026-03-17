@@ -517,6 +517,23 @@ CREATE TABLE IF NOT EXISTS referral_rewards (
 CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id);
 CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards(referred_user_id);
 
+CREATE TABLE IF NOT EXISTS referrals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  referrer_user_id INTEGER NOT NULL REFERENCES users(id),
+  referred_user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'reward_released')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  qualified_at TEXT,
+  reward_released_at TEXT,
+  qualifying_deposit_request_id INTEGER REFERENCES deposit_requests(id),
+  first_deposit_amount REAL,
+  reward_amount REAL,
+  reward_percent REAL
+);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_user_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referred ON referrals(referred_user_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_status ON referrals(status);
+
 CREATE TABLE IF NOT EXISTS partner_profiles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
@@ -744,6 +761,19 @@ async function ensureSchema(db) {
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_principal_locks_user_currency ON user_principal_locks(user_id, currency, lock_status)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards(referred_user_id)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_user_id)`).catch(() => {})
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referrals_referred ON referrals(referred_user_id)`).catch(() => {})
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referrals_status ON referrals(status)`).catch(() => {})
+  try {
+    await runAsync(db, `
+      INSERT OR IGNORE INTO referrals (referrer_user_id, referred_user_id, status, qualified_at, reward_released_at, qualifying_deposit_request_id, first_deposit_amount, reward_amount, reward_percent)
+      SELECT u.referred_by, u.id, CASE WHEN rr.id IS NOT NULL THEN 'reward_released' ELSE 'pending' END,
+             rr.created_at, rr.created_at, rr.deposit_request_id, rr.source_amount, rr.reward_amount, rr.reward_percent
+      FROM users u
+      LEFT JOIN referral_rewards rr ON rr.referred_user_id = u.id
+      WHERE u.referred_by IS NOT NULL AND u.referred_by <> u.id
+    `)
+  } catch (_) {}
   await runAsync(db, `UPDATE users SET referred_by = invited_by WHERE referred_by IS NULL AND invited_by IS NOT NULL`)
   await runAsync(db, `UPDATE users SET is_owner = CASE WHEN role = 'owner' THEN 1 ELSE 0 END`)
   const vipDefaults = [

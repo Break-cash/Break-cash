@@ -749,7 +749,7 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                     <span>{String(row.display_name || row.user_id)}</span>
                     <span>{String(row.referral_code || '—')}</span>
                     <span>
-                      {String(row.registered_count || 0)} / {String(row.depositors_count || 0)} / {Number(row.deposits_value || 0).toFixed(2)}
+                      {String(row.pending_count || 0)} / {String(row.active_count || 0)} / {String(row.reward_released_count || 0)} / {Number(row.rewards_value || 0).toFixed(2)}
                     </span>
                   </div>
                 ))}
@@ -1718,6 +1718,7 @@ export function OwnerPremiumDashboardPage({ user }: OwnerPremiumDashboardProps) 
                       <option value="all">{t('owner_banner_place_all')}</option>
                       <option value="home">{t('owner_banner_place_home')}</option>
                       <option value="profile">{t('owner_banner_place_profile')}</option>
+                      <option value="mining">{t('owner_banner_place_mining')}</option>
                     </select>
                     <div className="flex items-center gap-2">
                       <button

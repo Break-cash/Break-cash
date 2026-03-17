@@ -153,23 +153,45 @@ export function ReferralPage() {
               <div className="py-3 text-sm text-app-muted">{t('referral_history_empty')}</div>
             ) : (
               <div className="space-y-2">
-                {rows.map((row) => (
-                  <div key={row.id} className="rounded-xl border border-app-border bg-app-elevated p-2 text-xs">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium text-white/90">
-                        {row.referred_display_name || `${t('referral_user_prefix')} #${row.referred_user_id}`}
-                      </span>
-                      <span className="text-app-muted">{formatDate(row.created_at)}</span>
+                {rows.map((row) => {
+                  const statusKey =
+                    row.status === 'reward_released'
+                      ? 'referral_status_reward_released'
+                      : row.status === 'active'
+                        ? 'referral_status_active'
+                        : 'referral_status_pending'
+                  return (
+                    <div key={row.id} className="rounded-xl border border-app-border bg-app-elevated p-2 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-white/90">
+                          {row.referred_display_name || `${t('referral_user_prefix')} #${row.referred_user_id}`}
+                        </span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${
+                          row.status === 'reward_released'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : row.status === 'active'
+                              ? 'bg-brand-blue/20 text-brand-blue'
+                              : 'bg-amber-500/20 text-amber-300'
+                        }`}>
+                          {t(statusKey)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-app-muted">
+                        <span>{formatDate(row.created_at)}</span>
+                        {row.qualified_at ? (
+                          <span>→ {formatDate(row.qualified_at)}</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 grid gap-1 text-white/85 sm:grid-cols-3">
+                        <span>{t('referral_history_source')}: ${Number(row.source_amount || 0).toFixed(2)}</span>
+                        <span>{t('referral_history_percent')}: {Number(row.reward_percent || 0).toFixed(2)}%</span>
+                        <span className="text-emerald-300">
+                          {t('referral_history_reward')}: ${Number(row.reward_amount || 0).toFixed(2)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-1 grid gap-1 text-white/85 sm:grid-cols-3">
-                      <span>{t('referral_history_source')}: ${Number(row.source_amount || 0).toFixed(2)}</span>
-                      <span>{t('referral_history_percent')}: {Number(row.reward_percent || 0).toFixed(2)}%</span>
-                      <span className="text-emerald-300">
-                        {t('referral_history_reward')}: ${Number(row.reward_amount || 0).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </section>

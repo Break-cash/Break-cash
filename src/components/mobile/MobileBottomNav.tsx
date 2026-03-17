@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CandlestickChart, ChartNoAxesCombined, House, Pickaxe, Sparkles, Wallet } from 'lucide-react'
+import {
+  CandlestickChart,
+  ChartNoAxesCombined,
+  House,
+  Pickaxe,
+  Sparkles,
+  Wallet,
+} from 'lucide-react'
 import {
   getMobileNavConfig,
   type MobileNavConfigItem,
@@ -12,7 +19,8 @@ export function MobileBottomNav() {
   const { t, direction } = useI18n()
   const location = useLocation()
   const [navItems, setNavItems] = useState<MobileNavConfigItem[]>([])
-  const defaultNavItems = useMemo(
+
+  const defaultNavItems = useMemo<MobileNavConfigItem[]>(
     () => [
       { id: 'home', to: '/portfolio', label: t('nav_home'), icon: 'house', isFab: false },
       { id: 'tasks', to: '/futures', label: t('nav_tasks'), icon: 'candlestick', isFab: true },
@@ -22,25 +30,49 @@ export function MobileBottomNav() {
     ],
     [t],
   )
+
   useEffect(() => {
+    let isMounted = true
+
     getMobileNavConfig()
       .then((res) => {
-        const items = res.customized && Array.isArray(res.items) && res.items.length === 5 ? res.items : []
+        if (!isMounted) return
+
+        const items =
+          res?.customized &&
+          Array.isArray(res.items) &&
+          res.items.length === 5
+            ? res.items
+            : []
+
         setNavItems(items)
       })
-      .catch(() => setNavItems([]))
+      .catch(() => {
+        if (isMounted) setNavItems([])
+      })
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const effectiveNavItems = useMemo(() => {
     const sourceItems = navItems.length === 5 ? navItems : defaultNavItems
     const items = [...sourceItems]
-    const tasksIndex = items.findIndex((item) => String(item.id).toLowerCase() === 'tasks')
+
+    const tasksIndex = items.findIndex(
+      (item) => String(item.id).toLowerCase() === 'tasks',
+    )
+
     if (tasksIndex < 0) return items
+
     const [tasksItem] = items.splice(tasksIndex, 1)
     const middleIndex = Math.floor(items.length / 2)
     items.splice(middleIndex, 0, tasksItem)
+
     return items
   }, [defaultNavItems, navItems])
+
   const iconById = {
     wallet: Wallet,
     chart: ChartNoAxesCombined,
@@ -50,20 +82,32 @@ export function MobileBottomNav() {
     sparkles: Sparkles,
   } as const
 
+  const isItemActive = (to: string) => {
+    return location.pathname === to || location.pathname.startsWith(`${to}/`)
+  }
+
   return (
     <motion.nav
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className="fixed inset-x-0 bottom-[max(10px,env(safe-area-inset-bottom))] z-50 px-2"
-      aria-label="Mobile navigation"
+      aria-label={t('nav_mobile') || 'Mobile navigation'}
     >
       <div className="elite-enter elite-shine relative mx-auto w-full max-w-[760px] rounded-[24px] border border-white/12 bg-[#10141d]/92 px-2.5 pb-2 pt-2 shadow-[0_20px_45px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
-        <div className={`flex items-end justify-between gap-1 ${direction === 'rtl' ? 'flex-row-reverse' : ''}`}>
+        <div
+          className={`flex items-end justify-between gap-1 ${
+            direction === 'rtl' ? 'flex-row-reverse' : ''
+          }`}
+        >
           {effectiveNavItems.map((item) => {
-            const isActive = location.pathname.startsWith(item.to)
+            const isActive = isItemActive(item.to)
             const isFab = Boolean(item.isFab)
-            const Icon = iconById[item.icon as keyof typeof iconById] ?? null
+            const Icon =
+              item.icon === 'bcmark'
+                ? null
+                : (iconById[item.icon as keyof typeof iconById] ?? House)
+
             return (
               <Link
                 key={`${item.id}-${item.to}`}
@@ -85,30 +129,40 @@ export function MobileBottomNav() {
                         }`
                   }`}
                 >
-                  {isFab && Icon ? (
-                    <Icon
-                      size={28}
-                      strokeWidth={1.8}
-                      className={isActive ? 'text-white' : 'text-white/75'}
-                    />
-                  ) : isFab ? (
-                    <span className="crypto-bottom-nav-bcmark" aria-hidden="true">
-                      BC
-                    </span>
-                  ) : Icon ? (
-                    <Icon
-                      size={24}
-                      strokeWidth={1.8}
-                      className={isActive ? 'text-white' : 'text-white/75'}
-                    />
-                  ) : null}
+                  {isFab ? (
+                    Icon ? (
+                      <Icon
+                        size={28}
+                        strokeWidth={1.8}
+                        className={isActive ? 'text-white' : 'text-white/75'}
+                      />
+                    ) : (
+                      <span className="crypto-bottom-nav-bcmark" aria-hidden="true">
+                        BC
+                      </span>
+                    )
+                  ) : (
+                    Icon && (
+                      <Icon
+                        size={24}
+                        strokeWidth={1.8}
+                        className={isActive ? 'text-white' : 'text-white/75'}
+                      />
+                    )
+                  )}
                 </span>
-                {isActive && !isFab ? (
-                  <span className="mb-1 mt-2 h-1 w-5 rounded-full bg-brand-blue/80" />
-                ) : (
-                  <span className="mb-1 mt-2 h-1 w-5 rounded-full bg-transparent" />
-                )}
-                <span className={`text-[11px] leading-tight ${isActive ? 'font-semibold text-white' : 'text-white/70'}`}>
+
+                <span
+                  className={`mb-1 mt-2 h-1 w-5 rounded-full ${
+                    isActive && !isFab ? 'bg-brand-blue/80' : 'bg-transparent'
+                  }`}
+                />
+
+                <span
+                  className={`text-[11px] leading-tight ${
+                    isActive ? 'font-semibold text-white' : 'text-white/70'
+                  }`}
+                >
                   {item.label}
                 </span>
               </Link>

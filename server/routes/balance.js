@@ -305,6 +305,16 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
   if (!referrerUserId || referrerUserId === Number(payload.userId)) {
     return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
+
+  const referral = await get(
+    db,
+    `SELECT id, status FROM referrals WHERE referred_user_id = ? LIMIT 1`,
+    [payload.userId],
+  )
+  if (!referral || String(referral.status || '') !== 'pending') {
+    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+  }
+
   const successfulDeposits = await get(
     db,
     `SELECT COUNT(*) AS count
@@ -314,6 +324,12 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
     [payload.userId],
   )
   if (Number(successfulDeposits?.count || 0) !== 1) {
+    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+  }
+
+  const rules = payload.rules || (await getRules(db))
+  const minDeposit = Number(rules.minDeposit || 10)
+  if (amount < minDeposit) {
     return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
 
@@ -327,6 +343,15 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
   if (!Number.isFinite(rewardAmount) || rewardAmount <= 0) {
     return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
+
+  await run(
+    db,
+    `UPDATE referrals
+     SET status = 'active', qualified_at = CURRENT_TIMESTAMP,
+         qualifying_deposit_request_id = ?, first_deposit_amount = ?, reward_amount = ?, reward_percent = ?
+     WHERE referred_user_id = ? AND status = 'pending'`,
+    [payload.depositRequestId || null, amount, rewardAmount, rewardPercent, payload.userId],
+  )
 
   const rewardInsert = await run(
     db,
@@ -358,6 +383,12 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
     amount: rewardAmount,
     note: `Referral reward from user #${payload.userId} first deposit #${payload.depositRequestId || 0}`,
   })
+  await run(
+    db,
+    `UPDATE referrals SET status = 'reward_released', reward_released_at = CURRENT_TIMESTAMP
+     WHERE referred_user_id = ? AND status = 'active'`,
+    [payload.userId],
+  )
   await run(
     db,
     `INSERT INTO notifications (user_id, title, body) VALUES (?, 'Referral Reward', ?)`,
@@ -767,6 +798,7 @@ export function createBalanceRouter(db) {
             currency,
             adminId: null,
             depositRequestId: requestId,
+            rules,
           })
           rewardedReferrerUserId = Number(vipResult.rewardedReferrerUserId || 0)
         })
@@ -1067,6 +1099,7 @@ export function createBalanceRouter(db) {
           currency: item.currency,
           adminId: req.user.id,
           depositRequestId: requestId,
+          rules,
         })
         rewardedReferrerUserId = Number(vipResult.rewardedReferrerUserId || 0)
         await run(

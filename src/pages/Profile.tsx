@@ -172,6 +172,7 @@ export function Profile() {
       profile?.role === 'owner'
         ? [
             { label: t('nav_owner'), to: '/owner' },
+            { label: t('owner_premium_dashboard'), to: '/owner/premium' },
             { label: t('owner_quick_operations'), to: '/owner/operations' },
             { label: t('nav_admin'), to: '/admin/dashboard' },
             { label: t('admin_users'), to: '/admin/users' },

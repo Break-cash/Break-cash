@@ -479,6 +479,23 @@ async function ensureSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id);
     CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards(referred_user_id);
 
+    CREATE TABLE IF NOT EXISTS referrals (
+      id SERIAL PRIMARY KEY,
+      referrer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      referred_user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'reward_released')),
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      qualified_at TIMESTAMP,
+      reward_released_at TIMESTAMP,
+      qualifying_deposit_request_id INTEGER REFERENCES deposit_requests(id) ON DELETE SET NULL,
+      first_deposit_amount DOUBLE PRECISION,
+      reward_amount DOUBLE PRECISION,
+      reward_percent DOUBLE PRECISION
+    );
+    CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_user_id);
+    CREATE INDEX IF NOT EXISTS idx_referrals_referred ON referrals(referred_user_id);
+    CREATE INDEX IF NOT EXISTS idx_referrals_status ON referrals(status);
+
     CREATE TABLE IF NOT EXISTS partner_profiles (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -653,6 +670,33 @@ async function ensureSchema(db) {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_kyc_submissions_user_id ON kyc_submissions(user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards(referred_user_id)`)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id SERIAL PRIMARY KEY,
+      referrer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      referred_user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'reward_released')),
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      qualified_at TIMESTAMP,
+      reward_released_at TIMESTAMP,
+      qualifying_deposit_request_id INTEGER REFERENCES deposit_requests(id) ON DELETE SET NULL,
+      first_deposit_amount DOUBLE PRECISION,
+      reward_amount DOUBLE PRECISION,
+      reward_percent DOUBLE PRECISION
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referred ON referrals(referred_user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_referrals_status ON referrals(status)`)
+  await db.query(`
+    INSERT INTO referrals (referrer_user_id, referred_user_id, status, qualified_at, reward_released_at, qualifying_deposit_request_id, first_deposit_amount, reward_amount, reward_percent)
+    SELECT u.referred_by, u.id, CASE WHEN rr.id IS NOT NULL THEN 'reward_released' ELSE 'pending' END,
+           rr.created_at, rr.created_at, rr.deposit_request_id, rr.source_amount, rr.reward_amount, rr.reward_percent
+    FROM users u
+    LEFT JOIN referral_rewards rr ON rr.referred_user_id = u.id
+    WHERE u.referred_by IS NOT NULL AND u.referred_by <> u.id
+      AND NOT EXISTS (SELECT 1 FROM referrals r WHERE r.referred_user_id = u.id)
+  `).catch(() => {})
   await db.query(`UPDATE users SET referred_by = invited_by WHERE referred_by IS NULL AND invited_by IS NOT NULL`)
   await db.query(`UPDATE users SET is_owner = CASE WHEN role = 'owner' THEN 1 ELSE 0 END`)
   await db.query(

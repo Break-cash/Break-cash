@@ -155,18 +155,10 @@ export function createUsersRouter(db) {
       GROUP BY user_id
     ) wd ON wd.user_id = u.id
     LEFT JOIN (
-      SELECT u.invited_by, COUNT(*) AS referrals_count, COALESCE(SUM(rr.reward_amount), 0) AS referrals_earnings
-      FROM users u
-      LEFT JOIN referral_rewards rr ON rr.referred_user_id = u.id
-      WHERE u.invited_by IS NOT NULL
-        AND (u.verification_status = 'verified' OR u.is_approved = 1)
-        AND EXISTS (
-          SELECT 1 FROM balance_transactions bt
-          WHERE bt.user_id = u.id
-            AND bt.type = 'deposit'
-        )
-      GROUP BY u.invited_by
-    ) rf ON rf.invited_by = u.id
+      SELECT referrer_user_id, COUNT(*) AS referrals_count, COALESCE(SUM(reward_amount), 0) AS referrals_earnings
+      FROM referral_rewards
+      GROUP BY referrer_user_id
+    ) rf ON rf.referrer_user_id = u.id
     LEFT JOIN (
       SELECT user_id, COUNT(*) AS pending_withdrawals
       FROM withdrawal_requests
@@ -211,18 +203,10 @@ export function createUsersRouter(db) {
         WHERE type IN ('deduct', 'withdraw', 'bonus_deduct') GROUP BY user_id
       ) wd ON wd.user_id = u.id
       LEFT JOIN (
-        SELECT u.invited_by, COUNT(*) AS referrals_count, COALESCE(SUM(rr.reward_amount), 0) AS referrals_earnings
-        FROM users u
-        LEFT JOIN referral_rewards rr ON rr.referred_user_id = u.id
-        WHERE u.invited_by IS NOT NULL
-          AND (u.verification_status = 'verified' OR u.is_approved = 1)
-          AND EXISTS (
-            SELECT 1 FROM balance_transactions bt
-            WHERE bt.user_id = u.id
-              AND bt.type = 'deposit'
-          )
-        GROUP BY u.invited_by
-      ) rf ON rf.invited_by = u.id
+        SELECT referrer_user_id, COUNT(*) AS referrals_count, COALESCE(SUM(reward_amount), 0) AS referrals_earnings
+        FROM referral_rewards
+        GROUP BY referrer_user_id
+      ) rf ON rf.referrer_user_id = u.id
       WHERE u.id = ?
       LIMIT 1`,
       [userId],

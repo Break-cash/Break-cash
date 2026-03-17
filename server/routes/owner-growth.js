@@ -201,17 +201,10 @@ export function createOwnerGrowthRouter(db) {
        FROM partner_profiles p
        LEFT JOIN users u ON u.id = p.user_id
        LEFT JOIN (
-         SELECT invited_by, COUNT(*) AS referrals_count
-         FROM users
-         WHERE invited_by IS NOT NULL
-           AND (verification_status = 'verified' OR is_approved = 1)
-           AND EXISTS (
-             SELECT 1 FROM balance_transactions bt
-             WHERE bt.user_id = users.id
-               AND bt.type = 'deposit'
-           )
-         GROUP BY invited_by
-       ) r ON r.invited_by = p.user_id
+         SELECT referrer_user_id, COUNT(*) AS referrals_count
+         FROM referral_rewards
+         GROUP BY referrer_user_id
+       ) r ON r.referrer_user_id = p.user_id
        ORDER BY p.id DESC
        LIMIT ?`,
       [limit],
@@ -245,23 +238,20 @@ export function createOwnerGrowthRouter(db) {
     if (userId > 0) {
       const rows = await all(
         db,
-        `SELECT u.id, u.display_name, u.email, u.phone, u.created_at,
+        `SELECT r.id, r.referred_user_id, r.status, r.created_at, r.qualified_at, r.reward_released_at,
+                r.qualifying_deposit_request_id, r.first_deposit_amount, r.reward_amount, r.reward_percent,
+                u.display_name, u.email, u.phone, u.created_at AS user_created_at,
                 COALESCE(dep.total_deposits, 0) AS deposits_total
-         FROM users u
+         FROM referrals r
+         LEFT JOIN users u ON u.id = r.referred_user_id
          LEFT JOIN (
            SELECT user_id, SUM(amount) AS total_deposits
            FROM balance_transactions
            WHERE type IN ('add', 'deposit', 'bonus_add')
            GROUP BY user_id
-         ) dep ON dep.user_id = u.id
-         WHERE u.invited_by = ?
-           AND (u.verification_status = 'verified' OR u.is_approved = 1)
-           AND EXISTS (
-             SELECT 1 FROM balance_transactions bt
-             WHERE bt.user_id = u.id
-               AND bt.type = 'deposit'
-           )
-         ORDER BY u.id DESC
+         ) dep ON dep.user_id = r.referred_user_id
+         WHERE r.referrer_user_id = ?
+         ORDER BY r.id DESC
          LIMIT ?`,
         [userId, limit],
       )
@@ -271,29 +261,16 @@ export function createOwnerGrowthRouter(db) {
     const summary = await all(
       db,
       `SELECT u.id AS user_id, u.display_name, u.referral_code,
-              COUNT(r.id) AS registered_count,
-              SUM(CASE WHEN COALESCE(dep.total_deposits, 0) > 0 AND COALESCE(r.has_deposit, 0) = 1 THEN 1 ELSE 0 END) AS depositors_count,
-              COALESCE(SUM(CASE WHEN COALESCE(r.has_deposit, 0) = 1 THEN dep.total_deposits ELSE 0 END), 0) AS deposits_value
+              COUNT(r.id) AS total_referrals,
+              SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+              SUM(CASE WHEN r.status IN ('active', 'reward_released') THEN 1 ELSE 0 END) AS active_count,
+              SUM(CASE WHEN r.status = 'reward_released' THEN 1 ELSE 0 END) AS reward_released_count,
+              COALESCE(SUM(CASE WHEN r.status IN ('active', 'reward_released') THEN r.reward_amount ELSE 0 END), 0) AS rewards_value
        FROM users u
-       LEFT JOIN (
-         SELECT id, invited_by, verification_status, is_approved,
-                CASE WHEN EXISTS (
-                  SELECT 1 FROM balance_transactions bt
-                  WHERE bt.user_id = users.id AND bt.type = 'deposit'
-                ) THEN 1 ELSE 0 END AS has_deposit
-         FROM users
-         WHERE invited_by IS NOT NULL
-           AND (verification_status = 'verified' OR is_approved = 1)
-       ) r ON r.invited_by = u.id
-       LEFT JOIN (
-         SELECT user_id, SUM(amount) AS total_deposits
-         FROM balance_transactions
-         WHERE type IN ('add', 'deposit', 'bonus_add')
-         GROUP BY user_id
-       ) dep ON dep.user_id = r.id
+       LEFT JOIN referrals r ON r.referrer_user_id = u.id
        GROUP BY u.id, u.display_name, u.referral_code
        HAVING COUNT(r.id) > 0
-       ORDER BY registered_count DESC
+       ORDER BY active_count DESC, total_referrals DESC
        LIMIT ?`,
       [limit],
     )

@@ -78,8 +78,15 @@ export function VipPage() {
           {t('common_loading')}
         </section>
       ) : error ? (
-        <section className="rounded-2xl border border-rose-400/35 bg-rose-500/10 p-4 text-sm text-rose-200">
-          {error}
+        <section className="rounded-2xl border border-rose-400/35 bg-rose-500/10 p-4">
+          <p className="text-sm text-rose-200">{error}</p>
+          <button
+            type="button"
+            className="mt-3 rounded-lg border border-brand-blue/40 bg-brand-blue/20 px-4 py-2 text-sm font-medium text-white"
+            onClick={() => loadVipSummary(true)}
+          >
+            {t('common_retry')}
+          </button>
         </section>
       ) : data ? (
         <>
@@ -120,12 +127,12 @@ export function VipPage() {
           </section>
 
           <section className="space-y-2">
-            {data.tiers
-              .filter((tier) => tier.level >= 1 && tier.level <= 5)
+            {(data.tiers || [])
+              .filter((tier) => tier && tier.level >= 1 && tier.level <= 5)
               .map((tier) => {
                 const isCurrent = tier.level === data.currentVipLevel
                 const isUnlocked = tier.level <= data.currentVipLevel
-                const benefits = tier.perks.length > 0 ? tier.perks : resolveFallbackBenefits(tier.level, t)
+                const benefits = (tier.perks?.length ?? 0) > 0 ? tier.perks : resolveFallbackBenefits(tier.level, t)
                 return (
                   <div
                     key={tier.level}

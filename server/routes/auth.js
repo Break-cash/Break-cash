@@ -234,6 +234,15 @@ export function createAuthRouter(db) {
         [createdUserId, inviteRecordCode],
       )
     }
+    if (invitedBy && invitedBy !== createdUserId) {
+      await run(
+        db,
+        `INSERT INTO referrals (referrer_user_id, referred_user_id, status)
+         VALUES (?, ?, 'pending')
+         ON CONFLICT(referred_user_id) DO NOTHING`,
+        [invitedBy, createdUserId],
+      ).catch(() => {})
+    }
     await ensureUserRecoveryCode(db, createdUserId)
 
     const user = await get(

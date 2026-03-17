@@ -9,7 +9,7 @@
       "destination": "https://api.breakcash.cash/uploads/:path*"
     },
     {
-      "source": "/:path*",
+      "source": "/((?!api/|uploads/|assets/).*)",
       "destination": "/index.html"
     }
   ]

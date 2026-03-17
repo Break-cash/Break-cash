@@ -79,12 +79,13 @@ export function createSettingsRouter(db) {
     return key
   }
 
+  /** الأسواق والمهام هما الأساسيات في الشريط السفلي - يأتيان أولاً */
   const DEFAULT_MOBILE_NAV_CONFIG = [
-    { id: 'assets', to: '/assets', label: 'Assets', icon: 'wallet', isFab: false },
     { id: 'markets', to: '/market', label: 'Markets', icon: 'candlestick', isFab: false },
     { id: 'tasks', to: '/futures', label: 'Tasks', icon: 'candlestick', isFab: true },
-    { id: 'mining', to: '/mining', label: 'Mining', icon: 'pickaxe', isFab: false },
     { id: 'home', to: '/portfolio', label: 'Home', icon: 'house', isFab: false },
+    { id: 'mining', to: '/mining', label: 'Mining', icon: 'pickaxe', isFab: false },
+    { id: 'assets', to: '/assets', label: 'Assets', icon: 'wallet', isFab: false },
   ]
 
   function normalizeMobileNavConfig(raw) {
@@ -104,7 +105,9 @@ export function createSettingsRouter(db) {
       }))
     const fabCount = normalized.filter((x) => x.isFab).length
     if (fabCount !== 1) {
-      return normalized.map((x, idx) => ({ ...x, isFab: idx === 2 }))
+      const tasksIdx = normalized.findIndex((x) => String(x.id).toLowerCase() === 'tasks')
+      const fabIdx = tasksIdx >= 0 ? tasksIdx : 2
+      return normalized.map((x, idx) => ({ ...x, isFab: idx === fabIdx }))
     }
     return normalized
   }
@@ -165,7 +168,7 @@ export function createSettingsRouter(db) {
 
   function normalizePromoBanners(raw) {
     if (!Array.isArray(raw)) return DEFAULT_PROMO_BANNERS
-    const allowedPlacement = new Set(['all', 'home', 'profile'])
+    const allowedPlacement = new Set(['all', 'home', 'profile', 'mining'])
     const normalized = raw
       .map((item, idx) => {
         const placementRaw = String(item?.placement || 'all').trim().toLowerCase()
