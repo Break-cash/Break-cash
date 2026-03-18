@@ -1,4 +1,14 @@
 {
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        { "type": "host", "value": "www.breakcash.cash" }
+      ],
+      "destination": "https://breakcash.cash/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
