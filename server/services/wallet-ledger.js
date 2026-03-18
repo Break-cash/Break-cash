@@ -94,10 +94,11 @@ export async function getWalletAccountsOverview(db, userId) {
 /**
  * Get main balance for user (sum of main+system account).
  * Source of truth: wallet_accounts.
+ * If no row exists, creates one with balance 0 (lazy init) so we don't log errors on first read.
  */
 export async function getMainBalance(db, userId, currency) {
   const curr = String(currency || 'USDT').trim().toUpperCase()
-  const row = await get(
+  let row = await get(
     db,
     `SELECT COALESCE(balance_amount, 0) AS balance FROM wallet_accounts
      WHERE user_id = ? AND currency = ? AND account_type = 'main' AND source_type = 'system'
@@ -105,12 +106,16 @@ export async function getMainBalance(db, userId, currency) {
     [userId, curr],
   )
   if (row == null) {
-    if (process.env.NODE_ENV === 'production') {
-      console.warn(`[wallet] Missing wallet_accounts row for user=${userId} currency=${curr}`)
-    }
-    return 0
+    await getOrCreateWalletAccount(db, userId, curr, 'main', 'system')
+    row = await get(
+      db,
+      `SELECT COALESCE(balance_amount, 0) AS balance FROM wallet_accounts
+       WHERE user_id = ? AND currency = ? AND account_type = 'main' AND source_type = 'system'
+       LIMIT 1`,
+      [userId, curr],
+    )
   }
-  return Number(row.balance || 0)
+  return row != null ? Number(row.balance || 0) : 0
 }
 
 /**
