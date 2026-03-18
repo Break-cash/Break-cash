@@ -161,6 +161,36 @@ async function createAdminAuditLog(db, payload) {
   )
 }
 
+/**
+ * Temporary detailed log for every admin financial action.
+ * Source of truth: wallet_accounts + wallet_transactions. Logs to console and adds to audit metadata.
+ */
+function logAdminFinancialAction(payload) {
+  const {
+    adminUserId,
+    targetUserId,
+    actionType,
+    sourceTable = 'wallet_transactions',
+    targetTable = 'wallet_accounts',
+    transactionId = null,
+    balanceBefore = null,
+    balanceAfter = null,
+    extra = {},
+  } = payload
+  const line = {
+    admin_user_id: adminUserId,
+    target_user_id: targetUserId,
+    action_type: actionType,
+    source_table: sourceTable,
+    target_table: targetTable,
+    transaction_id: transactionId,
+    balance_before: balanceBefore,
+    balance_after: balanceAfter,
+    ...extra,
+  }
+  console.log('[admin-financial]', JSON.stringify(line))
+}
+
 async function getUserUnlockOverride(db, userId) {
   const row = await get(
     db,
@@ -683,7 +713,8 @@ export function createBalanceRouter(db) {
     const delta = type === 'deduct' ? -Math.abs(amount) : Math.abs(amount)
     try {
       await withTransaction(db, async (tx) => {
-        await adjustBalance(tx, {
+        const balanceBeforeAdjust = await getMainBalance(tx, userId, currency)
+        const { walletTxnId, balanceAfter: balanceAfterAdjust } = await adjustBalance(tx, {
           userId,
           currency,
           delta,
@@ -691,6 +722,17 @@ export function createBalanceRouter(db) {
           referenceId: req.user.id,
           createdBy: req.user.id,
           note: note || 'Admin balance adjustment',
+        })
+        logAdminFinancialAction({
+          adminUserId: req.user.id,
+          targetUserId: userId,
+          actionType: 'balance_adjust',
+          sourceTable: 'wallet_transactions',
+          targetTable: 'wallet_accounts',
+          transactionId: walletTxnId,
+          balanceBefore: balanceBeforeAdjust,
+          balanceAfter: balanceAfterAdjust,
+          extra: { delta, currency },
         })
         await run(
           tx,
@@ -1143,7 +1185,8 @@ export function createBalanceRouter(db) {
         )
         outcomeStatus = 'rejected'
       } else {
-        const { walletTxnId } = await createDeposit(tx, {
+        const balanceBeforeDeposit = await getBalanceAmount(tx, item.user_id, item.currency)
+        const { walletTxnId, balanceAfter: balanceAfterDeposit } = await createDeposit(tx, {
           userId: item.user_id,
           currency: item.currency,
           amount: Number(item.amount),
@@ -1152,6 +1195,27 @@ export function createBalanceRouter(db) {
           idempotencyKey: `deposit_review_${requestId}`,
           createdBy: req.user.id,
           note: adminNote || `Approved deposit request #${requestId}`,
+        })
+        const verifiedBalance = await getBalanceAmount(tx, item.user_id, item.currency)
+        if (verifiedBalance !== balanceAfterDeposit) {
+          console.warn('[admin-financial] deposit approval balance mismatch', {
+            requestId,
+            userId: item.user_id,
+            expected: balanceAfterDeposit,
+            actual: verifiedBalance,
+            walletTxnId,
+          })
+        }
+        logAdminFinancialAction({
+          adminUserId: req.user.id,
+          targetUserId: item.user_id,
+          actionType: 'deposit_approve',
+          sourceTable: 'deposit_requests',
+          targetTable: 'wallet_accounts',
+          transactionId: walletTxnId,
+          balanceBefore: balanceBeforeDeposit,
+          balanceAfter: balanceAfterDeposit,
+          extra: { requestId, amount: Number(item.amount), currency: item.currency },
         })
         const rules = await getRules(tx)
         const unlockProfile = await getEffectiveUnlockProfile(tx, item.user_id, item.currency, rules)
@@ -1198,7 +1262,14 @@ export function createBalanceRouter(db) {
           targetUserId: item.user_id,
           section: 'balance_requests',
           action: 'deposit_approved',
-          metadata: JSON.stringify({ requestId, amount: item.amount, currency: item.currency }),
+          metadata: JSON.stringify({
+            requestId,
+            amount: item.amount,
+            currency: item.currency,
+            walletTxnId,
+            balanceBefore: balanceBeforeDeposit,
+            balanceAfter: balanceAfterDeposit,
+          }),
         })
         outcomeStatus = 'approved'
       }
@@ -1249,12 +1320,12 @@ export function createBalanceRouter(db) {
       } else {
         const rules = await getRules(tx)
         const summary = await unlockAllPrincipalLocksIfEligible(tx, item.user_id, item.currency, rules)
-        const currentAmount = await getBalanceAmount(tx, item.user_id, item.currency)
+        const balanceBeforeWithdraw = await getBalanceAmount(tx, item.user_id, item.currency)
         const requestedAmount = Number(item.amount || 0)
-        if (currentAmount < requestedAmount || summary.withdrawable_balance < requestedAmount) {
+        if (balanceBeforeWithdraw < requestedAmount || summary.withdrawable_balance < requestedAmount) {
           throw new Error('INSUFFICIENT_BALANCE')
         }
-        const { walletTxnId } = await createWithdrawal(tx, {
+        const { walletTxnId, balanceAfter: balanceAfterWithdraw } = await createWithdrawal(tx, {
           userId: item.user_id,
           currency: item.currency,
           amount: requestedAmount,
@@ -1263,6 +1334,17 @@ export function createBalanceRouter(db) {
           idempotencyKey: `withdrawal_review_${requestId}`,
           createdBy: req.user.id,
           note: adminNote || `Approved withdrawal request #${requestId}`,
+        })
+        logAdminFinancialAction({
+          adminUserId: req.user.id,
+          targetUserId: item.user_id,
+          actionType: 'withdrawal_approve',
+          sourceTable: 'withdrawal_requests',
+          targetTable: 'wallet_accounts',
+          transactionId: walletTxnId,
+          balanceBefore: balanceBeforeWithdraw,
+          balanceAfter: balanceAfterWithdraw,
+          extra: { requestId, amount: requestedAmount, currency: item.currency },
         })
         const updateRes = await run(
           tx,
@@ -1287,7 +1369,14 @@ export function createBalanceRouter(db) {
           targetUserId: item.user_id,
           section: 'balance_requests',
           action: 'withdrawal_approved',
-          metadata: JSON.stringify({ requestId, amount: requestedAmount, currency: item.currency }),
+          metadata: JSON.stringify({
+            requestId,
+            amount: requestedAmount,
+            currency: item.currency,
+            walletTxnId,
+            balanceBefore: balanceBeforeWithdraw,
+            balanceAfter: balanceAfterWithdraw,
+          }),
         })
         outcomeStatus = 'approved'
       }
@@ -1349,10 +1438,10 @@ export function createBalanceRouter(db) {
     if (!userId || amount < 0) return res.status(400).json({ error: 'INVALID_INPUT' })
     const fixedAmount = Number(amount.toFixed(8))
     await withTransaction(db, async (tx) => {
-      const prevAmount = await getMainBalance(tx, userId, currency)
-      const delta = Number((fixedAmount - prevAmount).toFixed(8))
+      const balanceBeforeSet = await getMainBalance(tx, userId, currency)
+      const delta = Number((fixedAmount - balanceBeforeSet).toFixed(8))
       if (delta !== 0) {
-        await adjustBalance(tx, {
+        const { walletTxnId } = await adjustBalance(tx, {
           userId,
           currency,
           delta,
@@ -1360,6 +1449,17 @@ export function createBalanceRouter(db) {
           referenceId: req.user.id,
           createdBy: req.user.id,
           note: note || 'Set by owner',
+        })
+        logAdminFinancialAction({
+          adminUserId: req.user.id,
+          targetUserId: userId,
+          actionType: 'owner_set',
+          sourceTable: 'wallet_transactions',
+          targetTable: 'wallet_accounts',
+          transactionId: walletTxnId,
+          balanceBefore: balanceBeforeSet,
+          balanceAfter: fixedAmount,
+          extra: { currency, delta },
         })
       }
       await run(
