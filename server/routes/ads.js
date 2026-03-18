@@ -174,7 +174,7 @@ export function createAdsRouter(db) {
     const existing = await get(db, `SELECT id, media_url, sort_order FROM ads WHERE id = ? LIMIT 1`, [id])
     if (!existing) return res.status(404).json({ error: 'NOT_FOUND' })
     const type = String(req.body?.type || 'image').toLowerCase()
-    const mediaUrl = String(req.body?.mediaUrl ?? existing.media_url || '').trim()
+    const mediaUrl = String((req.body?.mediaUrl ?? existing.media_url ?? '')).trim()
     const title = String(req.body?.title ?? '').trim().slice(0, 120)
     const description = String(req.body?.description ?? '').trim().slice(0, 400)
     const linkUrl = String(req.body?.linkUrl ?? '').trim().slice(0, 500)
