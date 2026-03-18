@@ -77,7 +77,12 @@ export function Login({ onAuthSuccess }: LoginProps) {
       )
       onAuthSuccess?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('login_unknown_error'))
+      const isNetworkError =
+        err instanceof Error &&
+        (err.message === 'Failed to fetch' || err.name === 'TypeError')
+      setError(
+        isNetworkError ? t('login_network_error') : (err instanceof Error ? err.message : t('login_unknown_error')),
+      )
     } finally {
       setLoading(false)
     }
@@ -97,7 +102,12 @@ export function Login({ onAuthSuccess }: LoginProps) {
       setRecoverySuccess(t('login_recovery_request_success'))
       setRecoveryCode('')
     } catch (err) {
-      setRecoveryError(err instanceof Error ? err.message : t('login_unknown_error'))
+      const isNetworkError =
+        err instanceof Error &&
+        (err.message === 'Failed to fetch' || err.name === 'TypeError')
+      setRecoveryError(
+        isNetworkError ? t('login_network_error') : (err instanceof Error ? err.message : t('login_unknown_error')),
+      )
     } finally {
       setRecoveryLoading(false)
     }
@@ -204,7 +214,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
 
           {error ? (
             <div className="login-error">
-              {t('login_action_failed')}: {error}
+              {error}
             </div>
           ) : null}
           {successMsg ? <div className="login-success">{successMsg}</div> : null}
