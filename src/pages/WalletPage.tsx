@@ -20,6 +20,7 @@ import {
   type WalletOverview,
   type EarningGroup,
 } from '../api'
+import { TotalAssetsCard } from '../components/wallet/TotalAssetsCard'
 import { useI18n } from '../i18nCore'
 
 type TabId = 'overview' | 'history' | 'earnings'
@@ -215,15 +216,11 @@ export function WalletPage() {
       {tab === 'overview' && overview && (
         <div className="space-y-6">
           {/* Total assets - hero */}
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-6 shadow-xl">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(0,230,118,0.08)_0%,transparent_60%)]" />
-            <p className="relative mb-2 text-sm font-medium uppercase tracking-wider text-white/50">
-              {t('wallet_overview_total_assets')}
-            </p>
-            <p className="relative text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              {formatAmount(overview.total_assets)}
-            </p>
-          </div>
+          <TotalAssetsCard
+            totalAssets={overview.total_assets}
+            currency="USDT"
+            titleKey="wallet_overview_total_assets"
+          />
 
           {/* Balance breakdown */}
           <div className="grid grid-cols-3 gap-3">

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChevronDown, Crown, Gift, UserPlus, Users } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Crown, Gift, UserPlus, Users } from 'lucide-react'
 import {
   apiFetch,
   getMyProfile,
   getAds,
+  getWalletOverview,
   subscribeToLiveUpdates,
   type AuthUser,
   type AdItem,
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
+import { TotalAssetsCard } from '../components/wallet/TotalAssetsCard'
 import { useI18n } from '../i18nCore'
 import { getPremiumProfileColorClass } from '../premiumIdentity'
 import { appData } from '../data'
@@ -21,10 +23,10 @@ export function Profile() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const [realBalance, setRealBalance] = useState<number | null>(null)
+  const [totalAssets, setTotalAssets] = useState<number | null>(null)
   const [profile, setProfile] = useState<AuthUser | null>(null)
   const [holdings, setHoldings] = useState<{ id: number; symbol: string; quantity: number }[]>([])
   const [loading, setLoading] = useState(true)
-  const [currency, setCurrency] = useState('USDT')
   const [liveQuotes, setLiveQuotes] = useState<Record<string, { price: number; change24h: number }>>({})
   const [profileAds, setProfileAds] = useState<AdItem[]>([])
   const [isPullRefreshing, setIsPullRefreshing] = useState(false)
@@ -36,8 +38,13 @@ export function Profile() {
   const earningsCurrency = appData.balance_info.currency || 'USDT'
 
   const loadCoreDashboardData = useCallback(async () => {
-    const results = await Promise.allSettled([getMyProfile(), apiFetch('/api/balance/my'), apiFetch('/api/portfolio/holdings')])
-    const [profileRes, balanceRes, holdingsRes] = results
+    const results = await Promise.allSettled([
+      getMyProfile(),
+      apiFetch('/api/balance/my'),
+      apiFetch('/api/portfolio/holdings'),
+      getWalletOverview('USDT'),
+    ])
+    const [profileRes, balanceRes, holdingsRes, overviewRes] = results
     if (profileRes.status === 'fulfilled') setProfile(profileRes.value.profile)
     if (balanceRes.status === 'fulfilled') {
       const balances = (balanceRes.value as { balances: { amount: number }[] }).balances
@@ -48,6 +55,9 @@ export function Profile() {
       setHoldings(
         (holdingsRes.value as { holdings: { id: number; symbol: string; quantity: number }[] }).holdings,
       )
+    }
+    if (overviewRes.status === 'fulfilled' && overviewRes.value != null) {
+      setTotalAssets(Number((overviewRes.value as { total_assets: number }).total_assets ?? 0))
     }
   }, [])
 
@@ -124,7 +134,7 @@ export function Profile() {
     }
   }, [loadCoreDashboardData, loadAdsData, refreshDashboard])
 
-  const dashboardBalance = realBalance ?? walletDashboardMock.total_balance_usd
+  const dashboardBalance = totalAssets ?? realBalance ?? walletDashboardMock.total_balance_usd
   const assetsToRender = useMemo(() => {
     return walletDashboardMock.my_assets.map((item) => {
       const found = holdings.find((holding) => holding.symbol === item.symbol)
@@ -220,60 +230,51 @@ export function Profile() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: 'easeOut' }}
-        className={`elite-enter elite-hover-lift elite-shine rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#272c35,#222831)] p-4 shadow-[0_12px_44px_rgba(0,0,0,0.3)] ${premiumProfileColorClass}`}
+        className={`elite-enter space-y-4 ${premiumProfileColorClass}`}
       >
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/deposit')}
-              className="icon-interactive deposit-glow-icon h-10 rounded-xl border border-brand-blue/40 bg-brand-blue px-4 text-sm font-semibold text-white hover:brightness-110"
-            >
-              {t('deposit')}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/withdraw')}
-              className="icon-interactive withdraw-glow-icon h-10 rounded-xl border border-emerald-300/30 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 px-4 text-sm font-semibold text-white hover:brightness-110"
-            >
-              {t('withdraw')}
-            </button>
-          </div>
-          <div className="ms-auto text-start">
-            <p className="text-xs text-app-muted">{t('profile_total_assets')}</p>
-            <div className="mt-1 flex items-center gap-2">
-              <h1 className="text-3xl font-bold tracking-tight lg:text-[2.1rem]">${dashboardBalance.toFixed(2)}</h1>
-              <label className="relative inline-flex items-center">
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="h-8 appearance-none rounded-lg border border-app-border bg-app-elevated px-2 pe-6 text-xs text-white"
-                >
-                  <option value="USDT">USDT</option>
-                  <option value="USD">USD</option>
-                </select>
-                <ChevronDown size={12} className="pointer-events-none absolute end-2 text-white/70" />
-              </label>
-            </div>
-            <div className="mt-1">
-              <p className="text-[11px] text-app-muted">{t('home_today_earnings')}</p>
-              <p className={`text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
-                {dailyEarnings.toFixed(2)} {earningsCurrency}
-              </p>
-            </div>
-          </div>
+        <TotalAssetsCard
+          totalAssets={dashboardBalance}
+          currency="USDT"
+          titleKey="wallet_overview_total_assets"
+          onClick={() => navigate('/assets')}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/deposit')}
+            className="icon-interactive flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-400 transition hover:border-emerald-500/50 hover:bg-emerald-500/15"
+          >
+            <ArrowDownLeft size={20} strokeWidth={2} />
+            {t('deposit')}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/withdraw')}
+            className="icon-interactive flex items-center gap-2 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-4 py-2.5 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/50 hover:bg-brand-blue/15"
+          >
+            <ArrowUpRight size={20} strokeWidth={2} />
+            {t('withdraw')}
+          </button>
         </div>
-        {profile ? (
-          <div className="inline-flex items-center gap-2 rounded-xl border border-app-border bg-app-elevated px-2.5 py-1">
-            <span className="text-xs font-medium text-white/90">{profile.display_name || `#${profile.id}`}</span>
-            <UserIdentityBadges
-              badgeColor={profile.badge_color || 'none'}
-              vipLevel={profile.vip_level || 0}
-              premiumBadge={profile.profile_badge}
-              mode="verified"
-            />
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+          <div>
+            <p className="text-[11px] text-white/50">{t('home_today_earnings')}</p>
+            <p className={`text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
+              {dailyEarnings.toFixed(2)} {earningsCurrency}
+            </p>
           </div>
-        ) : null}
+          {profile ? (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1">
+              <span className="text-xs font-medium text-white/90">{profile.display_name || `#${profile.id}`}</span>
+              <UserIdentityBadges
+                badgeColor={profile.badge_color || 'none'}
+                vipLevel={profile.vip_level || 0}
+                premiumBadge={profile.profile_badge}
+                mode="verified"
+              />
+            </div>
+          ) : null}
+        </div>
       </motion.section>
       <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
         <div className="mb-2 flex items-center justify-between">
