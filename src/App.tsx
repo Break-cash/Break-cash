@@ -94,7 +94,14 @@ function OwnerGuard({ user }: OwnerGuardProps) {
   if (!user || user.role !== 'owner') {
     return <Navigate to="/portfolio" replace />
   }
-  return <Outlet />
+  // Lazy require to avoid pulling owner shell into non-owner bundles unnecessarily.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  const { OwnerLayout } = require('./pages/owner/OwnerLayout') as typeof import('./pages/owner/OwnerLayout')
+  return (
+    <OwnerLayout user={user}>
+      <Outlet />
+    </OwnerLayout>
+  )
 }
 
 function resolveUiLanguage(): Language {
