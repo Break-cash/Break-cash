@@ -12,16 +12,10 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import {
-  getWalletOverview,
-  getWalletHistory,
-  getEarningHistory,
-  subscribeToLiveUpdates,
-  type WalletOverview,
-  type EarningGroup,
-} from '../api'
+import { getWalletOverview, getWalletHistory, getEarningHistory, subscribeToLiveUpdates, type WalletOverview, type EarningGroup } from '../api'
 import { TotalAssetsCard } from '../components/wallet/TotalAssetsCard'
 import { useI18n } from '../i18nCore'
+import { mapWalletApiToSummary } from '../walletSummary'
 
 type TabId = 'overview' | 'history' | 'earnings'
 
@@ -246,9 +240,13 @@ export function WalletPage() {
       )}
       {tab === 'overview' && overview && (
         <div className="space-y-6">
+          {(() => {
+            const summary = mapWalletApiToSummary(overview)
+            return (
+              <>
           {/* Total assets - hero */}
           <TotalAssetsCard
-            totalAssets={overview.total_assets}
+                totalAssets={summary.totalAssets}
             currency="USDT"
             titleKey="wallet_overview_total_assets"
           />
@@ -259,21 +257,24 @@ export function WalletPage() {
               <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-white/50">
                 {t('wallet_overview_main_balance')}
               </p>
-              <p className="text-lg font-semibold text-white">{formatAmount(overview.main_balance)}</p>
+                  <p className="text-lg font-semibold text-white">{formatAmount(summary.mainBalance)}</p>
             </div>
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
               <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-amber-400/70">
                 {t('wallet_overview_locked')}
               </p>
-              <p className="text-lg font-semibold text-amber-400">{formatAmount(overview.locked_balance)}</p>
+                  <p className="text-lg font-semibold text-amber-400">{formatAmount(summary.lockedBalance)}</p>
             </div>
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
               <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-emerald-400/70">
                 {t('wallet_overview_withdrawable')}
               </p>
-              <p className="text-lg font-semibold text-emerald-400">{formatAmount(overview.withdrawable_balance)}</p>
+                  <p className="text-lg font-semibold text-emerald-400">{formatAmount(summary.withdrawableBalance)}</p>
             </div>
           </div>
+              </>
+            )
+          })()}
 
           {/* By source */}
           {overview.by_source && overview.by_source.length > 0 && (

@@ -18,12 +18,12 @@ import { useI18n } from '../i18nCore'
 import { getPremiumProfileColorClass } from '../premiumIdentity'
 import { appData } from '../data'
 import { walletDashboardMock } from '../ui/mobileMock'
+import { mapWalletApiToSummary, type WalletSummary } from '../walletSummary'
 
 export function Profile() {
   const { t } = useI18n()
   const navigate = useNavigate()
-  const [realBalance, setRealBalance] = useState<number | null>(null)
-  const [totalAssets, setTotalAssets] = useState<number | null>(null)
+  const [walletSummary, setWalletSummary] = useState<WalletSummary | null>(null)
   const [profile, setProfile] = useState<AuthUser | null>(null)
   const [holdings, setHoldings] = useState<{ id: number; symbol: string; quantity: number }[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,24 +40,18 @@ export function Profile() {
   const loadCoreDashboardData = useCallback(async () => {
     const results = await Promise.allSettled([
       getMyProfile(),
-      apiFetch('/api/balance/my'),
       apiFetch('/api/portfolio/holdings'),
       getWalletOverview('USDT'),
     ])
-    const [profileRes, balanceRes, holdingsRes, overviewRes] = results
+    const [profileRes, , holdingsRes, overviewRes] = results
     if (profileRes.status === 'fulfilled') setProfile(profileRes.value.profile)
-    if (balanceRes.status === 'fulfilled') {
-      const balances = (balanceRes.value as { balances: { amount: number }[] }).balances
-      const sum = balances.reduce((acc, row) => acc + Number(row.amount || 0), 0)
-      setRealBalance(sum)
-    }
     if (holdingsRes.status === 'fulfilled') {
       setHoldings(
         (holdingsRes.value as { holdings: { id: number; symbol: string; quantity: number }[] }).holdings,
       )
     }
     if (overviewRes.status === 'fulfilled' && overviewRes.value != null) {
-      setTotalAssets(Number((overviewRes.value as { total_assets: number }).total_assets ?? 0))
+      setWalletSummary(mapWalletApiToSummary(overviewRes.value as unknown as { total_assets?: unknown; main_balance?: unknown; locked_balance?: unknown; withdrawable_balance?: unknown }))
     }
   }, [])
 
@@ -134,7 +128,7 @@ export function Profile() {
     }
   }, [loadCoreDashboardData, loadAdsData, refreshDashboard])
 
-  const dashboardBalance = totalAssets ?? realBalance ?? walletDashboardMock.total_balance_usd
+  const dashboardBalance = walletSummary?.totalAssets ?? walletDashboardMock.total_balance_usd
   const assetsToRender = useMemo(() => {
     return walletDashboardMock.my_assets.map((item) => {
       const found = holdings.find((holding) => holding.symbol === item.symbol)
