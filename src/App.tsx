@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -84,6 +84,17 @@ function resolveSplashMode(): SplashMode {
 function shouldShowSplashOnEntry(mode: SplashMode): boolean {
   if (mode === 'always') return true
   return sessionStorage.getItem(SPLASH_SESSION_SEEN_KEY) !== '1'
+}
+
+type OwnerGuardProps = {
+  user: AuthUser | null
+}
+
+function OwnerGuard({ user }: OwnerGuardProps) {
+  if (!user || user.role !== 'owner') {
+    return <Navigate to="/portfolio" replace />
+  }
+  return <Outlet />
 }
 
 function resolveUiLanguage(): Language {
@@ -426,36 +437,11 @@ function App() {
                         )
                       }
                     />
-                    <Route
-                      path="/owner"
-                      element={
-                        user?.role === 'owner' ? (
-                          <OwnerUnifiedControlPage user={user as AuthUser} />
-                        ) : (
-                          <Navigate to="/portfolio" replace />
-                        )
-                      }
-                    />
-                    <Route
-                      path="/owner/premium"
-                      element={
-                        user?.role === 'owner' ? (
-                          <OwnerPremiumDashboardPage user={user as AuthUser} />
-                        ) : (
-                          <Navigate to="/portfolio" replace />
-                        )
-                      }
-                    />
-                    <Route
-                      path="/owner/operations"
-                      element={
-                        user?.role === 'owner' ? (
-                          <OwnerDashboardPage user={user as AuthUser} />
-                        ) : (
-                          <Navigate to="/portfolio" replace />
-                        )
-                      }
-                    />
+                    <Route path="/owner/*" element={<OwnerGuard user={user as AuthUser} />}>
+                      <Route index element={<OwnerUnifiedControlPage user={user as AuthUser} />} />
+                      <Route path="premium" element={<OwnerPremiumDashboardPage user={user as AuthUser} />} />
+                      <Route path="operations" element={<OwnerDashboardPage user={user as AuthUser} />} />
+                    </Route>
                     <Route path="*" element={<Navigate to="/portfolio" replace />} />
                   </Routes>
                 </Suspense>
