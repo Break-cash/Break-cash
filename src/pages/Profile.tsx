@@ -43,14 +43,14 @@ export function Profile() {
       apiFetch('/api/portfolio/holdings'),
       getWalletOverview('USDT'),
     ])
-    const [profileRes, , holdingsRes, overviewRes] = results
-    if (profileRes.status === 'fulfilled') setProfile(profileRes.value.profile)
-    if (holdingsRes.status === 'fulfilled') {
+    const [profileRes, holdingsRes, overviewRes] = results
+    if (profileRes?.status === 'fulfilled') setProfile(profileRes.value.profile)
+    if (holdingsRes?.status === 'fulfilled') {
       setHoldings(
         (holdingsRes.value as { holdings: { id: number; symbol: string; quantity: number }[] }).holdings,
       )
     }
-    if (overviewRes.status === 'fulfilled' && overviewRes.value != null) {
+    if (overviewRes?.status === 'fulfilled' && overviewRes.value != null) {
       setWalletSummary(mapWalletApiToSummary(overviewRes.value as unknown as { total_assets?: unknown; main_balance?: unknown; locked_balance?: unknown; withdrawable_balance?: unknown }))
     }
   }, [])
