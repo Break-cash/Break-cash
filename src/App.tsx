@@ -64,6 +64,7 @@ const OwnerUnifiedControlPage = lazy(() =>
 const OwnerDashboardPage = lazy(() =>
   import('./pages/owner/OwnerDashboardPage').then((m) => ({ default: m.OwnerDashboardPage })),
 )
+import { OwnerLayout } from './pages/owner/OwnerLayout'
 
 type LoginRouteWrapperProps = {
   onAuthSuccess: () => void
@@ -94,9 +95,6 @@ function OwnerGuard({ user }: OwnerGuardProps) {
   if (!user || user.role !== 'owner') {
     return <Navigate to="/portfolio" replace />
   }
-  // Lazy require to avoid pulling owner shell into non-owner bundles unnecessarily.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-  const { OwnerLayout } = require('./pages/owner/OwnerLayout') as typeof import('./pages/owner/OwnerLayout')
   return (
     <OwnerLayout user={user}>
       <Outlet />
