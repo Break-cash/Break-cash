@@ -174,6 +174,7 @@ export function createAdsRouter(db) {
     const existing = await get(db, `SELECT id, media_url, sort_order FROM ads WHERE id = ? LIMIT 1`, [id])
     if (!existing) return res.status(404).json({ error: 'NOT_FOUND' })
     const type = String(req.body?.type || 'image').toLowerCase()
+    // Node 20 ESM: avoid ??/|| mix in single expression (SyntaxError on Railway)
     const mediaUrlRaw = req.body?.mediaUrl ?? existing.media_url ?? ''
     const mediaUrl = String(mediaUrlRaw).trim()
     const title = String(req.body?.title ?? '').trim().slice(0, 120)
