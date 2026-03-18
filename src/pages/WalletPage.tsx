@@ -81,11 +81,42 @@ export function WalletPage() {
     dateTo: '',
   })
   const [selectedTxn, setSelectedTxn] = useState<WalletTxn | null>(null)
+  const [loadError, setLoadError] = useState(false)
 
   function loadOverview() {
-    getWalletOverview('USDT')
-      .then((data) => setOverview(data))
-      .catch(() => setOverview(null))
+    setLoadError(false)
+    return getWalletOverview('USDT')
+      .then((data) => {
+        setOverview(data)
+        setLoadError(false)
+      })
+      .catch(() => {
+        setOverview(null)
+        setLoadError(true)
+      })
+  }
+
+  function loadInitial() {
+    setLoading(true)
+    setLoadError(false)
+    Promise.all([
+      getWalletOverview('USDT'),
+      getWalletHistory({ currency: 'USDT', limit: 100 }),
+      getEarningHistory({ limit: 100, grouped: true }),
+    ])
+      .then(([ov, hist, earn]) => {
+        setOverview(ov)
+        setTransactions((hist.transactions || []) as WalletTxn[])
+        setEarningGrouped(earn.grouped || [])
+        setLoadError(false)
+      })
+      .catch(() => {
+        setOverview(null)
+        setTransactions([])
+        setEarningGrouped([])
+        setLoadError(true)
+      })
+      .finally(() => setLoading(false))
   }
 
   function loadHistory() {
@@ -102,19 +133,7 @@ export function WalletPage() {
   }
 
   useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      getWalletOverview('USDT'),
-      getWalletHistory({ currency: 'USDT', limit: 100 }),
-      getEarningHistory({ limit: 100, grouped: true }),
-    ])
-      .then(([ov, hist, earn]) => {
-        setOverview(ov)
-        setTransactions((hist.transactions || []) as WalletTxn[])
-        setEarningGrouped(earn.grouped || [])
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    loadInitial()
   }, [])
 
   useEffect(() => {
@@ -213,6 +232,18 @@ export function WalletPage() {
       </div>
 
       {/* Overview tab */}
+      {tab === 'overview' && !loading && loadError && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-8 text-center">
+          <p className="mb-4 text-white/80">{t('wallet_overview_load_failed')}</p>
+          <button
+            type="button"
+            onClick={() => loadInitial()}
+            className="rounded-xl border border-white/20 bg-white/10 px-6 py-2.5 text-sm font-medium text-white transition hover:bg-white/20"
+          >
+            {t('common_retry')}
+          </button>
+        </div>
+      )}
       {tab === 'overview' && overview && (
         <div className="space-y-6">
           {/* Total assets - hero */}

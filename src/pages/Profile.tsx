@@ -218,7 +218,7 @@ export function Profile() {
                 key={tool.to}
                 type="button"
                 onClick={() => navigate(tool.to)}
-                className="icon-interactive rounded-full border border-white/10 bg-[#252d3a] px-3 py-1.5 text-xs font-medium text-white/85 hover:border-brand-blue/35 hover:bg-[#2b3443]"
+                className="icon-interactive rounded-full border border-white/10 bg-app-elevated px-3 py-1.5 text-xs font-medium text-white/85 hover:border-brand-blue/35 hover:bg-app-card"
               >
                 {tool.label}
               </button>

@@ -94,7 +94,7 @@ export function MobileBottomNav() {
       className="fixed inset-x-0 bottom-[max(10px,env(safe-area-inset-bottom))] z-50 px-2"
       aria-label={t('nav_mobile') || 'Mobile navigation'}
     >
-      <div className="elite-enter elite-shine relative mx-auto w-full max-w-[760px] rounded-[24px] border border-white/12 bg-[#10141d]/92 px-2.5 pb-2 pt-2 shadow-[0_20px_45px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+      <div className="elite-enter elite-shine relative mx-auto w-full max-w-[760px] rounded-[24px] border border-white/12 bg-[var(--bg-surface)]/95 px-2.5 pb-2 pt-2 shadow-[var(--shadow-card)] backdrop-blur-2xl">
         <div
           className={`flex items-end justify-between gap-1 ${
             direction === 'rtl' ? 'flex-row-reverse' : ''
@@ -121,10 +121,10 @@ export function MobileBottomNav() {
                   aria-hidden="true"
                   className={`relative inline-flex items-center justify-center ${
                     isFab
-                      ? 'h-[58px] w-[58px] rounded-full border border-white/25 bg-gradient-to-b from-[#1d2433] to-[#0b0f16] shadow-[0_14px_30px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.3)]'
+                      ? 'h-[58px] w-[58px] rounded-full border border-white/20 bg-gradient-to-b from-[var(--bg-elevated)] to-[var(--bg-base)] shadow-[var(--shadow-card),inset_0_1px_0_rgba(255,255,255,0.12)]'
                       : `h-9 w-9 rounded-full border ${
                           isActive
-                            ? 'elite-active-glow border-brand-blue/55 bg-brand-blue/20 shadow-[0_0_0_2px_rgba(0,123,255,0.14)]'
+                            ? 'elite-active-glow border-[var(--border-blue)] bg-brand-blue/20 shadow-[0_0_0_2px_rgba(37,99,235,0.2)]'
                             : 'border-white/10 bg-white/[0.04]'
                         }`
                   }`}
