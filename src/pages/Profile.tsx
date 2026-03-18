@@ -230,13 +230,14 @@ export function Profile() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, ease: 'easeOut' }}
-        className={`elite-enter space-y-4 ${premiumProfileColorClass}`}
+        className={`elite-enter w-full max-w-full space-y-4 ${premiumProfileColorClass}`}
       >
         <TotalAssetsCard
           totalAssets={dashboardBalance}
           currency="USDT"
           titleKey="wallet_overview_total_assets"
           onClick={() => navigate('/assets')}
+          variant="hero"
         />
         <div className="flex flex-wrap items-center gap-2">
           <button
