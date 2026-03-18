@@ -232,30 +232,32 @@ export function Profile() {
         transition={{ duration: 0.28, ease: 'easeOut' }}
         className={`elite-enter w-full max-w-full space-y-4 ${premiumProfileColorClass}`}
       >
-        <TotalAssetsCard
-          totalAssets={dashboardBalance}
-          currency="USDT"
-          titleKey="wallet_overview_total_assets"
-          onClick={() => navigate('/assets')}
-          variant="hero"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/deposit')}
-            className="icon-interactive flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-400 transition hover:border-emerald-500/50 hover:bg-emerald-500/15"
-          >
-            <ArrowDownLeft size={20} strokeWidth={2} />
-            {t('deposit')}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/withdraw')}
-            className="icon-interactive flex items-center gap-2 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-4 py-2.5 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/50 hover:bg-brand-blue/15"
-          >
-            <ArrowUpRight size={20} strokeWidth={2} />
-            {t('withdraw')}
-          </button>
+        <div className="flex min-w-0 flex-col gap-3">
+          <TotalAssetsCard
+            totalAssets={dashboardBalance}
+            currency="USDT"
+            titleKey="wallet_overview_total_assets"
+            onClick={() => navigate('/assets')}
+            variant="hero"
+          />
+          <div className="grid min-w-0 grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/deposit')}
+              className="icon-interactive flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-400 transition hover:border-emerald-500/50 hover:bg-emerald-500/15 active:scale-[0.98]"
+            >
+              <ArrowDownLeft size={20} strokeWidth={2} className="shrink-0" />
+              <span className="truncate">{t('deposit')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/withdraw')}
+              className="icon-interactive flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-4 py-3 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/50 hover:bg-brand-blue/15 active:scale-[0.98]"
+            >
+              <ArrowUpRight size={20} strokeWidth={2} className="shrink-0" />
+              <span className="truncate">{t('withdraw')}</span>
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
           <div>

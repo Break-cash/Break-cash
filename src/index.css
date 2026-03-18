@@ -8,6 +8,40 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Design tokens – surfaces & text */
+  --bg-base: #070B14;
+  --bg-surface: #0B1120;
+  --bg-card: #111827;
+  --bg-elevated: #161F2F;
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --text-disabled: #64748B;
+
+  /* Accents */
+  --accent-blue: #2563EB;
+  --accent-blue-soft: #3B82F6;
+  --accent-cyan: #0EA5E9;
+  --accent-emerald: #10B981;
+  --accent-emerald-soft: #34D399;
+  --accent-amber: #F59E0B;
+  --accent-red: #EF4444;
+
+  /* Borders & effects */
+  --border-soft: rgba(255,255,255,0.08);
+  --border-glass: rgba(255,255,255,0.12);
+  --border-blue: rgba(59,130,246,0.45);
+  --border-green: rgba(16,185,129,0.35);
+
+  --shadow-card: 0 10px 30px rgba(0,0,0,0.35);
+  --shadow-inner: inset 0 0 0 1px rgba(255,255,255,0.04);
+  --glow-blue: 0 0 24px rgba(37,99,235,0.12);
+  --glow-green: 0 0 20px rgba(16,185,129,0.10);
+
+  --gradient-page: linear-gradient(180deg, #070B14 0%, #0B1120 45%, #111827 100%);
+  --gradient-card: linear-gradient(135deg, rgba(17,24,39,0.96) 0%, rgba(11,17,32,0.98) 55%, rgba(15,23,42,0.96) 100%);
 }
 
 html,
