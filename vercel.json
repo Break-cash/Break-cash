@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://api-production-114c.up.railway.app/api/$1"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "https://api-production-114c.up.railway.app/uploads/$1"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/"
     }
