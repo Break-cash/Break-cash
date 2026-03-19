@@ -10,7 +10,7 @@
     "dev": "vite",
     "dev:server": "node server/index.js",
     "dev:all": "node server/index.js",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/verify-dist.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server/index.js"
