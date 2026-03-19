@@ -19,6 +19,7 @@ import { createStatsRouter } from './routes/stats.js'
 import { createFriendsRouter } from './routes/friends.js'
 
 const PORT = Number(process.env.PORT || 5174)
+const HOST = process.env.HOST || '0.0.0.0'
 const app = express()
 const SENTRY_DSN = String(process.env.SENTRY_DSN || '').trim()
 
@@ -101,8 +102,14 @@ async function bootstrap() {
     return res.status(500).json({ error: 'SERVER_ERROR' })
   })
 
-  app.listen(PORT, () => {
-    console.log(`BREAK CASH API running on http://localhost:${PORT}`)
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.join(process.cwd(), 'dist')
+    app.use(express.static(distPath))
+    app.get('/{*path}', (_req, res) => res.sendFile(path.join(distPath, 'index.html')))
+  }
+
+  app.listen(PORT, HOST, () => {
+    console.log(`BREAK CASH API running on http://${HOST}:${PORT}`)
   })
 }
 
@@ -111,4 +118,3 @@ bootstrap().catch((error) => {
   console.error('Server bootstrap failed:', error)
   process.exit(1)
 })
-
