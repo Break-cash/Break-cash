@@ -27,7 +27,17 @@ export type AuthUser = {
   points?: number
   referred_by?: number | null
   is_owner?: number
+  preferred_language?: 'ar' | 'en' | 'tr' | string | null
   created_at?: string
+}
+
+function getPreferredLanguageForApi() {
+  const raw = String(localStorage.getItem('breakcash_language') || '').trim().toLowerCase()
+  if (raw === 'ar' || raw === 'en' || raw === 'tr') return raw
+  const browserLang = String(navigator.language || '').toLowerCase()
+  if (browserLang.startsWith('ar')) return 'ar'
+  if (browserLang.startsWith('tr')) return 'tr'
+  return 'en'
 }
 
 function resolveErrorCodeFromBody(body: unknown) {
@@ -127,14 +137,14 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
 export async function login(identifier: string, password: string) {
   return apiFetch('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ identifier, password }),
+    body: JSON.stringify({ identifier, password, preferredLanguage: getPreferredLanguageForApi() }),
   }) as Promise<{ token: string; user: AuthUser }>
 }
 
 export async function registerAccount(identifier: string, password: string) {
   return apiFetch('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ identifier, password }),
+    body: JSON.stringify({ identifier, password, preferredLanguage: getPreferredLanguageForApi() }),
   }) as Promise<{ token: string; user: AuthUser }>
 }
 
@@ -145,7 +155,7 @@ export async function registerWithInvite(
 ) {
   return apiFetch('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ identifier, password, inviteCode }),
+    body: JSON.stringify({ identifier, password, inviteCode, preferredLanguage: getPreferredLanguageForApi() }),
   }) as Promise<{ token: string; user: AuthUser }>
 }
 
@@ -204,6 +214,7 @@ export async function updateMyProfile(payload: {
   phone?: string | null
   displayName?: string | null
   bio?: string | null
+  preferredLanguage?: 'ar' | 'en' | 'tr'
 }) {
   return apiFetch('/api/profile/update', {
     method: 'POST',
@@ -404,8 +415,210 @@ export type AdItem = {
   updatedAt?: string
 }
 
+const CURATED_ADS_BY_PLACEMENT: Record<string, AdItem[]> = {
+  home: [
+    {
+      id: 991001,
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+      placement: 'home',
+      sortOrder: 0,
+      isActive: true,
+    },
+    {
+      id: 991002,
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+      placement: 'home',
+      sortOrder: 1,
+      isActive: true,
+    },
+    {
+      id: 991003,
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض التعدين الكهربائي',
+      linkUrl: '/mining',
+      placement: 'home',
+      sortOrder: 2,
+      isActive: true,
+    },
+    {
+      id: 991004,
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'يفتح صفحة التعدين',
+      linkUrl: '/mining',
+      placement: 'home',
+      sortOrder: 3,
+      isActive: true,
+    },
+  ],
+  deposit: [
+    {
+      id: 992001,
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+      placement: 'deposit',
+      sortOrder: 0,
+      isActive: true,
+    },
+    {
+      id: 992002,
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+      placement: 'deposit',
+      sortOrder: 1,
+      isActive: true,
+    },
+    {
+      id: 992003,
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض التعدين الكهربائي',
+      linkUrl: '/mining',
+      placement: 'deposit',
+      sortOrder: 2,
+      isActive: true,
+    },
+    {
+      id: 992004,
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'يفتح صفحة التعدين',
+      linkUrl: '/mining',
+      placement: 'deposit',
+      sortOrder: 3,
+      isActive: true,
+    },
+  ],
+  mining: [
+    {
+      id: 993001,
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+      placement: 'mining',
+      sortOrder: 0,
+      isActive: true,
+    },
+    {
+      id: 993002,
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+      placement: 'mining',
+      sortOrder: 1,
+      isActive: true,
+    },
+    {
+      id: 993003,
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض التعدين الكهربائي',
+      linkUrl: '/mining',
+      placement: 'mining',
+      sortOrder: 2,
+      isActive: true,
+    },
+    {
+      id: 993004,
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'يفتح صفحة التعدين',
+      linkUrl: '/mining',
+      placement: 'mining',
+      sortOrder: 3,
+      isActive: true,
+    },
+  ],
+  profile: [
+    {
+      id: 994001,
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+      placement: 'profile',
+      sortOrder: 0,
+      isActive: true,
+    },
+    {
+      id: 994002,
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+      placement: 'profile',
+      sortOrder: 1,
+      isActive: true,
+    },
+    {
+      id: 994003,
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض التعدين الكهربائي',
+      linkUrl: '/mining',
+      placement: 'profile',
+      sortOrder: 2,
+      isActive: true,
+    },
+    {
+      id: 994004,
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'يفتح صفحة التعدين',
+      linkUrl: '/mining',
+      placement: 'profile',
+      sortOrder: 3,
+      isActive: true,
+    },
+  ],
+}
+
+function shouldUseCuratedAds(items: AdItem[]) {
+  if (!Array.isArray(items) || items.length === 0) return true
+  return items.every((item) => Number(item?.id || 0) >= 900000)
+}
+
+function normalizeAdsForPlacement(placement: string, items: AdItem[]) {
+  const curated = CURATED_ADS_BY_PLACEMENT[placement]
+  if (!curated) return items
+  if (!shouldUseCuratedAds(items)) return items
+  return curated
+}
+
 export async function getAds(placement: string) {
-  return apiFetch(`/api/ads?placement=${encodeURIComponent(placement)}`) as Promise<{ items: AdItem[] }>
+  const res = await apiFetch(`/api/ads?placement=${encodeURIComponent(placement)}`) as { items: AdItem[] }
+  return {
+    items: normalizeAdsForPlacement(String(placement || '').trim().toLowerCase(), Array.isArray(res.items) ? res.items : []),
+  }
 }
 
 export async function getAdsAdmin() {
@@ -1207,12 +1420,35 @@ export type DailyTradeCampaign = {
   take_profit?: number | null
   stop_loss?: number | null
   success_rate?: number
+  reward_amount?: number
+  reward_currency?: string
   visibility_scope: 'all' | 'depositors' | 'vip' | 'vip_level'
   min_vip_level: number
   is_visible: number
+  claims_count?: number
   starts_at?: string | null
   ends_at?: string | null
   created_at?: string
+}
+
+export type UserDailyTradeReward = {
+  id: number
+  title: string
+  symbol?: string | null
+  side?: string | null
+  entry_price?: number | null
+  take_profit?: number | null
+  stop_loss?: number | null
+  success_rate?: number
+  reward_amount: number
+  reward_currency: string
+  visibility_scope: 'all' | 'depositors' | 'vip' | 'vip_level'
+  min_vip_level: number
+  starts_at?: string | null
+  ends_at?: string | null
+  claimed: boolean
+  claim_status?: string | null
+  claimed_at?: string | null
 }
 
 export type BonusRule = {
@@ -1242,6 +1478,8 @@ export type UserVipTier = {
   level: number
   title: string
   min_deposit: number
+  min_team_volume?: number
+  min_referrals?: number
   referral_percent: number
   perks: string[]
 }
@@ -1249,8 +1487,12 @@ export type UserVipTier = {
 export type UserVipSummary = {
   currentVipLevel: number
   totalDeposit: number
+  currentDirectReferrals?: number
+  currentTeamVolume?: number
   nextLevel: number | null
   nextMinDeposit: number | null
+  nextMinReferrals?: number | null
+  nextMinTeamVolume?: number | null
   progressPct: number
   tiers: UserVipTier[]
 }
@@ -1273,9 +1515,24 @@ export type ReferralSummary = {
   referralCode: string
   referralLink: string
   referralPercent: number
+  referralRule?: {
+    id: number
+    title: string
+    conditions?: Record<string, unknown>
+    reward?: Record<string, unknown>
+  } | null
   totalInvitedUsers: number
   totalReferralEarnings: number
   rewardHistory: ReferralRewardHistoryItem[]
+}
+
+export type PromotionRule = {
+  id: number
+  rule_type: 'first_deposit' | 'referral' | string
+  title: string
+  conditions?: Record<string, unknown>
+  reward?: Record<string, unknown>
+  is_active: number
 }
 
 export type PartnerProfile = {
@@ -1315,6 +1572,7 @@ export async function getDailyTradeCampaigns() {
 }
 
 export async function createDailyTradeCampaign(payload: {
+  id?: number
   title: string
   symbol?: string
   side?: string
@@ -1322,6 +1580,8 @@ export async function createDailyTradeCampaign(payload: {
   takeProfit?: number
   stopLoss?: number
   successRate?: number
+  rewardAmount?: number
+  rewardCurrency?: string
   visibilityScope: 'all' | 'depositors' | 'vip' | 'vip_level'
   minVipLevel?: number
   isVisible?: boolean
@@ -1341,11 +1601,36 @@ export async function toggleDailyTradeCampaign(id: number, isVisible: boolean) {
   }) as Promise<{ ok: boolean }>
 }
 
+export async function deleteDailyTradeCampaign(id: number) {
+  return apiFetch(`/api/owner-growth/daily-trades/${id}`, {
+    method: 'DELETE',
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function getMyDailyTradeRewards() {
+  return apiFetch('/api/rewards/daily-trades') as Promise<{ items: UserDailyTradeReward[] }>
+}
+
+export async function claimDailyTradeReward(id: number) {
+  return apiFetch(`/api/rewards/daily-trades/${id}/claim`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }) as Promise<{
+    ok: boolean
+    claimId: number
+    rewardAmount: number
+    rewardCurrency: string
+    walletTxnId: number | null
+    balanceAfter: number | null
+  }>
+}
+
 export async function getBonusRules() {
   return apiFetch('/api/owner-growth/bonus-rules') as Promise<{ items: BonusRule[] }>
 }
 
 export async function createBonusRule(payload: {
+  id?: number
   ruleType: 'deposit' | 'first_deposit' | 'referral' | 'seasonal'
   title: string
   conditions?: Record<string, unknown>
@@ -1360,6 +1645,19 @@ export async function createBonusRule(payload: {
   }) as Promise<{ ok: boolean }>
 }
 
+export async function toggleBonusRule(id: number, isActive: boolean) {
+  return apiFetch('/api/owner-growth/bonus-rules/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ id, isActive: isActive ? 1 : 0 }),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function deleteBonusRule(id: number) {
+  return apiFetch(`/api/owner-growth/bonus-rules/${id}`, {
+    method: 'DELETE',
+  }) as Promise<{ ok: boolean }>
+}
+
 export async function getVipTiers() {
   return apiFetch('/api/owner-growth/vip-tiers') as Promise<{ items: VipTier[] }>
 }
@@ -1370,6 +1668,13 @@ export async function getMyVipSummary() {
 
 export async function getMyReferralSummary() {
   return apiFetch('/api/rewards/referral') as Promise<ReferralSummary>
+}
+
+export async function getActivePromotions() {
+  return apiFetch('/api/rewards/promotions') as Promise<{
+    firstDeposit: PromotionRule[]
+    referral: PromotionRule[]
+  }>
 }
 
 export async function upsertVipTier(payload: {
@@ -1508,6 +1813,23 @@ export type KycWatchlistItem = {
   created_at: string
 }
 
+export type RecoveryCodeReviewRequestItem = {
+  id: number
+  user_id: number
+  recovery_code: string
+  request_status: 'pending' | 'approved' | 'rejected' | string
+  request_note?: string | null
+  submitted_ip?: string | null
+  submitted_user_agent?: string | null
+  reviewed_by?: number | null
+  reviewed_at?: string | null
+  created_at: string
+  updated_at?: string | null
+  display_name?: string | null
+  email?: string | null
+  phone?: string | null
+}
+
 export async function getSecurityOverview() {
   return apiFetch('/api/owner-growth/security/overview') as Promise<SecurityOverview>
 }
@@ -1623,6 +1945,18 @@ export async function toggleKycWatchlistEntry(id: number, isActive: boolean) {
   }) as Promise<{ ok: boolean }>
 }
 
+export async function getRecoveryCodeReviewRequests(status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  return apiFetch(`/api/owner-growth/recovery-code/requests${query}`) as Promise<{ items: RecoveryCodeReviewRequestItem[] }>
+}
+
+export async function reviewRecoveryCodeRequest(payload: { id: number; decision: 'approve' | 'reject'; note?: string }) {
+  return apiFetch('/api/owner-growth/recovery-code/review', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean }>
+}
+
 export type RewardTierRule = {
   minBalance: number
   maxBalance: number | null
@@ -1641,6 +1975,69 @@ export type TaskRewardCodeItem = {
   alreadyUsed?: boolean
   createdAt?: string
   updatedAt?: string
+}
+
+export type StrategyCodeFeatureType = 'trial_trade' | 'promo_bonus'
+export type StrategyCodeRewardMode = 'percent' | 'fixed'
+
+export type StrategyCodeItem = {
+  id: number
+  code: string
+  title: string
+  description?: string
+  featureType: StrategyCodeFeatureType
+  rewardMode: StrategyCodeRewardMode
+  rewardValue: number
+  assetSymbol: string
+  tradeReturnPercent: number
+  expiresAt?: string | null
+  isActive: boolean
+  alreadyUsed?: boolean
+  usage?: StrategyCodeUsage | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type StrategyCodeUsage = {
+  id: number
+  status: string
+  selectedSymbol: string
+  balanceSnapshot: number
+  stakeAmount: number
+  entryPrice?: number | null
+  exitPrice?: number | null
+  rewardValue: number
+  tradeReturnPercent: number
+  confirmedAt?: string | null
+  settledAt?: string | null
+  usedAt?: string | null
+}
+
+export type StrategyCodeAdminItem = StrategyCodeItem & {
+  createdBy?: number | null
+  createdByName?: string | null
+  usageCount: number
+  consumedCount: number
+}
+
+export type StrategyCodeUsageAdminItem = {
+  id: number
+  codeId: number
+  userId: number
+  userDisplayName?: string | null
+  userEmail?: string | null
+  userPhone?: string | null
+  status: string
+  selectedSymbol: string
+  balanceSnapshot: number
+  stakeAmount: number
+  rewardValue: number
+  tradeReturnPercent: number
+  entryPrice?: number | null
+  exitPrice?: number | null
+  confirmedAt?: string | null
+  settledAt?: string | null
+  usedAt?: string | null
 }
 
 export async function getTaskCodesMy() {
@@ -1683,6 +2080,107 @@ export async function toggleTaskCodeAdmin(id: number, isActive: boolean) {
 
 export async function deleteTaskCodeAdmin(id: number) {
   return apiFetch(`/api/tasks/admin/codes/${id}`, { method: 'DELETE' }) as Promise<{ ok: boolean }>
+}
+
+export async function getMyStrategyCodes() {
+  return apiFetch('/api/tasks/strategy-codes/my') as Promise<{ items: StrategyCodeItem[] }>
+}
+
+export async function previewStrategyCode(code: string, symbol?: string) {
+  return apiFetch('/api/tasks/strategy-codes/preview', {
+    method: 'POST',
+    body: JSON.stringify({ code, symbol }),
+  }) as Promise<{
+    ok: boolean
+    codeId: number
+    title: string
+    description?: string
+    featureType: StrategyCodeFeatureType
+    assetSymbol: string
+    currentPrice: number
+    requiresConfirmation: boolean
+    preview: {
+      action: 'trial_trade' | 'promo_bonus'
+      stakeAmount?: number
+      tradeReturnPercent?: number
+      rewardMode?: StrategyCodeRewardMode
+      rewardValue?: number
+      rewardAmount?: number
+      balanceSnapshot: number
+      confirmationMessage: string
+    }
+  }>
+}
+
+export async function redeemStrategyCode(payload: { code: string; symbol?: string; confirmed: boolean }) {
+  return apiFetch('/api/tasks/strategy-codes/redeem', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{
+    ok: boolean
+    codeId: number
+    usageId: number
+    featureType: StrategyCodeFeatureType
+    status: string
+    assetSymbol?: string
+    stakeAmount?: number
+    tradeReturnPercent?: number
+    entryPrice?: number
+    rewardAmount?: number
+    balanceAfter: number
+  }>
+}
+
+export async function settleStrategyTrade(usageId: number) {
+  return apiFetch(`/api/tasks/strategy-codes/${usageId}/settle`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }) as Promise<{
+    ok: boolean
+    usageId: number
+    status: string
+    exitPrice: number
+    payoutAmount: number
+    profitAmount: number
+    balanceAfter: number
+  }>
+}
+
+export async function getStrategyCodesAdmin() {
+  return apiFetch('/api/tasks/admin/strategy-codes') as Promise<{
+    items: StrategyCodeAdminItem[]
+    usages: StrategyCodeUsageAdminItem[]
+  }>
+}
+
+export async function upsertStrategyCodeAdmin(payload: {
+  id?: number
+  code: string
+  title: string
+  description?: string
+  featureType: StrategyCodeFeatureType
+  rewardMode: StrategyCodeRewardMode
+  rewardValue: number
+  assetSymbol: string
+  tradeReturnPercent: number
+  expiresAt?: string | null
+  isActive: boolean
+}) {
+  return apiFetch('/api/tasks/admin/strategy-codes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean; id: number }>
+}
+
+export async function toggleStrategyCodeAdmin(id: number, isActive: boolean) {
+  return apiFetch(`/api/tasks/admin/strategy-codes/${id}/toggle`, {
+    method: 'POST',
+    body: JSON.stringify({ isActive }),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function deleteStrategyCodeAdmin(id: number) {
+  return apiFetch(`/api/tasks/admin/strategy-codes/${id}`, { method: 'DELETE' }) as Promise<{ ok: boolean }>
 }
 
 export type MiningMediaItem = {
@@ -1735,7 +2233,7 @@ export async function subscribeMining(amount: number) {
   return apiFetch('/api/mining/subscribe', {
     method: 'POST',
     body: JSON.stringify({ amount }),
-  }) as Promise<{ ok: boolean }>
+  }) as Promise<{ ok: boolean; action?: 'subscribe' | 'increase'; principalAmount?: number }>
 }
 
 export async function claimMiningDaily() {

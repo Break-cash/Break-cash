@@ -12,6 +12,8 @@ import {
   settleMiningAtMaturity,
   executeMiningEmergencyWithdrawal,
 } from '../services/wallet-service.js'
+import { createLocalizedNotification } from '../services/notifications.js'
+import { getVipRuntimeRules } from '../services/vip-rules.js'
 
 const MINING_PERMISSION = 'تعدين'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -232,11 +234,12 @@ export function createMiningRouter(db) {
     const personalBalance = await getMainBalance(db, req.user.id, 'USDT')
     const releaseAtMs = parseDateTime(profile?.principal_release_at)
     const monthlyLockUntilMs = parseDateTime(profile?.monthly_lock_until)
+    const profileStatus = String(profile?.status || '')
     const canReleasePrincipal =
-      String(profile?.status || '') === 'cancelled_pending_release' &&
-      releaseAtMs != null &&
-      nowMs >= releaseAtMs &&
-      Number(profile?.principal_amount || 0) > 0
+      ['active', 'cancelled_pending_release'].includes(profileStatus) &&
+      Number(profile?.principal_amount || 0) > 0 &&
+      !profile?.principal_released_at &&
+      !profile?.emergency_withdrawn_at
     let monthlyAggregate = 0
     if (profile) {
       const monthRange = getMonthBoundsUtc(nowMs)
@@ -289,20 +292,44 @@ export function createMiningRouter(db) {
           `SELECT * FROM mining_profiles WHERE user_id = ? LIMIT 1`,
           [req.user.id],
         )
-        if (currentProfile && String(currentProfile.status || '') === 'active') {
-          throw new Error('MINING_ALREADY_ACTIVE')
-        }
 
         const currentBalance = await getMainBalance(tx, req.user.id, currency)
         if (currentBalance < amount) throw new Error('INSUFFICIENT_BALANCE')
 
-        const totalBalance = await getUserTotalBalance(tx, req.user.id)
-        const dailyPercent = resolveTierPercent(totalBalance, config.dailyTiers || [], 0)
-        const monthlyPercent = resolveTierPercent(totalBalance, config.monthlyTiers || [], 0)
-        const emergencyFeePercent = Number(config.emergencyFeePercent || 0)
         const nowMs = Date.now()
+        const isTopUp = currentProfile && String(currentProfile.status || '') === 'active'
+        const existingPrincipal = Number(currentProfile?.principal_amount || 0)
+        const nextPrincipalAmount = Number((existingPrincipal + amount).toFixed(8))
+        const tierBaseAmount = isTopUp ? nextPrincipalAmount : await getUserTotalBalance(tx, req.user.id)
+        const userVip = await get(tx, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [req.user.id])
+        const vipRules = getVipRuntimeRules(Number(userVip?.vip_level || 0))
+        const dailyPercent = Number(vipRules.dailyMiningPercent || resolveTierPercent(tierBaseAmount, config.dailyTiers || [], 0))
+        const monthlyPercent = Number((dailyPercent * 30).toFixed(4))
+        const emergencyFeePercent = Number(config.emergencyFeePercent || 0)
         const monthlyLockUntil = toIso(nowMs + MONTH_MS)
         const nowIso = toIso(nowMs)
+
+        if (isTopUp) {
+          const { dailyClaimable } = computeAccrual(currentProfile, nowMs)
+          if (dailyClaimable > 0) {
+            const referenceId = Number(currentProfile.id || 0) * 10000000 + Math.floor(nowMs / 1000)
+            await recordMiningDailyProfit(tx, {
+              userId: req.user.id,
+              amount: dailyClaimable,
+              profileId: currentProfile.id,
+              referenceId,
+            })
+            await run(
+              tx,
+              `UPDATE mining_profiles
+               SET daily_profit_claimed_total = COALESCE(daily_profit_claimed_total, 0) + ?,
+                   monthly_profit_accrued_total = COALESCE(monthly_profit_accrued_total, 0) + ?,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE user_id = ?`,
+              [dailyClaimable, dailyClaimable, req.user.id],
+            )
+          }
+        }
 
         await createMiningSubscription(tx, {
           userId: req.user.id,
@@ -321,21 +348,44 @@ export function createMiningRouter(db) {
           ON CONFLICT(user_id) DO UPDATE SET
             status = 'active',
             currency = excluded.currency,
-            principal_amount = excluded.principal_amount,
-            daily_percent = excluded.daily_percent,
-            monthly_percent = excluded.monthly_percent,
-            emergency_fee_percent = excluded.emergency_fee_percent,
-            started_at = excluded.started_at,
-            monthly_lock_until = excluded.monthly_lock_until,
-            last_daily_claim_at = excluded.last_daily_claim_at,
+            principal_amount = ?,
+            daily_percent = ?,
+            monthly_percent = ?,
+            emergency_fee_percent = ?,
+            started_at = CASE
+              WHEN mining_profiles.status = 'active' THEN mining_profiles.started_at
+              ELSE excluded.started_at
+            END,
+            monthly_lock_until = CASE
+              WHEN mining_profiles.status = 'active' THEN mining_profiles.monthly_lock_until
+              ELSE excluded.monthly_lock_until
+            END,
+            last_daily_claim_at = ?,
             cancel_requested_at = NULL,
             principal_release_at = NULL,
             principal_released_at = NULL,
             emergency_withdrawn_at = NULL,
             updated_at = CURRENT_TIMESTAMP`,
-          [req.user.id, currency, amount, dailyPercent, monthlyPercent, emergencyFeePercent, nowIso, monthlyLockUntil, nowIso],
+          [
+            req.user.id,
+            currency,
+            amount,
+            dailyPercent,
+            monthlyPercent,
+            emergencyFeePercent,
+            nowIso,
+            monthlyLockUntil,
+            nowIso,
+            nextPrincipalAmount,
+            dailyPercent,
+            monthlyPercent,
+            emergencyFeePercent,
+            nowIso,
+          ],
         )
-        const miningNoticeBody = `Subscription active with ${amount.toFixed(2)} USDT.`
+        const miningNoticeBody = isTopUp
+          ? `Subscription increased by ${amount.toFixed(2)} USDT.`
+          : `Subscription active with ${amount.toFixed(2)} USDT.`
         const latestMiningNotice = await get(
           tx,
           `SELECT id, body, created_at
@@ -351,20 +401,32 @@ export function createMiningRouter(db) {
           Date.now() - latestNoticeAtMs < 90 * 1000 &&
           String(latestMiningNotice?.body || '') === miningNoticeBody
         if (!isRecentDuplicateNotice) {
-          await run(
-            tx,
-            `INSERT INTO notifications (user_id, title, body)
-             VALUES (?, 'Mining subscription active', ?)`,
-            [req.user.id, miningNoticeBody],
-          )
+          await createLocalizedNotification(tx, req.user.id, 'mining_subscription_active', {
+            amount: isTopUp ? nextPrincipalAmount : amount,
+            currency,
+          })
         }
         const balanceAfter = Number((currentBalance - amount).toFixed(8))
-        return { amount, dailyPercent, monthlyPercent, emergencyFeePercent, monthlyLockUntil, balanceAfter }
+        return {
+          amount,
+          action: isTopUp ? 'increase' : 'subscribe',
+          principalAmount: nextPrincipalAmount,
+          dailyPercent,
+          monthlyPercent,
+          emergencyFeePercent,
+          monthlyLockUntil: isTopUp ? currentProfile?.monthly_lock_until || monthlyLockUntil : monthlyLockUntil,
+          balanceAfter,
+        }
       })
-      publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_subscribe' })
+      publishLiveUpdate({
+        type: 'balance_updated',
+        scope: 'user',
+        userId: req.user.id,
+        source: payload.action === 'increase' ? 'mining_increase' : 'mining_subscribe',
+      })
       return res.json({ ok: true, ...payload })
     } catch (error) {
-      const codes = new Set(['MINING_ALREADY_ACTIVE', 'INSUFFICIENT_BALANCE'])
+      const codes = new Set(['INSUFFICIENT_BALANCE'])
       if (error instanceof Error && codes.has(error.message)) {
         return res.status(400).json({ error: error.message })
       }
@@ -446,17 +508,17 @@ export function createMiningRouter(db) {
     try {
       const payload = await withTransaction(db, async (tx) => {
         const profile = await get(tx, `SELECT * FROM mining_profiles WHERE user_id = ? LIMIT 1`, [req.user.id])
-        if (!profile || String(profile.status || '') !== 'cancelled_pending_release') {
-          throw new Error('PRINCIPAL_NOT_READY')
-        }
-        const releaseAtMs = parseDateTime(profile.principal_release_at)
-        if (releaseAtMs == null || Date.now() < releaseAtMs) throw new Error('PRINCIPAL_LOCKED')
+        const profileStatus = String(profile?.status || '')
+        if (!profile || !['active', 'cancelled_pending_release'].includes(profileStatus)) throw new Error('PRINCIPAL_NOT_READY')
         const principal = Number(profile.principal_amount || 0)
         if (principal <= 0) throw new Error('PRINCIPAL_NOT_READY')
+        const feePercent = 20
+        const feeAmount = Number(((principal * feePercent) / 100).toFixed(8))
 
-        const { balanceAfter } = await settleMiningAtMaturity(tx, {
+        const { netAmount, balanceAfter } = await executeMiningEmergencyWithdrawal(tx, {
           userId: req.user.id,
           principal,
+          feeAmount,
           profileId: profile.id,
           idempotencyKey: `mining_release_${req.user.id}`,
         })
@@ -465,17 +527,20 @@ export function createMiningRouter(db) {
           `UPDATE mining_profiles
            SET status = 'inactive',
                principal_amount = 0,
+               cancel_requested_at = CURRENT_TIMESTAMP,
+               principal_release_at = CURRENT_TIMESTAMP,
                principal_released_at = CURRENT_TIMESTAMP,
+               emergency_withdrawn_at = CURRENT_TIMESTAMP,
                updated_at = CURRENT_TIMESTAMP
            WHERE user_id = ?`,
           [req.user.id],
         )
-        return { releasedAmount: principal, balanceAfter }
+        return { releasedAmount: netAmount, feeAmount, feePercent, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_release_principal' })
       return res.json({ ok: true, ...payload })
     } catch (error) {
-      const codes = new Set(['PRINCIPAL_NOT_READY', 'PRINCIPAL_LOCKED'])
+      const codes = new Set(['PRINCIPAL_NOT_READY'])
       if (error instanceof Error && codes.has(error.message)) {
         return res.status(400).json({ error: error.message })
       }

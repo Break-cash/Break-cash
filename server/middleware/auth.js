@@ -19,7 +19,7 @@ export function requireAuth(db) {
         `SELECT
           id, email, phone, role, is_approved, is_banned, is_frozen, banned_until, created_at,
           display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
-          phone_verified, identity_submitted, verification_ready_at,
+          phone_verified, identity_submitted, verification_ready_at, is_owner,
           two_factor_enabled, two_factor_for_admin_actions
          FROM users
          WHERE id = ? LIMIT 1`,
@@ -71,9 +71,11 @@ export function requireApproved() {
 export function requireRole(role) {
   return async (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'AUTH_REQUIRED' })
+    const isOwner = req.user.role === 'owner' || Number(req.user.is_owner || 0) === 1
     if (req.user.role === role) return next()
-    if (role === 'admin' && req.user.role === 'owner') return next()
-    if (role === 'moderator' && (req.user.role === 'admin' || req.user.role === 'owner')) {
+    if (role === 'owner' && isOwner) return next()
+    if (role === 'admin' && isOwner) return next()
+    if (role === 'moderator' && (req.user.role === 'admin' || isOwner)) {
       return next()
     }
     return res.status(403).json({ error: 'FORBIDDEN' })

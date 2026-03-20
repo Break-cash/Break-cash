@@ -15,7 +15,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { apiFetch, getHeaderIconConfig, type AuthUser, type HeaderIconConfigItem } from './api'
+import { apiFetch, getHeaderIconConfig, updateMyProfile, type AuthUser, type HeaderIconConfigItem } from './api'
 import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
 import { UserIdentityBadges } from './components/user/UserIdentityBadges'
@@ -64,6 +64,7 @@ export function Layout({
   const [avatarRetryNonce, setAvatarRetryNonce] = useState(0)
   const [avatarFailureCount, setAvatarFailureCount] = useState(0)
   const profileMenuRef = useRef<HTMLDivElement | null>(null)
+  const languageSyncRef = useRef('')
   const adminLinks = [
     canViewReports ? { title: t('nav_admin'), route: '/admin/dashboard' } : null,
     canManageUsers ? { title: t('admin_users'), route: '/admin/users' } : null,
@@ -96,6 +97,15 @@ export function Layout({
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (String(user.preferred_language || '').toLowerCase() === language) return
+    const syncKey = `${user.id}:${language}`
+    if (languageSyncRef.current === syncKey) return
+    languageSyncRef.current = syncKey
+    updateMyProfile({ preferredLanguage: language }).catch(() => {})
+  }, [language, user?.id, user?.preferred_language])
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -200,11 +210,11 @@ export function Layout({
   ]
 
   return (
-    <div dir={direction} className="min-h-[100dvh] overflow-x-clip bg-app-bg text-white">
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[linear-gradient(180deg,rgba(19,23,32,0.96),rgba(16,19,27,0.88))] pt-[max(6px,env(safe-area-inset-top))] shadow-[0_8px_26px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+    <div dir={direction} className="min-h-[100dvh] overflow-x-clip bg-app-bg text-[var(--text-primary)]">
+      <header className="sticky top-0 z-50 border-b border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(7,11,20,0.96),rgba(11,17,32,0.9))] pt-[max(6px,env(safe-area-inset-top))] shadow-[0_8px_26px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
         <div className="mx-auto w-full max-w-[1280px] px-3 pb-2 pt-1 lg:px-6 lg:pb-2 lg:pt-1.5">
-          <div className={`flex items-center justify-between gap-2.5 ${direction === 'rtl' ? 'flex-row-reverse' : ''}`}>
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="app-header-row">
+            <div className="app-header-side app-header-side-start">
               {profileIconVisible ? (
                 <div className="relative" ref={profileMenuRef}>
                   <button
@@ -232,7 +242,7 @@ export function Layout({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 6, scale: 0.98 }}
                         transition={{ duration: 0.16, ease: 'easeOut' }}
-                        className="absolute start-0 top-14 z-50 min-w-44 rounded-xl border border-white/10 bg-[#202632] p-2 shadow-[0_16px_32px_rgba(0,0,0,0.45)]"
+                        className="glass-panel absolute start-0 top-14 z-50 min-w-44 rounded-xl p-2 shadow-[0_16px_32px_rgba(0,0,0,0.45)]"
                       >
                         <div className="mb-1 rounded-lg border border-app-border bg-app-elevated px-3 py-2">
                           <div className="truncate text-sm font-semibold text-white">{user.display_name || `#${user.id}`}</div>
@@ -301,7 +311,22 @@ export function Layout({
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 rounded-2xl border border-white/10 bg-[#1b212d]/84 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+            <div className="app-header-brand-wrap">
+              <Link to="/portfolio" className="app-header-brand-banner" aria-label="BreakCash" dir="ltr">
+                <span className="app-header-brand-mark" aria-hidden="true">
+                  <span className="app-header-brand-mark-line app-header-brand-mark-line-lg" />
+                  <span className="app-header-brand-mark-line app-header-brand-mark-line-md" />
+                  <span className="app-header-brand-mark-line app-header-brand-mark-line-sm" />
+                </span>
+                <span className="app-header-brand-wordmark">BreakCash</span>
+                <span className="app-header-brand-badge" aria-hidden="true">
+                  <span className="app-header-brand-badge-check">✓</span>
+                </span>
+              </Link>
+            </div>
+
+            <div className="app-header-side app-header-side-actions">
+              <div className="glass-panel-soft app-header-actions-shell flex items-center gap-1.5 rounded-2xl p-1.5">
               {effectiveHeaderIcons.map((item) => {
                 if (!item.visible) return null
                 if (item.id === 'profile') return null
@@ -324,7 +349,7 @@ export function Layout({
                     <label key="language" className="liquid-glass-icon inline-flex h-10 items-center gap-1.5 rounded-full px-2 text-[11px] text-white/65">
                       <Globe2 size={13} />
                       <select
-                        className="h-7 rounded-full border border-white/10 bg-[#202733] px-2 text-xs text-white outline-none focus:border-brand-blue"
+                        className="glass-input h-7 rounded-full px-2 text-xs text-[var(--text-primary)]"
                         value={language}
                         onChange={(e) => setLanguage(e.target.value as Language)}
                         aria-label={t('language')}
@@ -356,6 +381,7 @@ export function Layout({
                 }
                 return null
               })}
+              </div>
             </div>
           </div>
 
@@ -368,7 +394,7 @@ export function Layout({
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="overflow-hidden"
               >
-                <div className="mt-2 rounded-2xl border border-app-border bg-app-card p-2">
+                <div className="glass-panel mt-2 rounded-2xl p-2">
                   <div className="relative">
                     <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-white/40">
                       <Search size={15} />
@@ -378,7 +404,7 @@ export function Layout({
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder={t('wallet_search')}
-                      className="h-10 w-full rounded-full border border-app-border bg-app-elevated ps-10 pe-10 text-sm text-white placeholder:text-app-muted/80 outline-none transition focus:border-brand-blue focus:shadow-[0_0_0_3px_rgba(0,123,255,0.2)]"
+                      className="glass-input h-10 w-full rounded-full ps-10 pe-10 text-sm text-[var(--text-primary)] placeholder:text-app-muted/80 transition"
                     />
                     <button
                       type="button"
@@ -392,21 +418,21 @@ export function Layout({
                   <div className="mt-2 flex gap-2 overflow-x-auto">
                     <button
                       type="button"
-                      className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+                      className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
                       onClick={() => navigate('/market')}
                     >
                       {t('nav_markets')}
                     </button>
                     <button
                       type="button"
-                      className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+                      className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
                       onClick={() => navigate('/futures')}
                     >
                       {t('nav_futures')}
                     </button>
                     <button
                       type="button"
-                      className="rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+                      className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
                       onClick={() => navigate('/friends')}
                     >
                       {t('nav_friends')}
@@ -453,10 +479,7 @@ export function Layout({
               ) : (
                 <div className="space-y-2">
                   {notifications.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-start justify-between gap-3 rounded-xl border border-app-border bg-app-elevated p-2"
-                    >
+                    <div key={item.id} className="glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2">
                       <div>
                         <div className="text-sm font-medium">{item.title}</div>
                         <div className="text-xs text-white/60">{item.body}</div>
@@ -487,7 +510,7 @@ export function Layout({
         <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-4">
           <aside className="hidden lg:block">
             <div className="sticky top-[96px] space-y-3">
-              <div className="rounded-2xl border border-app-border bg-app-card p-3">
+              <div className="glass-panel rounded-2xl p-3">
                 <div className="flex items-center gap-2">
                   <div className={`h-11 w-11 overflow-hidden rounded-full border border-app-border bg-app-elevated ${premiumProfileColorClass}`}>
                     {user.avatar_url && !avatarBroken ? (
@@ -518,7 +541,7 @@ export function Layout({
                   </div>
                 </div>
               </div>
-              <div className="rounded-2xl border border-app-border bg-app-card p-2.5">
+              <div className="glass-panel rounded-2xl p-2.5">
                 <div className="space-y-1">
                   {desktopQuickLinks.map((item) => {
                     const Icon = item.icon
@@ -529,15 +552,15 @@ export function Layout({
                         to={item.to}
                         className={`group flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition ${
                           isActive
-                            ? 'border border-brand-blue/45 bg-brand-blue/15 text-white shadow-[0_0_0_1px_rgba(0,123,255,0.2)]'
+                            ? 'border border-[var(--border-blue)] bg-brand-blue/15 text-white shadow-[var(--shadow-inner),var(--glow-blue)]'
                             : 'border border-transparent text-white/75 hover:border-app-border hover:bg-app-elevated'
                         }`}
                       >
                         <span
                           className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition ${
                             isActive
-                              ? 'border-brand-blue/45 bg-brand-blue/18 text-white'
-                              : 'border-white/10 bg-[#2a303c] text-white/80 group-hover:border-white/20'
+                              ? 'border-[var(--border-blue)] bg-brand-blue/18 text-white'
+                              : 'border-white/10 bg-[var(--bg-elevated)] text-white/80 group-hover:border-white/20'
                           }`}
                         >
                           <Icon size={14} />

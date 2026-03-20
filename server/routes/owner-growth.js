@@ -47,6 +47,26 @@ function buildValuesPlaceholders(rowCount, colCount) {
   return rows.join(', ')
 }
 
+function getMonthRange(rawValue) {
+  const raw = String(rawValue || '').trim()
+  const now = new Date()
+  const fallbackMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+  const month = /^\d{4}-\d{2}$/.test(raw) ? raw : fallbackMonth
+  const [yearPart, monthPart] = month.split('-')
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart)
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 1 || monthIndex > 12) {
+    return getMonthRange(fallbackMonth)
+  }
+  const startAt = new Date(Date.UTC(year, monthIndex - 1, 1, 0, 0, 0, 0))
+  const endAt = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0))
+  return {
+    month: `${year}-${String(monthIndex).padStart(2, '0')}`,
+    startAt: startAt.toISOString(),
+    endAt: endAt.toISOString(),
+  }
+}
+
 export function createOwnerGrowthRouter(db) {
   const router = Router()
   router.use(requireAuth(db), requireRole('owner'))
@@ -123,6 +143,7 @@ export function createOwnerGrowthRouter(db) {
   })
 
   router.post('/bonus-rules', async (req, res) => {
+    const id = Number(req.body?.id || 0)
     const ruleType = String(req.body?.ruleType || '').trim().toLowerCase()
     const title = String(req.body?.title || '').trim()
     const isActive = Number(req.body?.isActive) ? 1 : 0
@@ -133,6 +154,17 @@ export function createOwnerGrowthRouter(db) {
     if (!title || !['deposit', 'first_deposit', 'referral', 'seasonal'].includes(ruleType)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (id > 0) {
+      await run(
+        db,
+        `UPDATE bonus_rules
+         SET rule_type = ?, title = ?, conditions_json = ?, reward_json = ?, is_active = ?, starts_at = ?, ends_at = ?
+         WHERE id = ?`,
+        [ruleType, title, JSON.stringify(conditions), JSON.stringify(reward), isActive, startsAt, endsAt, id],
+      )
+      publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'bonus_rules' })
+      return res.json({ ok: true, id })
+    }
     await run(
       db,
       `INSERT INTO bonus_rules
@@ -140,6 +172,23 @@ export function createOwnerGrowthRouter(db) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [ruleType, title, JSON.stringify(conditions), JSON.stringify(reward), isActive, startsAt, endsAt, req.user.id],
     )
+    publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'bonus_rules' })
+    return res.json({ ok: true })
+  })
+
+  router.post('/bonus-rules/toggle', async (req, res) => {
+    const id = Number(req.body?.id || 0)
+    const isActive = Number(req.body?.isActive) ? 1 : 0
+    if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
+    await run(db, `UPDATE bonus_rules SET is_active = ? WHERE id = ?`, [isActive, id])
+    publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'bonus_rules' })
+    return res.json({ ok: true })
+  })
+
+  router.delete('/bonus-rules/:id', async (req, res) => {
+    const id = Number(req.params.id || 0)
+    if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
+    await run(db, `DELETE FROM bonus_rules WHERE id = ?`, [id])
     publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'bonus_rules' })
     return res.json({ ok: true })
   })
@@ -394,6 +443,148 @@ export function createOwnerGrowthRouter(db) {
       activePartners: Number(activePartners?.count || 0),
       activeContent: Number(activeContent?.count || 0),
     })
+  })
+
+  router.get('/reports/monthly-finance', async (req, res) => {
+    const { month, startAt, endAt } = getMonthRange(req.query.month)
+
+    const miningItemsRaw = await all(
+      db,
+      `SELECT wt.user_id,
+              MAX(u.display_name) AS display_name,
+              MAX(u.email) AS email,
+              MAX(u.phone) AS phone,
+              COUNT(*) AS subscription_count,
+              COALESCE(SUM(ABS(wt.amount)), 0) AS original_subscription_total,
+              MIN(wt.created_at) AS first_subscription_at,
+              MAX(wt.created_at) AS last_subscription_at
+       FROM wallet_transactions wt
+       LEFT JOIN users u ON u.id = wt.user_id
+       WHERE wt.source_type = 'mining'
+         AND wt.transaction_type = 'lock'
+         AND wt.reference_type = 'mining_subscription'
+         AND wt.created_at >= ?
+         AND wt.created_at < ?
+       GROUP BY wt.user_id
+       ORDER BY original_subscription_total DESC, last_subscription_at DESC
+       LIMIT 500`,
+      [startAt, endAt],
+    )
+    const miningItems = miningItemsRaw.map((row) => ({
+      ...row,
+      user_id: Number(row.user_id || 0),
+      subscription_count: Number(row.subscription_count || 0),
+      original_subscription_total: Number(row.original_subscription_total || 0),
+    }))
+
+    const depositItemsRaw = await all(
+      db,
+      `SELECT d.user_id,
+              MAX(u.display_name) AS display_name,
+              MAX(u.email) AS email,
+              MAX(u.phone) AS phone,
+              COUNT(*) AS deposits_count,
+              COALESCE(SUM(d.amount), 0) AS total_deposits,
+              MIN(COALESCE(d.completed_at, d.reviewed_at, d.updated_at, d.created_at)) AS first_deposit_at,
+              MAX(COALESCE(d.completed_at, d.reviewed_at, d.updated_at, d.created_at)) AS last_deposit_at
+       FROM deposit_requests d
+       LEFT JOIN users u ON u.id = d.user_id
+       WHERE LOWER(COALESCE(d.request_status, 'pending')) IN ('approved', 'completed')
+         AND COALESCE(d.completed_at, d.reviewed_at, d.updated_at, d.created_at) >= ?
+         AND COALESCE(d.completed_at, d.reviewed_at, d.updated_at, d.created_at) < ?
+       GROUP BY d.user_id
+       ORDER BY total_deposits DESC, last_deposit_at DESC
+       LIMIT 500`,
+      [startAt, endAt],
+    )
+    const depositItems = depositItemsRaw.map((row) => ({
+      ...row,
+      user_id: Number(row.user_id || 0),
+      deposits_count: Number(row.deposits_count || 0),
+      total_deposits: Number(row.total_deposits || 0),
+    }))
+
+    return res.json({
+      month,
+      mining: {
+        subscriberCount: miningItems.length,
+        subscriptionCount: miningItems.reduce((sum, row) => sum + Number(row.subscription_count || 0), 0),
+        totalOriginalSubscriptions: Number(
+          miningItems.reduce((sum, row) => sum + Number(row.original_subscription_total || 0), 0).toFixed(8),
+        ),
+        items: miningItems,
+      },
+      deposits: {
+        depositorCount: depositItems.length,
+        depositsCount: depositItems.reduce((sum, row) => sum + Number(row.deposits_count || 0), 0),
+        totalDeposits: Number(
+          depositItems.reduce((sum, row) => sum + Number(row.total_deposits || 0), 0).toFixed(8),
+        ),
+        items: depositItems,
+      },
+    })
+  })
+
+  router.get('/recovery-code-requests', async (req, res) => {
+    const status = String(req.query.status || '').trim().toLowerCase()
+    const params = []
+    const where = []
+    if (status) {
+      if (!['pending', 'approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: 'INVALID_INPUT' })
+      }
+      where.push(`LOWER(r.request_status) = ?`)
+      params.push(status)
+    }
+    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const items = await all(
+      db,
+      `SELECT r.id, r.user_id, r.recovery_code, r.request_status, r.request_note,
+              r.contact_channel, r.contact_value, r.submitted_ip, r.submitted_user_agent,
+              r.created_at, r.reviewed_at,
+              u.display_name, u.email, u.phone
+       FROM recovery_code_review_requests r
+       LEFT JOIN users u ON u.id = r.user_id
+       ${sqlWhere}
+       ORDER BY CASE WHEN LOWER(r.request_status) = 'pending' THEN 0 ELSE 1 END, r.id DESC
+       LIMIT 300`,
+      params,
+    )
+    return res.json({ items })
+  })
+
+  router.post('/recovery-code-requests/review', async (req, res) => {
+    const requestId = Number(req.body?.requestId || 0)
+    const decision = String(req.body?.decision || '').trim().toLowerCase()
+    const requestNote = String(req.body?.requestNote || '').trim() || null
+    if (!Number.isFinite(requestId) || requestId <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const row = await get(
+      db,
+      `SELECT id, user_id, request_status
+       FROM recovery_code_review_requests
+       WHERE id = ?
+       LIMIT 1`,
+      [requestId],
+    )
+    if (!row) return res.status(404).json({ error: 'NOT_FOUND' })
+
+    const nextStatus = decision === 'approve' ? 'approved' : 'rejected'
+    await run(
+      db,
+      `UPDATE recovery_code_review_requests
+       SET request_status = ?,
+           request_note = ?,
+           reviewed_by = ?,
+           reviewed_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [nextStatus, requestNote, req.user.id, requestId],
+    )
+    await logAudit(db, req.user.id, 'recovery_code', nextStatus, Number(row.user_id || 0), { requestId })
+    publishLiveUpdate({ type: 'owner_recovery_request_updated', source: 'owner_growth', requestId, status: nextStatus })
+    return res.json({ ok: true })
   })
 
   router.get('/security/overview', async (_req, res) => {

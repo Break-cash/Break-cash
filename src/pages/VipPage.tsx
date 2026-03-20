@@ -62,8 +62,8 @@ export function VipPage() {
 
   return (
     <div className="page space-y-3">
-      <section className="overflow-hidden rounded-2xl border border-app-border">
-        <img src="/ads/vip.jpeg" alt={t('home_action_vip_benefits')} className="w-full object-cover" loading="eager" />
+      <section className="app-icon-hero-shell overflow-hidden rounded-2xl border border-app-border">
+        <img src="/ads/vip.jpeg" alt={t('home_action_vip_benefits')} className="app-icon-hero-image w-full object-cover" loading="eager" />
       </section>
       <section className="elite-panel p-4">
         <div className="flex items-center gap-2">

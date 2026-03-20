@@ -56,6 +56,17 @@ export function ReferralPage() {
   }, [loadReferralSummary])
 
   const rows = useMemo(() => data?.rewardHistory || [], [data?.rewardHistory])
+  const referralRuleText = useMemo(() => {
+    const rule = data?.referralRule
+    if (!rule) return `${Number(data?.referralPercent || 0).toFixed(2)}%`
+    const reward = (rule.reward || {}) as Record<string, unknown>
+    const conditions = (rule.conditions || {}) as Record<string, unknown>
+    const mode = String(reward.mode || 'percent')
+    const value = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
+    const minDeposit = Number(conditions.minDeposit ?? 0)
+    if (mode === 'fixed') return `أودع صديقك ${minDeposit || 0} واحصل على ${value.toFixed(2)} USDT`
+    return `أودع صديقك ${minDeposit || 0} واحصل على ${value.toFixed(2)}%`
+  }, [data])
 
   async function copyText(value: string, mode: 'code' | 'link') {
     if (!value) return
@@ -75,16 +86,19 @@ export function ReferralPage() {
 
   return (
     <div className="page space-y-3">
-      <section className="overflow-hidden rounded-2xl border border-app-border">
-        <img src="/ads/invite.jpeg" alt={t('home_action_invite_earn')} className="w-full object-cover" loading="eager" />
+      <section className="app-icon-hero-shell overflow-hidden rounded-2xl border border-app-border">
+        <img src="/ads/invite.jpeg" alt={t('home_action_invite_earn')} className="app-icon-hero-image w-full object-cover" loading="eager" />
       </section>
-      <section className="elite-panel p-4">
-        <div className="flex items-center gap-2">
-          <Users size={18} className="text-brand-blue" />
-          <h1 className="text-lg font-semibold text-white">{t('referral_page_title')}</h1>
-        </div>
-        <p className="mt-1 text-sm text-app-muted">{t('referral_page_subtitle')}</p>
-      </section>
+          <section className="elite-panel p-4">
+            <div className="flex items-center gap-2">
+              <Users size={18} className="text-brand-blue" />
+              <h1 className="text-lg font-semibold text-white">{t('referral_page_title')}</h1>
+            </div>
+            <p className="mt-1 text-sm text-app-muted">{t('referral_page_subtitle')}</p>
+            <div className="mt-3 rounded-xl border border-app-border bg-app-elevated p-3 text-xs leading-6 text-white/85">
+              تُحتسب الإحالة مرة واحدة فقط لكل مستخدم. يجب أن يسجل صديقك عبر كودك أو رابطك، ثم يتم تأكيد أول إيداع له فعليًا، وبعدها فقط يحصل هو على مكافأة أول إيداع وتحصل أنت على مكافأة الإحالة.
+            </div>
+          </section>
 
       {loading ? (
         <section className="rounded-2xl border border-app-border bg-app-card p-4 text-sm text-app-muted">
@@ -131,7 +145,7 @@ export function ReferralPage() {
             <div className="rounded-2xl border border-app-border bg-app-card p-3">
               <p className="text-[11px] text-app-muted">{t('referral_bonus_percent_current')}</p>
               <p className="mt-1 text-lg font-semibold text-brand-blue">
-                {Number(data.referralPercent || 0).toFixed(2)}%
+                {referralRuleText}
               </p>
             </div>
             <div className="rounded-2xl border border-app-border bg-app-card p-3">

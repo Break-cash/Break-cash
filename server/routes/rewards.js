@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { all, get } from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
+import { resolveVipMetricsProgress } from '../services/vip-rules.js'
 
 function parsePerks(value) {
   if (!value) return []
@@ -9,6 +10,15 @@ function parsePerks(value) {
     return Array.isArray(parsed) ? parsed.map((item) => String(item || '').trim()).filter(Boolean) : []
   } catch {
     return []
+  }
+}
+
+function parseJsonSafe(value, fallback = null) {
+  try {
+    if (value == null || value === '') return fallback
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return fallback
   }
 }
 
@@ -39,6 +49,28 @@ async function resolveReferralPercent(db, vipLevel) {
   return toFiniteNumber(fallback[Math.max(0, Math.min(5, Number(vipLevel || 0)))], 3)
 }
 
+async function getVipNetworkMetrics(db, userId) {
+  const counts = await get(
+    db,
+    `SELECT COUNT(*) AS direct_referrals
+     FROM referrals
+     WHERE referrer_user_id = ?
+       AND status IN ('active', 'reward_released')`,
+    [userId],
+  )
+  const teamVolume = await get(
+    db,
+    `SELECT COALESCE(SUM(total_deposit), 0) AS team_volume
+     FROM users
+     WHERE referred_by = ?`,
+    [userId],
+  )
+  return {
+    directReferrals: Number(counts?.direct_referrals || 0),
+    teamVolume: toFiniteNumber(teamVolume?.team_volume, 0),
+  }
+}
+
 export function createRewardsRouter(db) {
   const router = Router()
   router.use(requireAuth(db))
@@ -56,7 +88,7 @@ export function createRewardsRouter(db) {
 
     const tiersRows = await all(
       db,
-      `SELECT level, title, min_deposit, referral_percent, perks_json
+      `SELECT level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json
        FROM vip_tiers
        WHERE is_active = 1
        ORDER BY level ASC`,
@@ -65,29 +97,35 @@ export function createRewardsRouter(db) {
       level: Number(row.level || 0),
       title: String(row.title || `VIP ${row.level || 0}`),
       min_deposit: toFiniteNumber(row.min_deposit, 0),
+      min_team_volume: toFiniteNumber(row.min_trade_volume, 0),
+      min_referrals: toFiniteNumber(row.referral_multiplier, 0),
       referral_percent: toFiniteNumber(row.referral_percent, 3),
       perks: parsePerks(row.perks_json),
     }))
 
     const currentVipLevel = Number(user.vip_level || 0)
     const totalDeposit = toFiniteNumber(user.total_deposit, 0)
+    const network = await getVipNetworkMetrics(db, req.user.id)
     const currentTier = tiers.filter((tier) => tier.level <= currentVipLevel).sort((a, b) => b.level - a.level)[0] || null
     const nextTier = tiers.find((tier) => tier.level > currentVipLevel) || null
 
     let progressPct = 100
     if (nextTier) {
-      const startDeposit = currentTier ? toFiniteNumber(currentTier.min_deposit, 0) : 0
-      const targetDeposit = Math.max(startDeposit, toFiniteNumber(nextTier.min_deposit, 0))
-      const denominator = Math.max(1, targetDeposit - startDeposit)
-      const ratio = (totalDeposit - startDeposit) / denominator
-      progressPct = Math.max(0, Math.min(100, Number((ratio * 100).toFixed(2))))
+      const depositProgress = resolveVipMetricsProgress(totalDeposit, nextTier.min_deposit)
+      const referralsProgress = resolveVipMetricsProgress(network.directReferrals, nextTier.min_referrals)
+      const teamProgress = resolveVipMetricsProgress(network.teamVolume, nextTier.min_team_volume)
+      progressPct = Math.min(depositProgress, referralsProgress, teamProgress)
     }
 
     return res.json({
       currentVipLevel,
       totalDeposit,
+      currentDirectReferrals: network.directReferrals,
+      currentTeamVolume: network.teamVolume,
       nextLevel: nextTier ? nextTier.level : null,
       nextMinDeposit: nextTier ? nextTier.min_deposit : null,
+      nextMinReferrals: nextTier ? nextTier.min_referrals : null,
+      nextMinTeamVolume: nextTier ? nextTier.min_team_volume : null,
       progressPct,
       tiers,
     })
@@ -106,6 +144,25 @@ export function createRewardsRouter(db) {
 
     const referralCode = String(user.referral_code || '').trim()
     const referralPercent = await resolveReferralPercent(db, Number(user.vip_level || 0))
+    const referralRuleRow = await get(
+      db,
+      `SELECT id, title, conditions_json, reward_json
+       FROM bonus_rules
+       WHERE rule_type = 'referral'
+         AND is_active = 1
+         AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+         AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+       ORDER BY id DESC
+       LIMIT 1`,
+    )
+    const referralRule = referralRuleRow
+      ? {
+          id: Number(referralRuleRow.id),
+          title: String(referralRuleRow.title || ''),
+          conditions: parseJsonSafe(referralRuleRow.conditions_json, {}) || {},
+          reward: parseJsonSafe(referralRuleRow.reward_json, {}) || {},
+        }
+      : null
 
     const invited = await get(
       db,
@@ -147,6 +204,7 @@ export function createRewardsRouter(db) {
       referralCode,
       referralLink: referralCode ? buildReferralLink(req, referralCode) : '',
       referralPercent,
+      referralRule,
       totalInvitedUsers: Number(invited?.total || 0),
       totalReferralEarnings: toFiniteNumber(earnings?.total, 0),
       rewardHistory: historyRows.map((row) => ({
@@ -162,6 +220,31 @@ export function createRewardsRouter(db) {
         qualified_at: row.qualified_at || null,
         reward_released_at: row.reward_released_at || null,
       })),
+    })
+  })
+
+  router.get('/promotions', async (_req, res) => {
+    const rows = await all(
+      db,
+      `SELECT id, rule_type, title, conditions_json, reward_json, is_active
+       FROM bonus_rules
+       WHERE is_active = 1
+         AND rule_type IN ('first_deposit', 'referral')
+         AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+         AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+       ORDER BY id DESC`,
+    )
+    const items = rows.map((row) => ({
+      id: Number(row.id),
+      rule_type: String(row.rule_type || ''),
+      title: String(row.title || ''),
+      conditions: parseJsonSafe(row.conditions_json, {}) || {},
+      reward: parseJsonSafe(row.reward_json, {}) || {},
+      is_active: Number(row.is_active || 0),
+    }))
+    return res.json({
+      firstDeposit: items.filter((item) => item.rule_type === 'first_deposit'),
+      referral: items.filter((item) => item.rule_type === 'referral'),
     })
   })
 

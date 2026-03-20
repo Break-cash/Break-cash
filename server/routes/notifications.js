@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
-import { requireApproved, requireAuth, requirePermission } from '../middleware/auth.js'
+import { requireApproved, requireAuth, requirePermission, requireRole } from '../middleware/auth.js'
+import { publishLiveUpdate } from '../services/live-updates.js'
 
 export function createNotificationsRouter(db) {
   const router = Router()
@@ -57,6 +58,45 @@ export function createNotificationsRouter(db) {
       body,
     ])
     return res.status(201).json({ ok: true })
+  })
+
+  router.post('/broadcast', requireRole('owner'), async (req, res) => {
+    const title = String(req.body?.title || '').trim().slice(0, 180)
+    const body = String(req.body?.body || '').trim().slice(0, 1200)
+    const vibrate = req.body?.vibrate !== false
+    if (!title || !body) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const users = await all(
+      db,
+      `SELECT id
+       FROM users
+       WHERE role = 'user'
+         AND COALESCE(is_banned, 0) = 0`,
+    )
+
+    let createdCount = 0
+    for (const row of users) {
+      const userId = Number(row?.id || 0)
+      if (!userId) continue
+      await run(db, `INSERT INTO notifications (user_id, title, body) VALUES (?, ?, ?)`, [
+        userId,
+        title,
+        body,
+      ])
+      createdCount += 1
+    }
+
+    publishLiveUpdate({
+      type: 'broadcast_notification',
+      scope: 'global',
+      source: 'notifications',
+      key: 'owner_broadcast',
+      title,
+      body,
+      vibrate,
+    })
+
+    return res.status(201).json({ ok: true, createdCount, vibrate })
   })
 
   return router

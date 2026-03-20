@@ -13,6 +13,7 @@ import {
 } from '../services/premium-identity.js'
 import { sendPhoneCodeSms } from '../services/sms.js'
 import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../services/verification.js'
+import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -67,11 +68,16 @@ function toPublicPath(absPath) {
   return `/uploads/${rel.replace(/^uploads\//, '')}`
 }
 
+function toPublicAvatarUrl(absPath) {
+  if (!absPath) return null
+  return toUploadPublicUrl(toPublicPath(absPath))
+}
+
 function normalizeProfile(row) {
   if (!row) return null
   return {
     ...row,
-    avatar_url: row.avatar_path ? toPublicPath(row.avatar_path) : null,
+    avatar_url: row.avatar_path ? toPublicAvatarUrl(row.avatar_path) : null,
     badge_color: Number(row.blue_badge) === 1 ? 'blue' : row.verification_status === 'verified' ? 'gold' : 'none',
   }
 }
@@ -88,6 +94,7 @@ async function fetchProfile(db, userId) {
       id, email, phone, role, is_approved, is_banned, is_frozen, created_at,
       display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
       phone_verified, identity_submitted, verification_ready_at,
+      preferred_language, preferred_currency,
       referral_code, invited_by, referred_by, total_deposit, points, is_owner
      FROM users WHERE id = ? LIMIT 1`,
     [userId],
@@ -115,6 +122,7 @@ export function createProfileRouter(db) {
     const hasPhone = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone')
     const hasDisplayName = Object.prototype.hasOwnProperty.call(req.body || {}, 'displayName')
     const hasBio = Object.prototype.hasOwnProperty.call(req.body || {}, 'bio')
+    const hasPreferredLanguage = Object.prototype.hasOwnProperty.call(req.body || {}, 'preferredLanguage')
 
     const email = hasEmail ? (String(req.body?.email || '').trim() || null) : current.email
     const phone = hasPhone ? (String(req.body?.phone || '').trim() || null) : current.phone
@@ -124,11 +132,18 @@ export function createProfileRouter(db) {
     const bio = hasBio
       ? String(req.body?.bio || '').trim().slice(0, 120) || null
       : current.bio || null
+    const preferredLanguage = hasPreferredLanguage
+      ? (() => {
+          const raw = String(req.body?.preferredLanguage || '').trim().toLowerCase()
+          if (raw === 'ar' || raw === 'en' || raw === 'tr') return raw
+          return current.preferred_language || 'ar'
+        })()
+      : current.preferred_language || null
 
     await run(
       db,
-      `UPDATE users SET email = ?, phone = ?, display_name = ?, bio = ? WHERE id = ?`,
-      [email, phone, displayName, bio, req.user.id],
+      `UPDATE users SET email = ?, phone = ?, display_name = ?, bio = ?, preferred_language = ? WHERE id = ?`,
+      [email, phone, displayName, bio, preferredLanguage, req.user.id],
     )
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ profile })
@@ -142,6 +157,12 @@ export function createProfileRouter(db) {
     if (!mime.startsWith('image/')) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
+    await persistUploadedAsset(db, {
+      publicUrl: toPublicPath(req.file.path),
+      absolutePath: req.file.path,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    })
     await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [req.file.path, req.user.id])
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ ok: true, profile })
@@ -159,6 +180,12 @@ export function createProfileRouter(db) {
     if (!mime.startsWith('image/')) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
+    await persistUploadedAsset(db, {
+      publicUrl: toPublicPath(req.file.path),
+      absolutePath: req.file.path,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    })
 
     await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [req.file.path, userId])
     const user = await fetchProfile(db, userId)

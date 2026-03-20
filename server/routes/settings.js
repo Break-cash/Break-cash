@@ -139,6 +139,59 @@ export function createSettingsRouter(db) {
     return normalized.slice(0, 4)
   }
 
+  const DEFAULT_PROMO_BANNERS = [
+    {
+      id: 'home-default',
+      title: 'Break cash Trading Booster',
+      subtitle: 'Activate featured opportunities and discover high-momentum pairs with one tap.',
+      ctaLabel: 'Explore',
+      to: '/market',
+      imageUrl: '',
+      backgroundStyle: '',
+      order: 1,
+      placement: 'home',
+      enabled: true,
+    },
+    {
+      id: 'profile-default',
+      title: 'First Deposit Reward',
+      subtitle: 'Deposit now to unlock premium member benefits and extra rewards.',
+      ctaLabel: 'Deposit',
+      to: '/deposit',
+      imageUrl: '',
+      backgroundStyle: '',
+      order: 2,
+      placement: 'profile',
+      enabled: true,
+    },
+  ]
+
+  function normalizePromoBanners(raw) {
+    if (!Array.isArray(raw)) return DEFAULT_PROMO_BANNERS
+    const allowedPlacement = new Set(['all', 'home', 'profile'])
+    const normalized = raw
+      .map((item, idx) => {
+        const placementRaw = String(item?.placement || 'all').trim().toLowerCase()
+        const placement = allowedPlacement.has(placementRaw) ? placementRaw : 'all'
+        return {
+          id: String(item?.id || `banner_${idx + 1}`).trim().slice(0, 48),
+          title: String(item?.title || '').trim().slice(0, 90),
+          subtitle: String(item?.subtitle || '').trim().slice(0, 220),
+          ctaLabel: String(item?.ctaLabel || '').trim().slice(0, 24),
+          to: String(item?.to || '').trim().slice(0, 120),
+          imageUrl: String(item?.imageUrl || '').trim().slice(0, 220),
+          backgroundStyle: String(item?.backgroundStyle || '').trim().slice(0, 220),
+          order: Number.isFinite(Number(item?.order)) ? Number(item.order) : idx + 1,
+          placement,
+          enabled: Boolean(item?.enabled),
+        }
+      })
+      .filter((item) => item.id && item.title && item.subtitle)
+      .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+      .slice(0, 12)
+    return normalized
+  }
+
   const DEFAULT_PWA_CONFIG = {
     name: 'Break cash',
     short_name: 'Break cash',
@@ -338,6 +391,30 @@ export function createSettingsRouter(db) {
     return res.json({ ok: true, items })
   }))
 
+  router.get('/promo-banners', asyncRoute(async (_req, res) => {
+    const row = await get(db, `SELECT value FROM settings WHERE key='promo_banners' LIMIT 1`)
+    let parsed = null
+    try {
+      parsed = JSON.parse(String(row?.value || 'null'))
+    } catch {
+      parsed = null
+    }
+    const items = normalizePromoBanners(parsed)
+    return res.json({ items, customized: Boolean(row) })
+  }))
+
+  router.post('/promo-banners', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    const items = normalizePromoBanners(req.body?.items)
+    await run(
+      db,
+      `INSERT INTO settings (key, value) VALUES ('promo_banners', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      [JSON.stringify(items)],
+    )
+    publishLiveUpdate({ type: 'home_content_updated', source: 'settings', key: 'promo_banners' })
+    return res.json({ ok: true, items })
+  }))
+
   router.get('/asset-images', asyncRoute(async (_req, res) => {
     const rows = await all(
       db,
@@ -485,6 +562,7 @@ export function createSettingsRouter(db) {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
       [JSON.stringify({ keys: normalized, targets: normalizedTargets, assignments: normalizedAssignments })],
     )
+    publishLiveUpdate({ type: 'home_content_updated', source: 'settings', key: 'icon_attraction_keys' })
     return res.json({ ok: true, keys: normalized, targets: normalizedTargets, assignments: normalizedAssignments })
   }))
 

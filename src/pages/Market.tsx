@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../api'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
+import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useI18n } from '../i18nCore'
 
 type Quote = { symbol: string; price: number; change24h: number; volume: number }
@@ -10,37 +11,14 @@ const intervals = ['1m', '5m', '15m', '1h', '4h', '1d']
 export function Market() {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [marketData, setMarketData] = useState<Quote[]>([])
   const [customQuote, setCustomQuote] = useState<Quote | null>(null)
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
   const [selectedInterval, setSelectedInterval] = useState('5m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [candlesLoading, setCandlesLoading] = useState(false)
-  const [quotesLoading, setQuotesLoading] = useState(true)
-  const [quotesError, setQuotesError] = useState<string | null>(null)
   const [candlesError, setCandlesError] = useState<string | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
-
-  const loadQuotes = useCallback(async () => {
-    setQuotesError(null)
-    setQuotesLoading(true)
-    try {
-      const res = (await apiFetch('/api/market/quotes')) as { items: Quote[] }
-      setMarketData(res.items || [])
-      setQuotesError(null)
-    } catch {
-      setMarketData([])
-      setQuotesError(t('market_quotes_error'))
-    } finally {
-      setQuotesLoading(false)
-    }
-  }, [t])
-
-  useEffect(() => {
-    loadQuotes().catch(() => setQuotesLoading(false))
-    const id = window.setInterval(() => loadQuotes().catch(() => {}), 3000)
-    return () => window.clearInterval(id)
-  }, [loadQuotes])
+  const { quotes: marketData, gainers, losers, loading: quotesLoading, usingFallback, reload: loadQuotes } = useMarketBoard(3000)
 
   const filtered = useMemo(() => {
     const q = query.trim().toUpperCase()
@@ -144,6 +122,59 @@ export function Market() {
         ) : null}
       </div>
 
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="elite-panel p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <strong className="text-white/95">Top Gainers</strong>
+            <span className="text-[11px] text-app-muted">{usingFallback ? 'Fallback' : 'Live'}</span>
+          </div>
+          <div className="space-y-2">
+            {gainers.length === 0 ? (
+              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2 text-sm text-app-muted">
+                لا توجد بيانات صاعدة متاحة الآن.
+              </div>
+            ) : (
+              gainers.map((item) => (
+                <button
+                  key={`g-${item.symbol}`}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl border border-app-border bg-app-elevated px-3 py-2 text-start"
+                  onClick={() => setSelectedSymbol(item.symbol)}
+                >
+                  <span className="text-sm font-semibold text-white">{item.symbol}</span>
+                  <span className="text-xs font-semibold text-emerald-300">+{item.change24h.toFixed(2)}%</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="elite-panel p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <strong className="text-white/95">Top Losers</strong>
+            <span className="text-[11px] text-app-muted">{usingFallback ? 'Fallback' : 'Live'}</span>
+          </div>
+          <div className="space-y-2">
+            {losers.length === 0 ? (
+              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2 text-sm text-app-muted">
+                لا توجد بيانات هابطة متاحة الآن.
+              </div>
+            ) : (
+              losers.map((item) => (
+                <button
+                  key={`l-${item.symbol}`}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl border border-app-border bg-app-elevated px-3 py-2 text-start"
+                  onClick={() => setSelectedSymbol(item.symbol)}
+                >
+                  <span className="text-sm font-semibold text-white">{item.symbol}</span>
+                  <span className="text-xs font-semibold text-rose-300">{item.change24h.toFixed(2)}%</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="elite-panel market-candles-card p-3">
         <div className="market-candles-head">
           <strong className="text-white/95">{effectiveSelectedSymbol}</strong>
@@ -186,9 +217,11 @@ export function Market() {
           <span>{t('home_last_price')}</span>
           <span>{t('home_change_24h')}</span>
         </div>
-        {quotesError ? (
+        {usingFallback ? (
           <div className="flex flex-col gap-2 border border-red-500/30 bg-red-500/10 p-4">
-            <p className="text-sm text-red-400">{quotesError}</p>
+            <p className="text-sm text-red-300">
+              مصدر السوق الحي غير متاح الآن. يتم عرض fallback واضح حتى يعود المصدر الحقيقي.
+            </p>
             <button
               type="button"
               className="w-fit rounded-lg border border-brand-blue/40 bg-brand-blue/20 px-4 py-2 text-sm font-medium text-white"

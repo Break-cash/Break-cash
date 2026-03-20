@@ -1,7 +1,86 @@
 import { Router } from 'express'
-import { createMarketFeed } from '../services/marketFeed.js'
+import { fetchBestQuote, sharedMarketFeed as marketFeed } from '../services/marketFeed.js'
 
-const marketFeed = createMarketFeed()
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'BreakCash/1.0 (Market Data)' },
+    signal: AbortSignal.timeout(10000),
+  })
+  if (!response.ok) throw new Error(`UPSTREAM_${response.status}`)
+  return response.json()
+}
+
+function normalizeBybitInterval(interval) {
+  const map = {
+    '1m': '1',
+    '5m': '5',
+    '15m': '15',
+    '1h': '60',
+    '4h': '240',
+    '1d': 'D',
+  }
+  return map[interval] || null
+}
+
+function toBinanceCandles(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    time: Math.floor(Number(row[0]) / 1000),
+    open: Number(row[1]),
+    high: Number(row[2]),
+    low: Number(row[3]),
+    close: Number(row[4]),
+  }))
+}
+
+function toBybitCandles(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      time: Math.floor(Number(row[0]) / 1000),
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+    }))
+    .reverse()
+}
+
+async function fetchBestCandles(symbol, interval, limit) {
+  const providers = [
+    async () => {
+      const endpoint =
+        `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}` +
+        `&interval=${encodeURIComponent(interval)}&limit=${limit}`
+      const rows = await fetchJson(endpoint)
+      return toBinanceCandles(rows)
+    },
+    async () => {
+      const bybitInterval = normalizeBybitInterval(interval)
+      if (!bybitInterval) return []
+      const endpoint =
+        `https://api.bybit.com/v5/market/kline?category=spot&symbol=${encodeURIComponent(symbol)}` +
+        `&interval=${encodeURIComponent(bybitInterval)}&limit=${limit}`
+      const rows = await fetchJson(endpoint)
+      return toBybitCandles(rows?.result?.list)
+    },
+    async () => {
+      const endpoint =
+        `https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}` +
+        `&interval=${encodeURIComponent(interval)}&limit=${limit}`
+      const rows = await fetchJson(endpoint)
+      return toBinanceCandles(rows)
+    },
+  ]
+
+  for (const provider of providers) {
+    try {
+      const candles = await provider()
+      if (candles.length > 0) return candles
+    } catch {
+      // try next provider
+    }
+  }
+  throw new Error('CANDLES_UNAVAILABLE')
+}
 
 export function createMarketRouter() {
   const router = Router()
@@ -17,18 +96,7 @@ export function createMarketRouter() {
     const cached = items.find((q) => q.symbol === symbol)
     if (cached) return res.json({ item: cached })
     try {
-      const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`, {
-        headers: { 'User-Agent': 'BreakCash/1.0 (Market Data)' },
-        signal: AbortSignal.timeout(8000),
-      })
-      if (!r.ok) return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
-      const row = await r.json()
-      const item = {
-        symbol: String(row?.symbol || '').toUpperCase(),
-        price: Number(row?.lastPrice ?? 0) || 0,
-        change24h: Number(row?.priceChangePercent ?? 0) || 0,
-        volume: Number(row?.quoteVolume ?? 0) || 0,
-      }
+      const item = await fetchBestQuote(symbol)
       return res.json({ item })
     } catch {
       return res.status(404).json({ error: 'SYMBOL_NOT_FOUND' })
@@ -60,27 +128,8 @@ export function createMarketRouter() {
       return res.status(400).json({ error: 'INVALID_INTERVAL' })
     }
 
-    const endpoint =
-      `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}` +
-      `&interval=${encodeURIComponent(interval)}&limit=${limit}`
-
     try {
-      const r = await fetch(endpoint, {
-        headers: { 'User-Agent': 'BreakCash/1.0 (Market Data)' },
-        signal: AbortSignal.timeout(10000),
-      })
-      if (!r.ok) {
-        const fallback = { symbol, interval, candles: [], refreshedAt: new Date().toISOString(), upstreamFailed: true }
-        return res.status(200).json(fallback)
-      }
-      const rows = await r.json()
-      const candles = (Array.isArray(rows) ? rows : []).map((row) => ({
-        time: Math.floor(Number(row[0]) / 1000),
-        open: Number(row[1]),
-        high: Number(row[2]),
-        low: Number(row[3]),
-        close: Number(row[4]),
-      }))
+      const candles = await fetchBestCandles(symbol, interval, limit)
       return res.json({ symbol, interval, candles, refreshedAt: new Date().toISOString() })
     } catch {
       const fallback = { symbol, interval, candles: [], refreshedAt: new Date().toISOString(), upstreamFailed: true }

@@ -1,0 +1,66 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { get, run } from '../db.js'
+
+function normalizeStorageKey(value) {
+  const raw = String(value || '').split('?')[0].trim().replaceAll('\\', '/')
+  if (!raw) return null
+  const withoutPrefix = raw.replace(/^https?:\/\/[^/]+/i, '').replace(/^\/+/, '')
+  if (!withoutPrefix.startsWith('uploads/')) return null
+  return withoutPrefix.slice('uploads/'.length)
+}
+
+export function toUploadPublicUrl(value, options = {}) {
+  const storageKey = normalizeStorageKey(value)
+  if (!storageKey) return String(value || '').trim() || null
+  const baseUrl = `/uploads/${storageKey}`
+  const withVersion = options.withVersion !== false
+  if (!withVersion) return baseUrl
+  const version = path.basename(storageKey).replace(/[^a-zA-Z0-9._-]/g, '')
+  return version ? `${baseUrl}?v=${encodeURIComponent(version)}` : baseUrl
+}
+
+export function getUploadStorageKey(value) {
+  return normalizeStorageKey(value)
+}
+
+export async function persistUploadedAsset(db, payload) {
+  const storageKey = normalizeStorageKey(payload?.publicUrl)
+  const absolutePath = String(payload?.absolutePath || '').trim()
+  if (!storageKey || !absolutePath) return null
+  const fileBuffer = await fs.readFile(absolutePath)
+  const contentBase64 = fileBuffer.toString('base64')
+  const mimeType = String(payload?.mimeType || 'application/octet-stream').trim() || 'application/octet-stream'
+  const originalName = String(payload?.originalName || path.basename(absolutePath)).trim() || path.basename(absolutePath)
+  await run(
+    db,
+    `INSERT INTO uploaded_assets (storage_key, mime_type, original_name, content_base64, byte_size)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(storage_key) DO UPDATE SET
+       mime_type = excluded.mime_type,
+       original_name = excluded.original_name,
+       content_base64 = excluded.content_base64,
+       byte_size = excluded.byte_size,
+       updated_at = CURRENT_TIMESTAMP`,
+    [storageKey, mimeType, originalName, contentBase64, fileBuffer.length],
+  )
+  return {
+    storageKey,
+    mimeType,
+    originalName,
+    byteSize: fileBuffer.length,
+  }
+}
+
+export async function getUploadedAssetByKey(db, storageKey) {
+  const key = normalizeStorageKey(storageKey)
+  if (!key) return null
+  return get(
+    db,
+    `SELECT storage_key, mime_type, original_name, content_base64, byte_size, updated_at
+     FROM uploaded_assets
+     WHERE storage_key = ?
+     LIMIT 1`,
+    [key],
+  )
+}

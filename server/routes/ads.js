@@ -5,8 +5,132 @@ import multer from 'multer'
 import { all, get, run } from '../db.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
+
+const DEFAULT_ADS = {
+  home: [
+    {
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض مرئي إضافي للتعدين',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'استعرض باقات التعدين داخل المنصة',
+      linkUrl: '/mining',
+    },
+  ],
+  deposit: [
+    {
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض مرئي إضافي للتعدين',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'تعرف على باقات التعدين الحالية',
+      linkUrl: '/mining',
+    },
+  ],
+  mining: [
+    {
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'شرح مرئي سريع عن التعدين',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض مرئي إضافي للتعدين',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'ابدأ باقة التعدين المناسبة لك',
+      linkUrl: '/mining',
+    },
+  ],
+  profile: [
+    {
+      type: 'image',
+      mediaUrl: '/ads/break-logo-promo.jpeg',
+      title: 'اعلان بريك',
+      description: 'إعلان المنصة الرسمي',
+      linkUrl: '/portfolio',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-feed.mp4',
+      title: 'اعلان تعدين فيد',
+      description: 'عرض التعدين المرئي',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'video',
+      mediaUrl: '/ads/mining-power.mp4',
+      title: 'اعلان تعدين كهرب',
+      description: 'عرض مرئي إضافي للتعدين',
+      linkUrl: '/mining',
+    },
+    {
+      type: 'image',
+      mediaUrl: '/ads/mining-banner.jpeg',
+      title: 'اعلان تعدين',
+      description: 'استعرض باقات التعدين داخل المنصة',
+      linkUrl: '/mining',
+    },
+  ],
+}
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -20,6 +144,39 @@ const asyncRoute = (handler) => async (req, res) => {
 function toPublicPath(absPath) {
   const rel = path.relative(path.join(process.cwd(), 'server'), absPath).replaceAll('\\', '/')
   return `/uploads/${rel.replace(/^uploads\//, '')}`
+}
+
+function normalizeAdRow(row) {
+  return {
+    id: Number(row.id),
+    type: row.type,
+    mediaUrl: row.media_url,
+    title: row.title || '',
+    description: row.description || '',
+    linkUrl: row.link_url || '',
+    placement: row.placement,
+    sortOrder: Number(row.sort_order || 0),
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function getDefaultAdsForPlacement(placement) {
+  const items = Array.isArray(DEFAULT_ADS[placement]) ? DEFAULT_ADS[placement] : []
+  return items.map((item, index) => ({
+    id: 900000 + index + placement.length * 100,
+    type: item.type,
+    mediaUrl: item.mediaUrl,
+    title: item.title || '',
+    description: item.description || '',
+    linkUrl: item.linkUrl || '',
+    placement,
+    sortOrder: index,
+    isActive: true,
+    createdAt: null,
+    updatedAt: null,
+  }))
 }
 
 export function createAdsRouter(db) {
@@ -58,23 +215,13 @@ export function createAdsRouter(db) {
       `SELECT id, type, media_url, title, description, link_url, placement, sort_order, is_active, created_at, updated_at
        FROM ads
        WHERE is_active = 1 AND (placement = ? OR placement = 'all')
-       ORDER BY sort_order ASC, id ASC`,
+      ORDER BY sort_order ASC, id ASC`,
       [p],
     )
+    const dbItems = rows.map(normalizeAdRow)
+    const items = dbItems.length > 0 ? dbItems : getDefaultAdsForPlacement(p)
     return res.json({
-      items: rows.map((r) => ({
-        id: r.id,
-        type: r.type,
-        mediaUrl: r.media_url,
-        title: r.title || '',
-        description: r.description || '',
-        linkUrl: r.link_url || '',
-        placement: r.placement,
-        sortOrder: r.sort_order,
-        isActive: Boolean(r.is_active),
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+      items,
     })
   }))
 
@@ -86,19 +233,7 @@ export function createAdsRouter(db) {
        ORDER BY sort_order ASC, id ASC`,
     )
     return res.json({
-      items: rows.map((r) => ({
-        id: r.id,
-        type: r.type,
-        mediaUrl: r.media_url,
-        title: r.title || '',
-        description: r.description || '',
-        linkUrl: r.link_url || '',
-        placement: r.placement,
-        sortOrder: r.sort_order,
-        isActive: Boolean(r.is_active),
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+      items: rows.map(normalizeAdRow),
     })
   }))
 
@@ -124,7 +259,13 @@ export function createAdsRouter(db) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE', message: 'File must be image or video' })
     }
     const publicUrl = toPublicPath(req.file.path)
-    return res.json({ ok: true, url: publicUrl, type: isVideo ? 'video' : 'image' })
+    await persistUploadedAsset(db, {
+      publicUrl,
+      absolutePath: req.file.path,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    })
+    return res.json({ ok: true, url: toUploadPublicUrl(publicUrl) || publicUrl, type: isVideo ? 'video' : 'image' })
   }))
 
   router.post('/', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
@@ -182,7 +323,8 @@ export function createAdsRouter(db) {
     const linkUrl = String(req.body?.linkUrl ?? '').trim().slice(0, 500)
     const placementVal = String(req.body?.placement ?? 'all').trim().toLowerCase()
     const placement = PLACEMENTS.has(placementVal) ? placementVal : 'all'
-    const sortOrder = Number(req.body?.sortOrder) ?? existing.sort_order
+    const requestedSortOrder = Number(req.body?.sortOrder)
+    const sortOrder = Number.isFinite(requestedSortOrder) ? requestedSortOrder : Number(existing.sort_order || 0)
     const isActive = req.body?.isActive !== false ? 1 : 0
     if (type !== 'image' && type !== 'video') {
       return res.status(400).json({ error: 'INVALID_INPUT', message: 'Type must be image or video' })

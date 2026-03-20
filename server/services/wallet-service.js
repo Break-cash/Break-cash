@@ -16,6 +16,58 @@ import {
 // Re-export for consumers
 export { getMainBalance, getWalletHistory, getEarningHistory }
 
+function normalizeRewardPayoutMode(value) {
+  return String(value || '').trim().toLowerCase() === 'bonus_locked' ? 'bonus_locked' : 'withdrawable'
+}
+
+async function getRewardPayoutConfig(db) {
+  const row = await get(db, `SELECT value FROM settings WHERE key = 'reward_payout_config' LIMIT 1`)
+  if (!row?.value) return { defaultMode: 'withdrawable' }
+  try {
+    const parsed = JSON.parse(String(row.value))
+    return { defaultMode: normalizeRewardPayoutMode(parsed?.defaultMode) }
+  } catch {
+    return { defaultMode: 'withdrawable' }
+  }
+}
+
+async function getRewardPayoutOverride(db, userId) {
+  if (!userId) return null
+  return get(
+    db,
+    `SELECT payout_mode
+     FROM user_reward_mode_overrides
+     WHERE user_id = ? LIMIT 1`,
+    [userId],
+  )
+}
+
+export async function getEffectiveRewardPayoutMode(db, userId) {
+  const [config, override] = await Promise.all([
+    getRewardPayoutConfig(db),
+    getRewardPayoutOverride(db, userId),
+  ])
+  return normalizeRewardPayoutMode(override?.payout_mode || config.defaultMode)
+}
+
+async function finalizeRewardTransfer(db, { userId, currency, entryId, idempotencyKey }) {
+  const payoutMode = await getEffectiveRewardPayoutMode(db, userId)
+  if (payoutMode === 'bonus_locked') {
+    return {
+      walletTxnId: null,
+      balanceAfter: await getMainBalance(db, userId, currency),
+      payoutMode,
+    }
+  }
+  const txn = await transferEarningToMain(db, entryId, idempotencyKey)
+  if (!txn) return null
+  return {
+    walletTxnId: txn.id,
+    balanceAfter: await getMainBalance(db, userId, currency),
+    payoutMode,
+  }
+}
+
 /**
  * Create deposit (credit main balance). Idempotent.
  * @param {object} db - Database handle
@@ -54,10 +106,21 @@ export async function approveDeposit(db, opts) {
  * @returns {{ walletTxnId, balanceAfter }}
  */
 export async function createWithdrawal(db, opts) {
-  const { userId, currency = 'USDT', amount, referenceType = 'withdrawal_request', referenceId, idempotencyKey, createdBy } = opts
+  const {
+    userId,
+    currency = 'USDT',
+    amount,
+    feeAmount = 0,
+    referenceType = 'withdrawal_request',
+    referenceId,
+    idempotencyKey,
+    createdBy,
+  } = opts
   if (!userId || !Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_INPUT')
   const balance = await getMainBalance(db, userId, currency)
   if (balance < amount) throw new Error('INSUFFICIENT_BALANCE')
+  const safeFeeAmount = Number.isFinite(Number(feeAmount)) && Number(feeAmount) > 0 ? Number(Number(feeAmount).toFixed(8)) : 0
+  const payoutAmount = Number(Math.max(0, amount - safeFeeAmount).toFixed(8))
   const txn = await recordTransaction(db, {
     userId,
     currency,
@@ -65,7 +128,8 @@ export async function createWithdrawal(db, opts) {
     sourceType: 'system',
     referenceType,
     referenceId,
-    amount: -amount,
+    amount: -payoutAmount,
+    feeAmount: safeFeeAmount,
     idempotencyKey,
     createdBy,
   })
@@ -242,9 +306,12 @@ export async function createReferralReward(db, opts) {
     amount,
   })
   if (!earningResult?.id) return null
-  const txn = await transferEarningToMain(db, earningResult.id, `referral_reward_${referralRewardId}`)
-  if (!txn) return null
-  return { walletTxnId: txn.id, balanceAfter: await getMainBalance(db, userId, currency) }
+  return finalizeRewardTransfer(db, {
+    userId,
+    currency,
+    entryId: earningResult.id,
+    idempotencyKey: `referral_reward_${referralRewardId}`,
+  })
 }
 
 /**
@@ -263,7 +330,80 @@ export async function createTaskReward(db, opts) {
   })
   const entryId = earningResult?.id ?? (await get(db, `SELECT id FROM earning_entries WHERE source_type = 'tasks' AND reference_type = 'task_redemption' AND reference_id = ? LIMIT 1`, [redemptionId]))?.id
   if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
-  const txn = await transferEarningToMain(db, entryId, `task_redemption_${redemptionId}`)
-  if (!txn) return null
-  return { walletTxnId: txn.id, balanceAfter: await getMainBalance(db, userId, currency) }
+  return finalizeRewardTransfer(db, {
+    userId,
+    currency,
+    entryId,
+    idempotencyKey: `task_redemption_${redemptionId}`,
+  })
+}
+
+/**
+ * Create a promotional strategy reward through the unified earning pipeline.
+ */
+export async function createStrategyPromoReward(db, opts) {
+  const { userId, amount, usageId, currency = 'USDT' } = opts
+  if (!userId || !Number.isFinite(amount) || amount <= 0 || !usageId) throw new Error('INVALID_INPUT')
+  const earningResult = await createEarningEntry(db, {
+    userId,
+    sourceType: 'tasks',
+    referenceType: 'strategy_code_bonus',
+    referenceId: usageId,
+    currency,
+    amount,
+  })
+  const entryId =
+    earningResult?.id ??
+    (await get(
+      db,
+      `SELECT id
+       FROM earning_entries
+       WHERE source_type = 'tasks'
+         AND reference_type = 'strategy_code_bonus'
+         AND reference_id = ?
+       LIMIT 1`,
+      [usageId],
+    ))?.id
+  if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
+  return finalizeRewardTransfer(db, {
+    userId,
+    currency,
+    entryId,
+    idempotencyKey: `strategy_code_bonus_${usageId}`,
+  })
+}
+
+/**
+ * Create first deposit bonus reward through the unified earning pipeline.
+ */
+export async function createFirstDepositBonusReward(db, opts) {
+  const { userId, amount, depositRequestId, currency = 'USDT' } = opts
+  if (!userId || !Number.isFinite(amount) || amount <= 0 || !depositRequestId) throw new Error('INVALID_INPUT')
+  const earningResult = await createEarningEntry(db, {
+    userId,
+    sourceType: 'deposits',
+    referenceType: 'first_deposit_bonus',
+    referenceId: depositRequestId,
+    currency,
+    amount,
+  })
+  const entryId =
+    earningResult?.id ??
+    (await get(
+      db,
+      `SELECT id
+       FROM earning_entries
+       WHERE source_type = 'deposits'
+         AND reference_type = 'first_deposit_bonus'
+         AND reference_id = ?
+       LIMIT 1`,
+      [depositRequestId],
+    ))?.id
+  if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
+  return finalizeRewardTransfer(db, {
+    userId,
+    currency,
+    entryId,
+    idempotencyKey: `first_deposit_bonus_${depositRequestId}`,
+  })
 }

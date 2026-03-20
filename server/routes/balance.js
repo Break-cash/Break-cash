@@ -13,6 +13,7 @@ import {
   createWithdrawal,
   adjustBalance,
   createReferralReward,
+  createFirstDepositBonusReward,
 } from '../services/wallet-service.js'
 import { getWalletAccountsOverview } from '../services/wallet-ledger.js'
 import {
@@ -22,6 +23,8 @@ import {
   verifyDepositWithdrawalLinkage,
   verifyUnexpectedZeroBalances,
 } from '../services/wallet-reconciliation.js'
+import { createLocalizedNotification } from '../services/notifications.js'
+import { getDefaultVipTierRows, getVipRuntimeRules } from '../services/vip-rules.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const DEFAULT_BALANCE_RULES = {
@@ -263,35 +266,186 @@ async function createPrincipalLock(db, payload) {
   )
 }
 
-async function ensureVipTierDefaults(db) {
-  await run(
+function calculateRequiredProfitAmount(principalAmount, unlockRatio, minimumProfitToUnlock) {
+  const principal = Number(principalAmount || 0)
+  const ratio = Number(unlockRatio || 0)
+  const minimumProfit = Number(minimumProfitToUnlock || 0)
+  const requiredByRatio = Number((principal * ratio).toFixed(8))
+  return Number(Math.max(requiredByRatio, minimumProfit).toFixed(8))
+}
+
+async function reapplyPrincipalLocksForUser(db, userId, currency, rules = null) {
+  const safeRules = rules || (await getRules(db))
+  const normalizedCurrency = normalizeCurrency(currency || 'USDT')
+  const profile = await getEffectiveUnlockProfile(db, userId, normalizedCurrency, safeRules)
+  const lockedRows = await all(
     db,
-    `INSERT INTO vip_tiers (
-      level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active
+    `SELECT id, principal_amount
+     FROM user_principal_locks
+     WHERE user_id = ? AND currency = ? AND lock_status = 'locked'
+     ORDER BY id ASC`,
+    [userId, normalizedCurrency],
+  )
+  if (!lockedRows.length) return 0
+
+  if (profile.forceUnlockPrincipal) {
+    const unlockRes = await run(
+      db,
+      `UPDATE user_principal_locks
+       SET lock_status = 'unlocked', unlocked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND currency = ? AND lock_status = 'locked'`,
+      [userId, normalizedCurrency],
     )
-    VALUES
-      (1, 'VIP 1', 500, 0, 1, 4, '[]', 1),
-      (2, 'VIP 2', 1500, 0, 1, 5, '[]', 1),
-      (3, 'VIP 3', 3000, 0, 1, 6, '[]', 1),
-      (4, 'VIP 4', 7000, 0, 1, 7, '[]', 1),
-      (5, 'VIP 5', 15000, 0, 1, 8, '[]', 1)
-    ON CONFLICT(level) DO UPDATE SET
-      title = excluded.title,
-      min_deposit = excluded.min_deposit,
-      referral_percent = excluded.referral_percent,
-      is_active = 1`,
+    return Number(unlockRes?.changes || unlockRes?.rowCount || 0)
+  }
+
+  let affected = 0
+  for (const row of lockedRows) {
+    const requiredProfitAmount = calculateRequiredProfitAmount(
+      row.principal_amount,
+      profile.unlockRatio,
+      profile.minimumProfitToUnlock,
+    )
+    if (requiredProfitAmount <= 0) {
+      const unlockRes = await run(
+        db,
+        `UPDATE user_principal_locks
+         SET required_profit_amount = 0,
+             unlock_ratio = ?,
+             lock_status = 'unlocked',
+             unlocked_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [Number(profile.unlockRatio.toFixed(4)), Number(row.id)],
+      )
+      affected += Number(unlockRes?.changes || unlockRes?.rowCount || 0)
+      continue
+    }
+    const updateRes = await run(
+      db,
+      `UPDATE user_principal_locks
+       SET required_profit_amount = ?, unlock_ratio = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [requiredProfitAmount, Number(profile.unlockRatio.toFixed(4)), Number(row.id)],
+    )
+    affected += Number(updateRes?.changes || updateRes?.rowCount || 0)
+  }
+
+  await unlockAllPrincipalLocksIfEligible(db, userId, normalizedCurrency, safeRules)
+  return affected
+}
+
+async function reapplyPrincipalLocksForAllUsers(db, rules = null) {
+  const safeRules = rules || (await getRules(db))
+  const rows = await all(
+    db,
+    `SELECT DISTINCT user_id, currency
+     FROM user_principal_locks
+     WHERE lock_status = 'locked'`,
+  )
+  let affected = 0
+  for (const row of rows) {
+    affected += await reapplyPrincipalLocksForUser(db, Number(row.user_id || 0), String(row.currency || 'USDT'), safeRules)
+  }
+  return affected
+}
+
+async function ensureVipTierDefaults(db) {
+  for (const tier of getDefaultVipTierRows()) {
+    await run(
+      db,
+      `INSERT INTO vip_tiers (
+        level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(level) DO UPDATE SET
+        title = excluded.title,
+        min_deposit = excluded.min_deposit,
+        min_trade_volume = excluded.min_trade_volume,
+        referral_multiplier = excluded.referral_multiplier,
+        referral_percent = excluded.referral_percent,
+        perks_json = excluded.perks_json,
+        is_active = 1`,
+      [
+        tier.level,
+        tier.title,
+        tier.minDeposit,
+        tier.minTeamVolume,
+        tier.minReferrals,
+        tier.referralPercent,
+        JSON.stringify(tier.perks),
+      ],
+    )
+  }
+}
+
+async function getVipTierRows(db) {
+  return all(
+    db,
+    `SELECT level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json
+     FROM vip_tiers
+     WHERE is_active = 1
+     ORDER BY level ASC`,
   )
 }
 
-async function resolveVipLevelByDeposit(db, totalDeposit) {
-  const row = await get(
+async function getVipNetworkMetrics(db, userId) {
+  const counts = await get(
     db,
-    `SELECT COALESCE(MAX(level), 0) AS level
-     FROM vip_tiers
-     WHERE is_active = 1 AND min_deposit <= ?`,
-    [Number(totalDeposit || 0)],
+    `SELECT COUNT(*) AS direct_referrals
+     FROM referrals
+     WHERE referrer_user_id = ?
+       AND status IN ('active', 'reward_released')`,
+    [userId],
   )
-  return Number(row?.level || 0)
+  const teamVolumeRow = await get(
+    db,
+    `SELECT COALESCE(SUM(total_deposit), 0) AS team_volume
+     FROM users
+     WHERE referred_by = ?`,
+    [userId],
+  )
+  return {
+    directReferrals: Number(counts?.direct_referrals || 0),
+    teamVolume: Number(teamVolumeRow?.team_volume || 0),
+  }
+}
+
+async function resolveVipLevelForUser(db, userId, totalDeposit) {
+  const tiers = await getVipTierRows(db)
+  const metrics = await getVipNetworkMetrics(db, userId)
+  let level = 0
+  for (const tier of tiers) {
+    const minDeposit = Number(tier.min_deposit || 0)
+    const minTeamVolume = Number(tier.min_trade_volume || 0)
+    const minReferrals = Number(tier.referral_multiplier || 0)
+    if (
+      Number(totalDeposit || 0) >= minDeposit &&
+      metrics.teamVolume >= minTeamVolume &&
+      metrics.directReferrals >= minReferrals
+    ) {
+      level = Number(tier.level || 0)
+    }
+  }
+  return { level, metrics, tiers }
+}
+
+async function persistVipLevel(db, userId, totalDeposit) {
+  const nextTotalDeposit = Number(Number(totalDeposit || 0).toFixed(8))
+  const resolved = await resolveVipLevelForUser(db, userId, nextTotalDeposit)
+  await run(
+    db,
+    `UPDATE users
+     SET total_deposit = ?, vip_level = ?
+     WHERE id = ?`,
+    [nextTotalDeposit, resolved.level, userId],
+  )
+  return {
+    totalDeposit: nextTotalDeposit,
+    vipLevel: resolved.level,
+    directReferrals: resolved.metrics.directReferrals,
+    teamVolume: resolved.metrics.teamVolume,
+  }
 }
 
 async function resolveReferralPercentByVip(db, vipLevel) {
@@ -301,8 +455,225 @@ async function resolveReferralPercentByVip(db, vipLevel) {
     [Number(vipLevel || 0)],
   )
   if (row?.referral_percent != null) return Number(row.referral_percent)
-  const fallbackByLevel = { 0: 3, 1: 4, 2: 5, 3: 6, 4: 7, 5: 8 }
-  return Number(fallbackByLevel[Math.max(0, Math.min(5, Number(vipLevel || 0)))] || 3)
+  return Number(getVipRuntimeRules(vipLevel).referralPercent || 3)
+}
+
+async function resolveReferralRewardRule(db, amount) {
+  const rules = await all(
+    db,
+    `SELECT id, conditions_json, reward_json
+     FROM bonus_rules
+     WHERE rule_type = 'referral'
+       AND is_active = 1
+       AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+       AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+     ORDER BY id DESC`,
+  )
+  if (!rules.length) return null
+
+  let bestMatch = null
+  for (const rule of rules) {
+    const conditions = parseJsonSafe(rule.conditions_json, {}) || {}
+    const reward = parseJsonSafe(rule.reward_json, {}) || {}
+    const minDeposit = Number(conditions.minDeposit ?? conditions.depositAmount ?? 0)
+    const maxDepositRaw = conditions.maxDeposit
+    const maxDeposit = maxDepositRaw == null || maxDepositRaw === '' ? null : Number(maxDepositRaw)
+    if (Number.isFinite(minDeposit) && amount < minDeposit) continue
+    if (maxDeposit != null && Number.isFinite(maxDeposit) && amount > maxDeposit) continue
+
+    const rewardMode = normalizeRewardMode(reward.mode)
+    const rewardValue = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
+    if (!Number.isFinite(rewardValue) || rewardValue <= 0) continue
+    const rewardAmount =
+      rewardMode === 'fixed'
+        ? Number(rewardValue.toFixed(8))
+        : Number(((amount * rewardValue) / 100).toFixed(8))
+    if (!Number.isFinite(rewardAmount) || rewardAmount <= 0) continue
+    if (!bestMatch || rewardAmount > bestMatch.rewardAmount) {
+      bestMatch = {
+        id: Number(rule.id),
+        rewardAmount,
+        rewardMode,
+        rewardValue,
+      }
+    }
+  }
+  return bestMatch
+}
+
+function parseJsonSafe(value, fallback = null) {
+  try {
+    if (value == null || value === '') return fallback
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return fallback
+  }
+}
+
+function normalizeRewardMode(value) {
+  return String(value || '').trim().toLowerCase() === 'fixed' ? 'fixed' : 'percent'
+}
+
+async function applyFirstDepositBonus(db, payload) {
+  const amount = Number(payload.amount || 0)
+  const depositRequestId = Number(payload.depositRequestId || 0)
+  const currency = String(payload.currency || 'USDT').trim().toUpperCase() || 'USDT'
+  if (!Number.isFinite(amount) || amount <= 0 || !depositRequestId) {
+    return { bonusRuleId: null, bonusAmount: 0, walletTxnId: null }
+  }
+
+  const approvedDepositsRow = await get(
+    db,
+    `SELECT COUNT(*) AS count
+     FROM deposit_requests
+     WHERE user_id = ?
+       AND request_status IN ('approved', 'completed')`,
+    [payload.userId],
+  )
+  if (Number(approvedDepositsRow?.count || 0) !== 1) {
+    return { bonusRuleId: null, bonusAmount: 0, walletTxnId: null }
+  }
+
+  const priorBonus = await get(
+    db,
+    `SELECT id
+     FROM earning_entries
+     WHERE source_type = 'deposits'
+       AND reference_type = 'first_deposit_bonus'
+       AND reference_id = ?
+     LIMIT 1`,
+    [depositRequestId],
+  )
+  if (priorBonus?.id) {
+    return { bonusRuleId: null, bonusAmount: 0, walletTxnId: null }
+  }
+
+  const rules = await all(
+    db,
+    `SELECT id, title, conditions_json, reward_json
+     FROM bonus_rules
+     WHERE rule_type = 'first_deposit'
+       AND is_active = 1
+       AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+       AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+     ORDER BY id DESC`,
+  )
+  if (!rules.length) return { bonusRuleId: null, bonusAmount: 0, walletTxnId: null }
+
+  let bestMatch = null
+  for (const rule of rules) {
+    const conditions = parseJsonSafe(rule.conditions_json, {}) || {}
+    const reward = parseJsonSafe(rule.reward_json, {}) || {}
+    const minDeposit = Number(conditions.minDeposit ?? conditions.depositAmount ?? 0)
+    const maxDepositRaw = conditions.maxDeposit
+    const maxDeposit = maxDepositRaw == null || maxDepositRaw === '' ? null : Number(maxDepositRaw)
+    if (Number.isFinite(minDeposit) && amount < minDeposit) continue
+    if (maxDeposit != null && Number.isFinite(maxDeposit) && amount > maxDeposit) continue
+
+    const rewardMode = normalizeRewardMode(reward.mode)
+    const rewardValue = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
+    if (!Number.isFinite(rewardValue) || rewardValue <= 0) continue
+    const bonusAmount =
+      rewardMode === 'fixed'
+        ? Number(rewardValue.toFixed(8))
+        : Number(((amount * rewardValue) / 100).toFixed(8))
+    if (!Number.isFinite(bonusAmount) || bonusAmount <= 0) continue
+
+    if (!bestMatch || bonusAmount > bestMatch.bonusAmount) {
+      bestMatch = {
+        id: Number(rule.id),
+        bonusAmount,
+      }
+    }
+  }
+
+  if (!bestMatch) return { bonusRuleId: null, bonusAmount: 0, walletTxnId: null }
+
+  const rewardRes = await createFirstDepositBonusReward(db, {
+    userId: payload.userId,
+    amount: bestMatch.bonusAmount,
+    depositRequestId,
+    currency,
+  })
+  await createLocalizedNotification(db, payload.userId, 'first_deposit_bonus', {
+    amount: bestMatch.bonusAmount,
+    currency,
+  })
+  return {
+    bonusRuleId: bestMatch.id,
+    bonusAmount: bestMatch.bonusAmount,
+    walletTxnId: rewardRes?.walletTxnId || null,
+  }
+}
+
+async function getReferralChain(db, userId, maxDepth = 3) {
+  const chain = []
+  let currentUserId = Number(userId || 0)
+  const seen = new Set([currentUserId])
+  for (let depth = 1; depth <= maxDepth; depth += 1) {
+    const row = await get(
+      db,
+      `SELECT referred_by, invited_by
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
+      [currentUserId],
+    )
+    const nextUserId = Number(row?.referred_by || row?.invited_by || 0)
+    if (!nextUserId || seen.has(nextUserId)) break
+    const user = await get(
+      db,
+      `SELECT id, vip_level
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
+      [nextUserId],
+    )
+    if (!user?.id) break
+    chain.push({
+      userId: Number(user.id),
+      vipLevel: Number(user.vip_level || 0),
+      depth,
+    })
+    seen.add(nextUserId)
+    currentUserId = nextUserId
+  }
+  return chain
+}
+
+async function creditReferralReward(db, payload) {
+  const insertRes = await run(
+    db,
+    `INSERT INTO referral_rewards (
+      referrer_user_id, referred_user_id, deposit_request_id, source_amount, reward_percent, reward_amount, level_depth
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(referrer_user_id, referred_user_id, level_depth) DO NOTHING
+    RETURNING id`,
+    [
+      payload.referrerUserId,
+      payload.referredUserId,
+      payload.depositRequestId || null,
+      payload.sourceAmount,
+      payload.rewardPercent,
+      payload.rewardAmount,
+      payload.levelDepth,
+    ],
+  )
+  const referralRewardId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
+  if (!referralRewardId) return false
+  await createReferralReward(db, {
+    userId: payload.referrerUserId,
+    amount: payload.rewardAmount,
+    referralRewardId,
+    currency: payload.currency,
+    note: `Referral reward L${payload.levelDepth} from user #${payload.referredUserId} first deposit #${payload.depositRequestId || 0}`,
+  })
+  await createLocalizedNotification(db, payload.referrerUserId, 'referral_reward', {
+    amount: payload.rewardAmount,
+    currency: payload.currency,
+  })
+  return true
 }
 
 async function applyVipAndReferralAfterDeposit(db, payload) {
@@ -324,19 +695,17 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
   }
 
   const nextTotalDeposit = Number((Number(user.total_deposit || 0) + amount).toFixed(8))
-  const nextVipLevel = await resolveVipLevelByDeposit(db, nextTotalDeposit)
-  await run(
-    db,
-    `UPDATE users
-     SET total_deposit = ?, vip_level = ?
-     WHERE id = ?`,
-    [nextTotalDeposit, nextVipLevel, payload.userId],
-  )
+  const vipState = await persistVipLevel(db, payload.userId, nextTotalDeposit)
 
   const referrerUserId = Number(user.referred_by || user.invited_by || 0)
   if (!referrerUserId || referrerUserId === Number(payload.userId)) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+    return { totalDeposit: vipState.totalDeposit, vipLevel: vipState.vipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
+  await persistVipLevel(
+    db,
+    referrerUserId,
+    Number((await get(db, `SELECT total_deposit FROM users WHERE id = ? LIMIT 1`, [referrerUserId]))?.total_deposit || 0),
+  )
 
   const referral = await get(
     db,
@@ -344,7 +713,7 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
     [payload.userId],
   )
   if (!referral || String(referral.status || '') !== 'pending') {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+    return { totalDeposit: vipState.totalDeposit, vipLevel: vipState.vipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
 
   const successfulDeposits = await get(
@@ -356,25 +725,25 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
     [payload.userId],
   )
   if (Number(successfulDeposits?.count || 0) !== 1) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+    return { totalDeposit: vipState.totalDeposit, vipLevel: vipState.vipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
 
   const rules = payload.rules || (await getRules(db))
   const minDeposit = Number(rules.minDeposit || 10)
   if (amount < minDeposit) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
+    return { totalDeposit: vipState.totalDeposit, vipLevel: vipState.vipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
 
-  const referrer = await get(db, `SELECT id, vip_level FROM users WHERE id = ? LIMIT 1`, [referrerUserId])
-  if (!referrer?.id) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
-  }
+  const directReferrer = await get(db, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [referrerUserId])
 
-  const rewardPercent = await resolveReferralPercentByVip(db, Number(referrer.vip_level || 0))
-  const rewardAmount = Number(((amount * rewardPercent) / 100).toFixed(8))
-  if (!Number.isFinite(rewardAmount) || rewardAmount <= 0) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
-  }
+  const referralRule = await resolveReferralRewardRule(db, amount)
+  const directRewardPercent =
+    referralRule?.rewardMode === 'percent'
+      ? Number(referralRule.rewardValue || 0)
+      : await resolveReferralPercentByVip(db, Number(directReferrer?.vip_level || 0))
+  const directRewardAmount = referralRule
+    ? Number(referralRule.rewardAmount || 0)
+    : Number(((amount * directRewardPercent) / 100).toFixed(8))
 
   await run(
     db,
@@ -382,62 +751,115 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
      SET status = 'active', qualified_at = CURRENT_TIMESTAMP,
          qualifying_deposit_request_id = ?, first_deposit_amount = ?, reward_amount = ?, reward_percent = ?
      WHERE referred_user_id = ? AND status = 'pending'`,
-    [payload.depositRequestId || null, amount, rewardAmount, rewardPercent, payload.userId],
+    [payload.depositRequestId || null, amount, directRewardAmount, directRewardPercent, payload.userId],
   )
 
-  const rewardInsert = await run(
-    db,
-    `INSERT INTO referral_rewards (
-      referrer_user_id, referred_user_id, deposit_request_id, source_amount, reward_percent, reward_amount
+  const chain = await getReferralChain(db, payload.userId, 3)
+  const rewardResults = []
+  for (const ancestor of chain) {
+    const tierRules = getVipRuntimeRules(ancestor.vipLevel)
+    const rewardPercent =
+      ancestor.depth === 1
+        ? directRewardPercent
+        : ancestor.depth === 2
+          ? Number(tierRules.level2ReferralPercent || 0)
+          : Number(tierRules.level3ReferralPercent || 0)
+    const rewardAmount =
+      ancestor.depth === 1
+        ? directRewardAmount
+        : Number(((amount * rewardPercent) / 100).toFixed(8))
+    if (!Number.isFinite(rewardPercent) || rewardPercent <= 0 || !Number.isFinite(rewardAmount) || rewardAmount <= 0) {
+      continue
+    }
+    const rewarded = await creditReferralReward(db, {
+      referrerUserId: ancestor.userId,
+      referredUserId: payload.userId,
+      depositRequestId: payload.depositRequestId || null,
+      sourceAmount: amount,
+      rewardPercent,
+      rewardAmount,
+      levelDepth: ancestor.depth,
+      currency: payload.currency,
+    })
+    if (rewarded) {
+      rewardResults.push({
+        userId: ancestor.userId,
+        depth: ancestor.depth,
+        rewardPercent,
+        rewardAmount,
+      })
+    }
+  }
+
+  if (rewardResults.some((item) => item.depth === 1)) {
+    await run(
+      db,
+      `UPDATE referrals SET status = 'reward_released', reward_released_at = CURRENT_TIMESTAMP
+       WHERE referred_user_id = ? AND status = 'active'`,
+      [payload.userId],
     )
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(referred_user_id) DO NOTHING`,
-    [referrerUserId, payload.userId, payload.depositRequestId || null, amount, rewardPercent, rewardAmount],
-  )
-  if (!Number(rewardInsert.changes || 0)) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
   }
+  const firstDepositBonus = await applyFirstDepositBonus(db, payload)
 
-  const referralRewardRow = await get(
-    db,
-    `SELECT id FROM referral_rewards WHERE referred_user_id = ? LIMIT 1`,
-    [payload.userId],
-  )
-  const referralRewardId = Number(referralRewardRow?.id || 0)
-  if (!referralRewardId) {
-    return { totalDeposit: nextTotalDeposit, vipLevel: nextVipLevel, rewardedReferrerUserId: null, rewardAmount: 0 }
-  }
-
-  await createReferralReward(db, {
-    userId: referrerUserId,
-    amount: rewardAmount,
-    referralRewardId,
-    currency: payload.currency,
-    note: `Referral reward from user #${payload.userId} first deposit #${payload.depositRequestId || 0}`,
-  })
-  await run(
-    db,
-    `UPDATE referrals SET status = 'reward_released', reward_released_at = CURRENT_TIMESTAMP
-     WHERE referred_user_id = ? AND status = 'active'`,
-    [payload.userId],
-  )
-  await run(
-    db,
-    `INSERT INTO notifications (user_id, title, body) VALUES (?, 'Referral Reward', ?)`,
-    [referrerUserId, `You earned ${rewardAmount} ${payload.currency} from referral first deposit.`],
-  )
   return {
-    totalDeposit: nextTotalDeposit,
-    vipLevel: nextVipLevel,
+    totalDeposit: vipState.totalDeposit,
+    vipLevel: vipState.vipLevel,
     rewardedReferrerUserId: referrerUserId,
-    rewardAmount,
+    rewardAmount: directRewardAmount,
+    firstDepositBonusAmount: Number(firstDepositBonus.bonusAmount || 0),
+    firstDepositBonusRuleId: firstDepositBonus.bonusRuleId,
   }
+}
+
+async function hasActiveMiningOrTrade(db, userId) {
+  const mining = await get(
+    db,
+    `SELECT id FROM mining_profiles WHERE user_id = ? AND status = 'active' LIMIT 1`,
+    [userId],
+  )
+  if (mining?.id) return true
+  const trade = await get(
+    db,
+    `SELECT id FROM strategy_code_usages WHERE user_id = ? AND status = 'trade_active' LIMIT 1`,
+    [userId],
+  )
+  return Boolean(trade?.id)
+}
+
+async function getEffectiveWithdrawalPolicy(db, userId) {
+  const user = await get(db, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [userId])
+  const vipLevel = Number(user?.vip_level || 0)
+  const vipRules = getVipRuntimeRules(vipLevel)
+  const activeExtraFee = (await hasActiveMiningOrTrade(db, userId)) ? Number(vipRules.activeExtraFeePercent || 0) : 0
+  return {
+    vipLevel,
+    dailyLimit: Number(vipRules.dailyWithdrawalLimit || 0),
+    feePercent: Number(vipRules.withdrawalFeePercent || 0) + activeExtraFee,
+    processingHoursMin: Number(vipRules.processingHoursMin || 0),
+    processingHoursMax: Number(vipRules.processingHoursMax || 0),
+  }
+}
+
+async function getDailyWithdrawalRequestedAmount(db, userId, currency) {
+  const row = await get(
+    db,
+    `SELECT COALESCE(SUM(amount), 0) AS total
+     FROM withdrawal_requests
+     WHERE user_id = ?
+       AND currency = ?
+       AND request_status IN ('pending', 'approved', 'completed')
+       AND created_at >= CURRENT_DATE
+       AND created_at < (CURRENT_DATE + INTERVAL '1 day')`,
+    [userId, currency],
+  )
+  return Number(row?.total || 0)
 }
 
 async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const safeRules = rules || (await getRules(db))
   const balance = await getBalanceAmount(db, userId, currency)
   const profile = await getEffectiveUnlockProfile(db, userId, currency, safeRules)
+  const withdrawalPolicy = await getEffectiveWithdrawalPolicy(db, userId)
   const lockRows = await all(
     db,
     `SELECT id, principal_amount, required_profit_amount
@@ -454,7 +876,13 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     principalLocked <= 0 ||
     unlockTargetProfit <= 0 ||
     earnedProfit >= unlockTargetProfit
-  const withdrawableBalance = Number((isPrincipalUnlocked ? balance : Math.max(0, earnedProfit)).toFixed(8))
+  const unlockedBalance = Number((isPrincipalUnlocked ? balance : Math.max(0, earnedProfit)).toFixed(8))
+  const todayRequestedAmount = await getDailyWithdrawalRequestedAmount(db, userId, currency)
+  const dailyRemaining =
+    withdrawalPolicy.dailyLimit > 0
+      ? Number(Math.max(0, withdrawalPolicy.dailyLimit - todayRequestedAmount).toFixed(8))
+      : unlockedBalance
+  const withdrawableBalance = Number(Math.min(unlockedBalance, dailyRemaining).toFixed(8))
   const remainingProfitToUnlock = Number((isPrincipalUnlocked ? 0 : Math.max(0, unlockTargetProfit - earnedProfit)).toFixed(8))
   const unlockProgressPct = Number(
     (
@@ -478,8 +906,14 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     is_principal_unlocked: isPrincipalUnlocked,
     unlock_ratio: Number(profile.unlockRatio.toFixed(4)),
     minimum_profit_to_unlock: Number(profile.minimumProfitToUnlock.toFixed(8)),
-    vip_level: profile.vipLevel,
+    vip_level: withdrawalPolicy.vipLevel,
     force_unlock_principal: profile.forceUnlockPrincipal,
+    withdrawal_fee_percent: Number(withdrawalPolicy.feePercent.toFixed(4)),
+    daily_withdrawal_limit: Number(withdrawalPolicy.dailyLimit || 0),
+    daily_withdrawal_requested: Number(todayRequestedAmount.toFixed(8)),
+    daily_withdrawal_remaining: dailyRemaining,
+    processing_hours_min: withdrawalPolicy.processingHoursMin,
+    processing_hours_max: withdrawalPolicy.processingHoursMax,
   }
 }
 
@@ -601,6 +1035,7 @@ export function createBalanceRouter(db) {
       getWalletAccountsOverview(db, req.user.id),
       getRules(db),
     ])
+    await reapplyPrincipalLocksForUser(db, req.user.id, currency, rules)
     const withdrawSummary = await calculateWithdrawalSummary(db, req.user.id, currency, rules)
     return res.json({
       total_assets: accountsOverview.total_assets,
@@ -653,6 +1088,7 @@ export function createBalanceRouter(db) {
       getWalletHistory(db, userId, { currency, limit }),
       getEarningHistory(db, userId, { limit }),
     ])
+    await reapplyPrincipalLocksForUser(db, userId, currency, rules)
     const withdrawSummary = await calculateWithdrawalSummary(db, userId, currency, rules)
     const userRow = await get(db, `SELECT id, email, phone, display_name FROM users WHERE id = ? LIMIT 1`, [userId])
     return res.json({
@@ -734,12 +1170,11 @@ export function createBalanceRouter(db) {
           balanceAfter: balanceAfterAdjust,
           extra: { delta, currency },
         })
-        await run(
-          tx,
-          `INSERT INTO notifications (user_id, title, body)
-           VALUES (?, 'Balance Updated', ?)`,
-          [userId, `Your ${currency} balance was ${type}ed by ${Math.abs(amount)}.`],
-        )
+          await createLocalizedNotification(tx, userId, 'balance_adjusted', {
+            currency,
+            amount: Math.abs(amount),
+            operation: type === 'deduct' ? 'deducted' : 'added',
+          })
       })
     } catch (error) {
       if (error instanceof Error && error.message === 'INSUFFICIENT_BALANCE') {
@@ -760,13 +1195,16 @@ export function createBalanceRouter(db) {
   router.post('/rules', requireRole('owner'), async (req, res) => {
     const nextRules = normalizeRules(req.body?.rules)
     await upsertRules(db, nextRules)
+    await reapplyPrincipalLocksForAllUsers(db, nextRules)
     publishLiveUpdate({ type: 'home_content_updated', source: 'balance_rules', key: 'balance_rules' })
+    publishLiveUpdate({ type: 'balance_rules_updated', source: 'balance_rules', key: 'balance_rules' })
     return res.json({ ok: true, rules: nextRules })
   })
 
   router.get('/withdraw-summary/my', async (req, res) => {
     const currency = normalizeCurrency(req.query.currency || 'USDT')
     const rules = await getRules(db)
+    await reapplyPrincipalLocksForUser(db, req.user.id, currency, rules)
     const summary = await calculateWithdrawalSummary(db, req.user.id, currency, rules)
     return res.json({ summary })
   })
@@ -774,6 +1212,7 @@ export function createBalanceRouter(db) {
   router.get('/withdraw-locks/my', async (req, res) => {
     const currency = normalizeCurrency(req.query.currency || 'USDT')
     const rules = await getRules(db)
+    await reapplyPrincipalLocksForUser(db, req.user.id, currency, rules)
     await unlockAllPrincipalLocksIfEligible(db, req.user.id, currency, rules)
     const summary = await calculateWithdrawalSummary(db, req.user.id, currency, rules)
     const rows = await all(
@@ -798,6 +1237,7 @@ export function createBalanceRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
     const override = await getUserUnlockOverride(db, userId)
     const rules = await getRules(db)
+    await reapplyPrincipalLocksForUser(db, userId, 'USDT', rules)
     const summary = await calculateWithdrawalSummary(db, userId, 'USDT', rules)
     return res.json({ override, summary })
   })
@@ -837,14 +1277,18 @@ export function createBalanceRouter(db) {
           updated_at = CURRENT_TIMESTAMP`,
         [userId, forceUnlockPrincipal, customUnlockRatio, customMinProfit, note || null, req.user.id],
       )
-      if (forceUnlockPrincipal === 1) {
-        await run(
-          tx,
-          `UPDATE user_principal_locks
-           SET lock_status = 'unlocked', unlocked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = ? AND lock_status = 'locked'`,
-          [userId],
-        )
+      const currencies = await all(
+        tx,
+        `SELECT DISTINCT currency
+         FROM user_principal_locks
+         WHERE user_id = ? AND lock_status = 'locked'`,
+        [userId],
+      )
+      if (currencies.length) {
+        const rules = await getRules(tx)
+        for (const row of currencies) {
+          await reapplyPrincipalLocksForUser(tx, userId, String(row.currency || 'USDT'), rules)
+        }
       }
       await createAdminAuditLog(tx, {
         actorUserId: req.user.id,
@@ -946,6 +1390,7 @@ export function createBalanceRouter(db) {
             depositRequestId: requestId,
             rules,
           })
+          await reapplyPrincipalLocksForUser(tx, req.user.id, currency, rules)
           rewardedReferrerUserId = Number(vipResult.rewardedReferrerUserId || 0)
         })
         publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'deposit_auto_approved' })
@@ -992,8 +1437,15 @@ export function createBalanceRouter(db) {
     if (amount < Number(rules.minWithdrawal || 0)) return res.status(400).json({ error: 'INVALID_INPUT' })
     if (!rules.withdrawalMethods.includes(method)) return res.status(400).json({ error: 'INVALID_INPUT' })
 
+    await reapplyPrincipalLocksForUser(db, req.user.id, currency, rules)
     const summaryBefore = await calculateWithdrawalSummary(db, req.user.id, currency, rules)
+    if (Number(summaryBefore.daily_withdrawal_remaining || 0) < amount) {
+      return res.status(400).json({ error: 'DAILY_LIMIT_EXCEEDED' })
+    }
     if (summaryBefore.withdrawable_balance < amount) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
+    const feePercent = Number(summaryBefore.withdrawal_fee_percent || 0)
+    const feeAmount = Number(((amount * feePercent) / 100).toFixed(8))
+    const payoutAmount = Number(Math.max(0, amount - feeAmount).toFixed(8))
 
     try {
       if (!rules.manualReview) {
@@ -1002,19 +1454,36 @@ export function createBalanceRouter(db) {
           const insertRes = await run(
             tx,
             `INSERT INTO withdrawal_requests (
-              user_id, amount, currency, method, account_info, user_notes, request_status, idempotency_key
+              user_id, amount, currency, method, account_info, user_notes, request_status, idempotency_key,
+              fee_percent, fee_amount, payout_amount, vip_level, processing_hours_min, processing_hours_max
             )
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
-            [req.user.id, amount, currency, method, accountInfo, notes || null, idempotencyKey || null],
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+            [
+              req.user.id,
+              amount,
+              currency,
+              method,
+              accountInfo,
+              notes || null,
+              idempotencyKey || null,
+              feePercent,
+              feeAmount,
+              payoutAmount,
+              Number(summaryBefore.vip_level || 0),
+              Number(summaryBefore.processing_hours_min || 0) || null,
+              Number(summaryBefore.processing_hours_max || 0) || null,
+            ],
           )
           requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
           const autoSummary = await unlockAllPrincipalLocksIfEligible(tx, req.user.id, currency, rules)
           const current = await getBalanceAmount(tx, req.user.id, currency)
+          if (Number(autoSummary.daily_withdrawal_remaining || 0) < amount) throw new Error('DAILY_LIMIT_EXCEEDED')
           if (current < amount || autoSummary.withdrawable_balance < amount) throw new Error('INSUFFICIENT_BALANCE')
           const { walletTxnId } = await createWithdrawal(tx, {
             userId: req.user.id,
             currency,
             amount,
+            feeAmount,
             referenceType: 'withdrawal_request',
             referenceId: requestId,
             idempotencyKey: `withdrawal_auto_${requestId}`,
@@ -1038,16 +1507,32 @@ export function createBalanceRouter(db) {
       const insertRes = await run(
         db,
         `INSERT INTO withdrawal_requests (
-          user_id, amount, currency, method, account_info, user_notes, request_status, idempotency_key
+          user_id, amount, currency, method, account_info, user_notes, request_status, idempotency_key,
+          fee_percent, fee_amount, payout_amount, vip_level, processing_hours_min, processing_hours_max
         )
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
-        [req.user.id, amount, currency, method, accountInfo, notes || null, idempotencyKey || null],
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [
+          req.user.id,
+          amount,
+          currency,
+          method,
+          accountInfo,
+          notes || null,
+          idempotencyKey || null,
+          feePercent,
+          feeAmount,
+          payoutAmount,
+          Number(summaryBefore.vip_level || 0),
+          Number(summaryBefore.processing_hours_min || 0) || null,
+          Number(summaryBefore.processing_hours_max || 0) || null,
+        ],
       )
       const requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'withdraw_request_created' })
       return res.json({ ok: true, requestId, status: 'pending' })
     } catch (error) {
       const msg = String(error?.message || '').toLowerCase()
+      if (msg.includes('daily_limit_exceeded')) return res.status(400).json({ error: 'DAILY_LIMIT_EXCEEDED' })
       if (msg.includes('insufficient_balance')) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
       if (msg.includes('idempotency_key') || msg.includes('unique')) {
         return res.status(409).json({ error: 'ALREADY_EXISTS' })
@@ -1085,6 +1570,7 @@ export function createBalanceRouter(db) {
           db,
           `SELECT id, 'withdrawal' AS request_type, amount, currency, method, account_info,
                   user_notes, request_status, admin_note, reviewed_by, reviewed_at, completed_at,
+                  fee_percent, fee_amount, payout_amount, vip_level, processing_hours_min, processing_hours_max,
                   created_at, updated_at
            FROM withdrawal_requests
            WHERE user_id = ? AND request_status = ?
@@ -1095,6 +1581,7 @@ export function createBalanceRouter(db) {
           db,
           `SELECT id, 'withdrawal' AS request_type, amount, currency, method, account_info,
                   user_notes, request_status, admin_note, reviewed_by, reviewed_at, completed_at,
+                  fee_percent, fee_amount, payout_amount, vip_level, processing_hours_min, processing_hours_max,
                   created_at, updated_at
            FROM withdrawal_requests
            WHERE user_id = ?
@@ -1251,12 +1738,9 @@ export function createBalanceRouter(db) {
           depositRequestId: requestId,
           rules,
         })
+        await reapplyPrincipalLocksForUser(tx, item.user_id, item.currency, rules)
         rewardedReferrerUserId = Number(vipResult.rewardedReferrerUserId || 0)
-        await run(
-          tx,
-          `INSERT INTO notifications (user_id, title, body) VALUES (?, 'Deposit Approved', ?)`,
-          [item.user_id, `Your deposit request #${requestId} has been approved.`],
-        )
+        await createLocalizedNotification(tx, item.user_id, 'deposit_approved', { requestId })
         await createAdminAuditLog(tx, {
           actorUserId: req.user.id,
           targetUserId: item.user_id,
@@ -1322,6 +1806,9 @@ export function createBalanceRouter(db) {
         const summary = await unlockAllPrincipalLocksIfEligible(tx, item.user_id, item.currency, rules)
         const balanceBeforeWithdraw = await getBalanceAmount(tx, item.user_id, item.currency)
         const requestedAmount = Number(item.amount || 0)
+        if (Number(summary.daily_withdrawal_remaining || 0) < requestedAmount) {
+          throw new Error('DAILY_LIMIT_EXCEEDED')
+        }
         if (balanceBeforeWithdraw < requestedAmount || summary.withdrawable_balance < requestedAmount) {
           throw new Error('INSUFFICIENT_BALANCE')
         }
@@ -1329,6 +1816,7 @@ export function createBalanceRouter(db) {
           userId: item.user_id,
           currency: item.currency,
           amount: requestedAmount,
+          feeAmount: Number(item.fee_amount || 0),
           referenceType: 'withdrawal_request',
           referenceId: requestId,
           idempotencyKey: `withdrawal_review_${requestId}`,
@@ -1359,11 +1847,7 @@ export function createBalanceRouter(db) {
           [adminNote || null, req.user.id, walletTxnId || null, requestId],
         )
         if (!updateRes.changes) throw new Error('ALREADY_PROCESSED')
-        await run(
-          tx,
-          `INSERT INTO notifications (user_id, title, body) VALUES (?, 'Withdrawal Approved', ?)`,
-          [item.user_id, `Your withdrawal request #${requestId} has been approved.`],
-        )
+        await createLocalizedNotification(tx, item.user_id, 'withdrawal_approved', { requestId })
         await createAdminAuditLog(tx, {
           actorUserId: req.user.id,
           targetUserId: item.user_id,
@@ -1384,6 +1868,7 @@ export function createBalanceRouter(db) {
       const msg = String(error?.message || '')
       if (msg === 'NOT_FOUND') return res.status(404).json({ error: 'NOT_FOUND' })
       if (msg === 'ALREADY_PROCESSED') return res.status(409).json({ error: 'ALREADY_EXISTS' })
+      if (msg === 'DAILY_LIMIT_EXCEEDED') return res.status(400).json({ error: 'DAILY_LIMIT_EXCEEDED' })
       if (msg === 'INSUFFICIENT_BALANCE') return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
       throw error
     })
@@ -1414,11 +1899,7 @@ export function createBalanceRouter(db) {
        WHERE id = ? AND request_status = 'approved'`,
       [adminNote || item.admin_note || null, req.user.id, requestId],
     )
-    await run(
-      db,
-      `INSERT INTO notifications (user_id, title, body) VALUES (?, 'Withdrawal Completed', ?)`,
-      [item.user_id, `Your withdrawal request #${requestId} has been completed.`],
-    )
+    await createLocalizedNotification(db, item.user_id, 'withdrawal_completed', { requestId })
     await createAdminAuditLog(db, {
       actorUserId: req.user.id,
       targetUserId: item.user_id,
@@ -1462,12 +1943,10 @@ export function createBalanceRouter(db) {
           extra: { currency, delta },
         })
       }
-      await run(
-        tx,
-        `INSERT INTO notifications (user_id, title, body)
-         VALUES (?, 'Balance Updated', ?)`,
-        [userId, `Your ${currency} balance was set to ${fixedAmount}.`],
-      )
+        await createLocalizedNotification(tx, userId, 'balance_set', {
+          currency,
+          amount: fixedAmount,
+        })
     })
     publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId, source: 'balance_set' })
     return res.json({ ok: true, balance: { userId, currency, amount: fixedAmount } })

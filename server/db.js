@@ -1,4 +1,5 @@
 import { Pool } from 'pg'
+import { getDefaultVipTierRows } from './services/vip-rules.js'
 
 function normalizeSql(sql) {
   return sql
@@ -281,6 +282,49 @@ async function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_task_reward_redemptions_user ON task_reward_redemptions(user_id);
 
+    CREATE TABLE IF NOT EXISTS strategy_codes (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT,
+      feature_type TEXT NOT NULL DEFAULT 'trial_trade',
+      reward_mode TEXT NOT NULL DEFAULT 'percent',
+      reward_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+      asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT',
+      trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+      expires_at TIMESTAMP,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategy_codes_active ON strategy_codes(is_active);
+
+    CREATE TABLE IF NOT EXISTS strategy_code_usages (
+      id SERIAL PRIMARY KEY,
+      code_id INTEGER NOT NULL REFERENCES strategy_codes(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending_confirmation',
+      selected_symbol TEXT,
+      feature_type TEXT NOT NULL DEFAULT 'trial_trade',
+      balance_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0,
+      stake_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      reward_value DOUBLE PRECISION NOT NULL DEFAULT 0,
+      trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+      entry_price DOUBLE PRECISION,
+      exit_price DOUBLE PRECISION,
+      wallet_debit_txn_id INTEGER,
+      wallet_credit_txn_id INTEGER,
+      metadata_json TEXT,
+      confirmed_at TIMESTAMP,
+      settled_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(code_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategy_code_usages_user ON strategy_code_usages(user_id);
+    CREATE INDEX IF NOT EXISTS idx_strategy_code_usages_status ON strategy_code_usages(status);
+
     CREATE TABLE IF NOT EXISTS mining_profiles (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -362,6 +406,8 @@ async function ensureSchema(db) {
       recovery_code TEXT NOT NULL,
       request_status TEXT NOT NULL DEFAULT 'pending',
       request_note TEXT,
+      contact_channel TEXT,
+      contact_value TEXT,
       submitted_ip TEXT,
       submitted_user_agent TEXT,
       reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -371,6 +417,17 @@ async function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_recovery_requests_user_status
       ON recovery_code_review_requests(user_id, request_status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_reward_mode_overrides (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_reward_mode_overrides_user
+      ON user_reward_mode_overrides(user_id);
 
     CREATE TABLE IF NOT EXISTS kyc_submissions (
       id SERIAL PRIMARY KEY,
@@ -624,6 +681,12 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS processed_txn_id INTEGER REFERENCES balance_transactions(id) ON DELETE SET NULL`)
   await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS idempotency_key TEXT`)
   await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS fee_percent DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS fee_amount DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS payout_amount DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS vip_level INTEGER NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS processing_hours_min INTEGER`)
+  await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS processing_hours_max INTEGER`)
   await db.query(`ALTER TABLE user_principal_locks ADD COLUMN IF NOT EXISTS required_profit_amount DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE user_principal_locks ADD COLUMN IF NOT EXISTS unlock_ratio DOUBLE PRECISION NOT NULL DEFAULT 1`)
   await db.query(`ALTER TABLE user_principal_locks ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'deposit_request'`)
@@ -637,8 +700,49 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE user_unlock_overrides ADD COLUMN IF NOT EXISTS note TEXT`)
   await db.query(`ALTER TABLE user_unlock_overrides ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL`)
   await db.query(`ALTER TABLE user_unlock_overrides ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+  await db.query(`ALTER TABLE recovery_code_review_requests ADD COLUMN IF NOT EXISTS contact_channel TEXT`)
+  await db.query(`ALTER TABLE recovery_code_review_requests ADD COLUMN IF NOT EXISTS contact_value TEXT`)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_reward_mode_overrides (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_user_reward_mode_overrides_user ON user_reward_mode_overrides(user_id)`)
   await db.query(`ALTER TABLE mining_profiles ADD COLUMN IF NOT EXISTS video_access_unlocked INTEGER NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE mining_profiles ADD COLUMN IF NOT EXISTS video_access_unlocked_at TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS feature_type TEXT NOT NULL DEFAULT 'trial_trade'`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS reward_mode TEXT NOT NULL DEFAULT 'percent'`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS reward_value DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT'`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_strategy_codes_active ON strategy_codes(is_active)`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending_confirmation'`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS selected_symbol TEXT`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS feature_type TEXT NOT NULL DEFAULT 'trial_trade'`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS balance_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS stake_amount DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS reward_value DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS entry_price DOUBLE PRECISION`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS exit_price DOUBLE PRECISION`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS wallet_debit_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS wallet_credit_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS metadata_json TEXT`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_strategy_code_usages_user ON strategy_code_usages(user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_strategy_code_usages_status ON strategy_code_usages(status)`)
   await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'`)
   await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT`)
   await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS full_name_match_score DOUBLE PRECISION`)
@@ -647,6 +751,10 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS auto_review_at TIMESTAMP`)
   await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS reviewed_note TEXT`)
   await db.query(`ALTER TABLE vip_tiers ADD COLUMN IF NOT EXISTS referral_percent DOUBLE PRECISION NOT NULL DEFAULT 3`)
+  await db.query(`ALTER TABLE referral_rewards ADD COLUMN IF NOT EXISTS level_depth INTEGER NOT NULL DEFAULT 1`)
+  await db.query(`ALTER TABLE referral_rewards DROP CONSTRAINT IF EXISTS referral_rewards_referred_user_id_key`).catch(() => {})
+  await db.query(`DROP INDEX IF EXISTS idx_referral_rewards_referred_unique`).catch(() => {})
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_rewards_referrer_referred_depth ON referral_rewards(referrer_user_id, referred_user_id, level_depth)`)
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_users_total_deposit ON users(total_deposit)`)
@@ -699,22 +807,33 @@ async function ensureSchema(db) {
   `).catch(() => {})
   await db.query(`UPDATE users SET referred_by = invited_by WHERE referred_by IS NULL AND invited_by IS NOT NULL`)
   await db.query(`UPDATE users SET is_owner = CASE WHEN role = 'owner' THEN 1 ELSE 0 END`)
-  await db.query(
-    `INSERT INTO vip_tiers (
-      level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active
+  for (const tier of getDefaultVipTierRows()) {
+    await db.query(
+      prep(
+        `INSERT INTO vip_tiers (
+          level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(level) DO UPDATE SET
+          title = excluded.title,
+          min_deposit = excluded.min_deposit,
+          min_trade_volume = excluded.min_trade_volume,
+          referral_multiplier = excluded.referral_multiplier,
+          referral_percent = excluded.referral_percent,
+          perks_json = excluded.perks_json,
+          is_active = 1`,
+      ),
+      [
+        tier.level,
+        tier.title,
+        tier.minDeposit,
+        tier.minTeamVolume,
+        tier.minReferrals,
+        tier.referralPercent,
+        JSON.stringify(tier.perks),
+      ],
     )
-    VALUES
-      (1, 'VIP 1', 500, 0, 1, 4, '[]', 1),
-      (2, 'VIP 2', 1500, 0, 1, 5, '[]', 1),
-      (3, 'VIP 3', 3000, 0, 1, 6, '[]', 1),
-      (4, 'VIP 4', 7000, 0, 1, 7, '[]', 1),
-      (5, 'VIP 5', 15000, 0, 1, 8, '[]', 1)
-    ON CONFLICT(level) DO UPDATE SET
-      title = excluded.title,
-      min_deposit = excluded.min_deposit,
-      referral_percent = excluded.referral_percent,
-      is_active = 1`,
-  )
+  }
   await db.query(`
     CREATE TABLE IF NOT EXISTS ads (
       id SERIAL PRIMARY KEY,

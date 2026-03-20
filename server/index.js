@@ -25,6 +25,7 @@ import { createTasksRouter } from './routes/tasks.js'
 import { createMiningRouter } from './routes/mining.js'
 import { createRewardsRouter } from './routes/rewards.js'
 import { createAdsRouter } from './routes/ads.js'
+import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-assets.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -42,7 +43,39 @@ let dbRef = null
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
-app.use('/uploads', express.static(path.join(process.cwd(), 'server', 'uploads')))
+app.use('/uploads', async (req, res, next) => {
+  if (!dbRef) return next()
+  try {
+    const storageKey = getUploadStorageKey(`/uploads${String(req.path || '')}`)
+    if (!storageKey) return next()
+    const asset = await getUploadedAssetByKey(dbRef, storageKey)
+    if (!asset?.content_base64) return next()
+    const buffer = Buffer.from(String(asset.content_base64), 'base64')
+    res.setHeader('Content-Type', String(asset.mime_type || 'application/octet-stream'))
+    res.setHeader('Content-Length', String(buffer.length))
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    return res.end(buffer)
+  } catch {
+    return next()
+  }
+})
+app.use(
+  '/uploads',
+  express.static(path.join(process.cwd(), 'server', 'uploads'), {
+    etag: false,
+    lastModified: false,
+    setHeaders: (res, filePath) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+      res.setHeader('Expires', '0')
+    },
+  }),
+)
+app.use('/uploads', (_req, res) => {
+  return res.status(404).send('UPLOAD_NOT_FOUND')
+})
 
 app.get('/api/health/live', (_req, res) => {
   return res.json({ ok: true, service: 'api', uptimeSec: Math.floor(process.uptime()) })

@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  cancelMining,
   claimMiningDaily,
   emergencyWithdrawMining,
   getMiningMy,
   getAds,
-  releaseMiningPrincipal,
   subscribeMining,
   subscribeToLiveUpdates,
   type MiningConfig,
@@ -16,34 +14,7 @@ import { AdBanner } from '../components/ads/AdBanner'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
 
-type ConfirmAction = 'subscribe' | 'claim' | 'cancel' | 'emergency' | null
-
-const DEFAULT_MINING_MEDIA = [
-  {
-    id: 'local-mining-ad-video',
-    type: 'video' as const,
-    url: '/mining-media/mining-ad.mp4',
-    title: '',
-    enabled: true,
-    order: 0,
-  },
-  {
-    id: 'local-mining-ad-image',
-    type: 'image' as const,
-    url: '/ads/mining-main-banner.jpg',
-    title: '',
-    enabled: true,
-    order: 1,
-  },
-  {
-    id: 'local-mining-ad-video-electric',
-    type: 'video' as const,
-    url: '/mining-media/mining-electric.mp4',
-    title: '',
-    enabled: true,
-    order: 2,
-  },
-]
+type ConfirmAction = 'subscribe' | 'increase' | 'claim' | 'emergency' | null
 
 export function MiningPage() {
   const { t } = useI18n()
@@ -54,10 +25,8 @@ export function MiningPage() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [activeMediaIndex, setActiveMediaIndex] = useState(0)
-  const [autoplayOnSubscribe, setAutoplayOnSubscribe] = useState(false)
   const [miningAds, setMiningAds] = useState<AdItem[]>([])
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const subscribeSectionRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     getAds('mining')
@@ -79,7 +48,6 @@ export function MiningPage() {
       const res = await getMiningMy()
       setConfig(res.config)
       setProfile(res.profile)
-      setActiveMediaIndex(0)
     } catch {
       setConfig(null)
       setProfile(null)
@@ -96,28 +64,19 @@ export function MiningPage() {
     return Number.isFinite(typed) ? typed : 0
   }, [selectedAmount, customAmount])
 
-  const mediaItems = useMemo(() => {
-    const configured = (config?.mediaItems?.filter((item) => item.enabled) || []).slice()
-    const existingUrls = new Set(configured.map((item) => String(item.url || '').trim()))
-    for (const fallbackItem of DEFAULT_MINING_MEDIA) {
-      if (!existingUrls.has(fallbackItem.url)) {
-        configured.push(fallbackItem)
-      }
-    }
-    return configured.sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-  }, [config?.mediaItems])
-  const activeMedia = mediaItems[activeMediaIndex] || null
-  const hasVideoMedia = mediaItems.some((item) => item.type === 'video')
-
-  useEffect(() => {
-    if (!mediaItems.length) return
-    if (mediaItems[activeMediaIndex]?.type === 'video') return
-    const firstVideoIndex = mediaItems.findIndex((item) => item.type === 'video')
-    if (firstVideoIndex >= 0) setActiveMediaIndex(firstVideoIndex)
-  }, [activeMediaIndex, mediaItems])
+  const hasActiveSubscription = Boolean(profile && profile.status === 'active')
 
   function openConfirm(action: ConfirmAction) {
     setConfirmAction(action)
+  }
+
+  function openIncreaseFlow() {
+    const minimumAmount = Number(config?.minSubscription || 500)
+    if (!selectedAmount && Number(customAmount || 0) < minimumAmount) {
+      setSelectedAmount(minimumAmount)
+      setCustomAmount('')
+    }
+    subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function performConfirmedAction() {
@@ -125,10 +84,12 @@ export function MiningPage() {
     setSubmitting(true)
     setMessage(null)
     try {
-      if (confirmAction === 'subscribe') {
-        await subscribeMining(amountToUse)
-        setAutoplayOnSubscribe(true)
-        const text = t('mining_subscribe_success')
+      if (confirmAction === 'subscribe' || confirmAction === 'increase') {
+        const res = await subscribeMining(amountToUse)
+        const text =
+          confirmAction === 'increase' || res.action === 'increase'
+            ? t('mining_increase_success')
+            : t('mining_subscribe_success')
         setMessage({ type: 'success', text })
         emitToast({ kind: 'success', message: text, durationMs: 3600 })
       } else if (confirmAction === 'claim') {
@@ -136,11 +97,6 @@ export function MiningPage() {
         const text = t('mining_claim_success')
         setMessage({ type: 'success', text })
         emitToast({ kind: 'success', message: text, durationMs: 3200 })
-      } else if (confirmAction === 'cancel') {
-        await cancelMining()
-        const text = t('mining_cancel_success')
-        setMessage({ type: 'success', text })
-        emitToast({ kind: 'success', message: text, durationMs: 4500 })
       } else if (confirmAction === 'emergency') {
         await emergencyWithdrawMining()
         const text = t('mining_emergency_success')
@@ -156,25 +112,6 @@ export function MiningPage() {
     }
   }
 
-  useEffect(() => {
-    if (!autoplayOnSubscribe || !hasVideoMedia) return
-    const firstVideoIndex = mediaItems.findIndex((item) => item.type === 'video')
-    if (firstVideoIndex >= 0 && firstVideoIndex !== activeMediaIndex) {
-      setActiveMediaIndex(firstVideoIndex)
-    }
-  }, [activeMediaIndex, autoplayOnSubscribe, hasVideoMedia, mediaItems])
-
-  useEffect(() => {
-    if (!activeMedia || activeMedia.type !== 'video') return
-    const videoEl = videoRef.current
-    if (!videoEl) return
-    videoEl.currentTime = 0
-    const playPromise = videoEl.play()
-    if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise.catch(() => {})
-    }
-  }, [activeMedia, autoplayOnSubscribe])
-
   return (
     <div className="page space-y-3">
       <h1 className="page-title">{t('mining_title')}</h1>
@@ -184,54 +121,12 @@ export function MiningPage() {
         <AdBanner items={miningAds} placement="mining" className="my-0" />
       </section>
 
-      <section className="rounded-2xl border border-app-border bg-app-card p-3">
-        <h2 className="text-sm font-semibold text-white">{t('mining_media_title')}</h2>
-        <p className="mt-1 text-xs text-app-muted">{t('mining_media_hint')}</p>
-        {activeMedia ? (
-          <div className="mt-3 overflow-hidden rounded-xl border border-app-border bg-app-elevated">
-            {activeMedia.type === 'video' ? (
-              <div className="relative">
-                <video
-                  ref={videoRef}
-                  src={activeMedia.url}
-                  className="h-40 w-full object-cover"
-                  controls
-                  muted
-                  playsInline
-                  autoPlay
-                  loop
-                  preload="metadata"
-                />
-              </div>
-            ) : (
-              <img src={activeMedia.url} alt={activeMedia.title || 'mining'} className="h-40 w-full object-cover" />
-            )}
-            <div className="px-3 py-2 text-xs text-app-muted">{activeMedia.title || t('mining_media_caption')}</div>
-          </div>
-        ) : (
-          <div className="mt-3 rounded-xl border border-dashed border-app-border bg-app-elevated px-3 py-6 text-center text-xs text-app-muted">
-            {t('mining_media_empty')}
-          </div>
-        )}
-        {mediaItems.length > 1 ? (
-          <div className="mt-2 flex justify-center gap-1.5">
-            {mediaItems.map((item, idx) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`h-2 rounded-full ${idx === activeMediaIndex ? 'w-5 bg-brand-blue' : 'w-2 bg-white/35'}`}
-                onClick={() => setActiveMediaIndex(idx)}
-                aria-label={`${t('promo_go_to')} ${idx + 1}`}
-              />
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <section id="subscribe" className="rounded-2xl border border-app-border bg-app-card p-3">
-        <h2 className="text-sm font-semibold text-white">{t('mining_subscribe_title')}</h2>
+      <section id="subscribe" ref={subscribeSectionRef} className="rounded-2xl border border-app-border bg-app-card p-3">
+        <h2 className="text-sm font-semibold text-white">
+          {hasActiveSubscription ? t('mining_increase_title') : t('mining_subscribe_title')}
+        </h2>
         <p className="mt-1 text-xs text-app-muted">
-          {t('mining_subscribe_hint')} {config?.minSubscription || 500}$
+          {hasActiveSubscription ? t('mining_increase_hint') : t('mining_subscribe_hint')} {config?.minSubscription || 500}$
         </p>
         <div className="mt-3 grid grid-cols-3 gap-2">
           {(config?.planOptions || [500, 1000, 3000]).map((value) => (
@@ -271,11 +166,11 @@ export function MiningPage() {
               emitToast({ kind: 'error', errorCode: 'INVALID_AMOUNT', message: text })
               return
             }
-            openConfirm('subscribe')
+            openConfirm(hasActiveSubscription ? 'increase' : 'subscribe')
           }}
           disabled={submitting}
         >
-          {t('mining_subscribe_button')}
+          {hasActiveSubscription ? t('mining_increase_subscription') : t('mining_subscribe_button')}
         </button>
       </section>
 
@@ -308,14 +203,6 @@ export function MiningPage() {
             </button>
             <button
               type="button"
-              className="wallet-action-btn owner-set-btn"
-              onClick={() => openConfirm('cancel')}
-              disabled={submitting || profile.status !== 'active'}
-            >
-              {t('mining_cancel_subscription')}
-            </button>
-            <button
-              type="button"
               className="wallet-action-btn wallet-action-withdraw"
               onClick={() => openConfirm('emergency')}
               disabled={submitting || profile.status === 'inactive'}
@@ -325,24 +212,10 @@ export function MiningPage() {
             <button
               type="button"
               className="wallet-action-btn owner-set-btn"
-              onClick={async () => {
-                setSubmitting(true)
-                setMessage(null)
-                try {
-                  await releaseMiningPrincipal()
-                  const text = t('mining_release_success')
-                  setMessage({ type: 'success', text })
-                  emitToast({ kind: 'success', message: text, durationMs: 3500 })
-                  await loadMining()
-                } catch {
-                  setMessage({ type: 'error', text: t('toast_error_transaction_failed') })
-                } finally {
-                  setSubmitting(false)
-                }
-              }}
-              disabled={submitting || !profile.can_release_principal}
+              onClick={openIncreaseFlow}
+              disabled={submitting || profile.status !== 'active'}
             >
-              {t('mining_release_principal')}
+              {t('mining_increase_subscription')}
             </button>
           </div>
         </section>
@@ -361,11 +234,11 @@ export function MiningPage() {
             <p className="mt-2 text-sm text-app-muted">
               {confirmAction === 'subscribe'
                 ? `${t('mining_confirm_subscribe')} ${amountToUse.toFixed(2)} USDT`
+                : confirmAction === 'increase'
+                  ? `${t('mining_confirm_increase')} ${amountToUse.toFixed(2)} USDT`
                 : confirmAction === 'claim'
                   ? t('mining_confirm_claim')
-                  : confirmAction === 'cancel'
-                    ? t('mining_confirm_cancel')
-                    : t('mining_confirm_emergency')}
+                  : t('mining_confirm_emergency')}
             </p>
             <div className="mt-4 flex gap-2">
               <button

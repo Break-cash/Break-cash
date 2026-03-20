@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { apiFetch, getAds, subscribeToLiveUpdates, type AdItem } from '../api'
+import { getAds, subscribeToLiveUpdates, type AdItem } from '../api'
 import { appData } from '../data'
 import { AdBanner } from '../components/ads/AdBanner'
+import { useMarketBoard } from '../hooks/useMarketBoard'
+import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
-
-type MarketQuote = { symbol: string; price: number; change24h: number }
 
 export function Home() {
   const { t } = useI18n()
   const { balance_info } = appData
   const [ads, setAds] = useState<AdItem[]>([])
-  const [marketData, setMarketData] = useState<MarketQuote[]>([])
+  const { summary: walletSummary } = useWalletSummary()
+  const { mostTraded, usingFallback, loading } = useMarketBoard(5000)
 
   useEffect(() => {
     getAds('home')
@@ -25,32 +26,6 @@ export function Home() {
       }
     })
     return unsub
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    async function loadQuotes() {
-      try {
-        const res = (await apiFetch('/api/market/quotes')) as {
-          items: Array<{ symbol: string; price: number; change24h: number }>
-        }
-        if (!active) return
-        const rows = (res.items || []).map((item) => ({
-          symbol: String(item.symbol || '').toUpperCase(),
-          price: Number(item.price || 0),
-          change24h: Number(item.change24h || 0),
-        }))
-        setMarketData(rows)
-      } catch {
-        if (active) setMarketData([])
-      }
-    }
-    loadQuotes().catch(() => {})
-    const id = window.setInterval(() => loadQuotes().catch(() => {}), 5000)
-    return () => {
-      active = false
-      window.clearInterval(id)
-    }
   }, [])
 
   return (
@@ -70,7 +45,7 @@ export function Home() {
               
               <div>
                 <div className="text-4xl lg:text-5xl font-black bg-gradient-to-r from-brand-blue to-brand-blue/70 bg-clip-text text-transparent">
-                  {balance_info.total_assets_usdt.toFixed(2)}
+                  {walletSummary.totalAssets.toFixed(2)}
                 </div>
               </div>
 
@@ -97,7 +72,7 @@ export function Home() {
               <div>
                 <div className="text-xs font-medium text-app-muted uppercase tracking-wide mb-3">{t('home_funding_account')}</div>
                 <div className="text-3xl font-bold text-amber-400">
-                  {balance_info.funding_account.toFixed(2)}
+                  {walletSummary.mainBalance.toFixed(2)}
                 </div>
               </div>
               <div className="text-xs text-app-muted leading-relaxed pt-3 border-t border-app-border">{t('home_funding_hint')}</div>
@@ -112,7 +87,7 @@ export function Home() {
         <section className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl lg:text-2xl font-bold text-white">{t('home_most_traded')}</h2>
-            <div className="text-xs text-app-muted">24h • Live</div>
+            <div className="text-xs text-app-muted">{usingFallback ? 'Fallback data' : '24h • Live'}</div>
           </div>
 
           <div className="card overflow-hidden">
@@ -124,12 +99,12 @@ export function Home() {
               </div>
               
               <div className="divide-y divide-app-border">
-                {marketData.length === 0 ? (
+                {loading && mostTraded.length === 0 ? (
                   <div className="table-row justify-center py-8">
                     <span className="text-app-muted">{t('common_loading')}</span>
                   </div>
                 ) : (
-                  marketData.map((item) => {
+                  mostTraded.map((item) => {
                     const pair = item.symbol.replace(/USDT$/i, '/USDT')
                     const isPositive = item.change24h >= 0
                     return (
@@ -166,6 +141,11 @@ export function Home() {
               </div>
             </div>
           </div>
+          {usingFallback ? (
+            <p className="text-xs text-amber-300/85">
+              تعذر جلب السوق الحي الآن، ويتم عرض بيانات احتياطية واضحة لحين عودة المصدر المباشر.
+            </p>
+          ) : null}
         </section>
         <div className="space-y-3 lg:col-span-1">
           <AdBanner

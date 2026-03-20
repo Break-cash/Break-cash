@@ -12,11 +12,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://api.breakcash.cash/api/:path*"
+      "destination": "https://break-cash.up.railway.app/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://api.breakcash.cash/uploads/:path*"
+      "destination": "https://break-cash.up.railway.app/uploads/:path*"
     },
     {
       "source": "/((?!api/|uploads/|assets/).*)",

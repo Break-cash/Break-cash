@@ -6,6 +6,7 @@ import {
   getBalanceRules,
   getAssetImages,
   getAds,
+  getActivePromotions,
   getMyBalanceRequests,
   getWithdrawLocksMy,
   getWithdrawSummaryMy,
@@ -18,6 +19,7 @@ import {
   type BalanceRequestStatus,
   type BalanceRules,
   type DepositRequestItem,
+  type PromotionRule,
   type PrincipalLockItem,
   type WithdrawalSummary,
   type WithdrawalRequestItem,
@@ -27,6 +29,7 @@ import {
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
 import { DEPOSIT_TERMS_AR } from '../depositTerms'
+import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
 
@@ -35,7 +38,7 @@ type DepositPageProps = {
   pageMode?: 'deposit' | 'withdraw'
 }
 
-const QUICK_AMOUNTS = [20, 50, 100] as const
+const QUICK_AMOUNTS = [75, 499, 1000] as const
 const DEFAULT_DEPOSIT_PROOF_EXAMPLE_URL = '/help/deposit-proof.jpg'
 
 export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
@@ -53,7 +56,6 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [copyDone, setCopyDone] = useState(false)
   const [logoBroken, setLogoBroken] = useState(false)
-  const [balanceUSDT, setBalanceUSDT] = useState(0)
   const [withdrawSummary, setWithdrawSummary] = useState<WithdrawalSummary | null>(null)
   const [principalLocks, setPrincipalLocks] = useState<PrincipalLockItem[]>([])
   const [rules, setRules] = useState<BalanceRules>({
@@ -86,15 +88,46 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   const [depositSubmitting, setDepositSubmitting] = useState(false)
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false)
   const [depositAds, setDepositAds] = useState<AdItem[]>([])
+  const [promotionRules, setPromotionRules] = useState<{ firstDeposit: PromotionRule[]; referral: PromotionRule[] }>({
+    firstDeposit: [],
+    referral: [],
+  })
 
   const isOwner = profile?.role === 'owner'
   const isDepositPage = pageMode === 'deposit'
   const isWithdrawPage = pageMode === 'withdraw'
   const effectiveProofExampleUrl = (depositProofExampleUrl || '').trim() || DEFAULT_DEPOSIT_PROOF_EXAMPLE_URL
+  const { summary: walletSummary, refresh: refreshWalletSummary } = useWalletSummary({
+    subscribeLive: false,
+  })
 
   function resolveUsdtDepositMethod(nextRules: BalanceRules) {
     const matched = (nextRules.depositMethods || []).find((item) => /usdt/i.test(String(item || '')))
-    return matched || 'USDT'
+    return matched || nextRules.depositMethods?.[0] || 'USDT'
+  }
+
+  async function refreshBalanceRulesLive() {
+    try {
+      const [rulesRes, summaryRes, locksRes] = await Promise.all([
+        getBalanceRules(),
+        getWithdrawSummaryMy('USDT'),
+        getWithdrawLocksMy('USDT'),
+      ])
+      setRules(rulesRes.rules)
+      setDepositMethod((current) => {
+        const nextDefault = resolveUsdtDepositMethod(rulesRes.rules)
+        return rulesRes.rules.depositMethods.includes(current) ? current : nextDefault
+      })
+      setWithdrawMethod((current) => {
+        const methods = rulesRes.rules.withdrawalMethods || []
+        if (methods.length === 0) return ''
+        return methods.includes(current) ? current : methods[0]
+      })
+      setWithdrawSummary(summaryRes.summary)
+      setPrincipalLocks(locksRes.items || [])
+    } catch {
+      // ignore transient live refresh failures
+    }
   }
 
   useEffect(() => {
@@ -120,7 +153,6 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         setDepositMethod(resolveUsdtDepositMethod(rulesRes.rules))
         setWithdrawMethod(rulesRes.rules.withdrawalMethods[0] || '')
         setWithdrawSummary(summaryRes.summary)
-        setBalanceUSDT(Number(summaryRes.summary?.current_balance || 0))
         setPrincipalLocks(locksRes.items || [])
       })
       .catch(() => {})
@@ -143,15 +175,47 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
     getAds('deposit')
       .then((res) => setDepositAds(res.items || []))
       .catch(() => setDepositAds([]))
+    getActivePromotions()
+      .then((res) => setPromotionRules({
+        firstDeposit: res.firstDeposit || [],
+        referral: res.referral || [],
+      }))
+      .catch(() => setPromotionRules({ firstDeposit: [], referral: [] }))
   }, [])
 
   useEffect(() => {
     const unsub = subscribeToLiveUpdates((event) => {
       if (event.type === 'home_content_updated') {
         getAds('deposit').then((res) => setDepositAds(res.items || [])).catch(() => {})
+        if (event.source === 'balance_rules' || event.key === 'balance_rules') {
+          refreshBalanceRulesLive().catch(() => {})
+        }
+      }
+      if (event.type === 'balance_rules_updated') {
+        refreshBalanceRulesLive().catch(() => {})
+      }
+      if (event.type === 'balance_updated' && event.scope === 'user') {
+        refreshBalanceRulesLive().catch(() => {})
       }
     })
     return unsub
+  }, [])
+
+  useEffect(() => {
+    const handlePageRefresh = () => {
+      refreshBalanceRulesLive().catch(() => {})
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshBalanceRulesLive().catch(() => {})
+      }
+    }
+    window.addEventListener('focus', handlePageRefresh)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      window.removeEventListener('focus', handlePageRefresh)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   useEffect(() => {
@@ -167,6 +231,15 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   }, [requestStatusFilter])
 
   const displayLogoUrl = (logoUrl || '').trim() ? logoUrl : '/break-cash-logo-premium.png'
+  const formatPromotionText = (rule: PromotionRule) => {
+    const conditions = (rule.conditions || {}) as Record<string, unknown>
+    const reward = (rule.reward || {}) as Record<string, unknown>
+    const minDeposit = Number(conditions.minDeposit ?? 0)
+    const mode = String(reward.mode || 'percent')
+    const value = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
+    if (mode === 'fixed') return `أودع ${minDeposit || 0} واحصل على ${value.toFixed(2)} USDT`
+    return `أودع ${minDeposit || 0} واحصل على ${value.toFixed(2)}%`
+  }
 
   async function handleSaveWallet() {
     if (!isOwner) return
@@ -223,9 +296,11 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   }
 
   async function refreshBalancesAndRequests() {
-    const summaryRes = await getWithdrawSummaryMy('USDT')
+    const [summaryRes] = await Promise.all([
+      getWithdrawSummaryMy('USDT'),
+      refreshWalletSummary(),
+    ])
     setWithdrawSummary(summaryRes.summary)
-    setBalanceUSDT(Number(summaryRes.summary?.current_balance || 0))
     const locksRes = await getWithdrawLocksMy('USDT')
     setPrincipalLocks(locksRes.items || [])
     const myReq = await getMyBalanceRequests(requestStatusFilter || undefined)
@@ -341,9 +416,29 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         ←
       </button>
 
-      <section className="deposit-promo-banner mb-4">
+      <section className="deposit-promo-banner mb-4 app-icon-hero-shell">
         <AdBanner items={depositAds} placement="deposit" />
       </section>
+
+      {(promotionRules.firstDeposit.length > 0 || promotionRules.referral.length > 0) ? (
+        <section className="rounded-2xl border border-app-border bg-app-card p-3">
+          <div className="mb-2 text-sm font-semibold text-white">العروض الحالية</div>
+          <div className="space-y-2 text-xs text-white/85">
+            {promotionRules.firstDeposit.map((rule) => (
+              <div key={`fd-${rule.id}`} className="rounded-xl border border-app-border bg-app-elevated p-3">
+                <div className="font-medium text-brand-blue">مكافأة أول إيداع</div>
+                <div className="mt-1">{formatPromotionText(rule)}</div>
+              </div>
+            ))}
+            {promotionRules.referral.map((rule) => (
+              <div key={`ref-${rule.id}`} className="rounded-xl border border-app-border bg-app-elevated p-3">
+                <div className="font-medium text-emerald-300">مكافأة الإحالة بعد أول إيداع مؤكد</div>
+                <div className="mt-1">إذا سجّل صديقك عبر كودك أو رابطك وتم تأكيد أول إيداعه: {formatPromotionText(rule)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="deposit-brand">
         <div className="deposit-logo-wrap">
@@ -394,7 +489,8 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         <h1 className="deposit-title">BREAK CASH</h1>
       </div>
 
-      <section className="deposit-section deposit-wallet-section">
+      {isDepositPage ? (
+        <section className="deposit-section deposit-wallet-section">
         <h2 className="deposit-section-title">محفظة المنصة</h2>
         {isOwner ? (
           <div className="deposit-wallet-edit">
@@ -426,14 +522,15 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
             {copyDone ? 'تم النسخ ✓' : 'نسخ'}
           </button>
         </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="deposit-section">
         <h2 className="deposit-section-title">
           {isWithdrawPage ? t('wallet_requests_withdraw_title') : t('wallet_requests_deposit_title')}
         </h2>
         <p className="deposit-welcome" style={{ marginTop: 0 }}>
-          {t('wallet_requests_balance')}: {balanceUSDT.toFixed(2)} USDT
+          {t('wallet_requests_balance')}: {walletSummary.mainBalance.toFixed(2)} USDT
           <Link to="/wallet" className="deposit-wallet-link" style={{ marginLeft: 8, fontSize: '0.9em' }}>
             ({t('wallet_overview_link')})
           </Link>
@@ -441,11 +538,11 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         {withdrawSummary ? (
           <div className="owner-history-card" style={{ marginBottom: 12 }}>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
-              <span className="owner-hint">{t('wallet_lock_principal')}: {withdrawSummary.locked_balance.toFixed(2)} USDT</span>
+              <span className="owner-hint">{t('wallet_lock_principal')}: {walletSummary.lockedBalance.toFixed(2)} USDT</span>
               <span className="owner-hint">{t('wallet_lock_profit')}: {withdrawSummary.earned_profit.toFixed(2)} USDT</span>
             </div>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
-              <span className="owner-hint">{t('wallet_lock_withdrawable')}: {withdrawSummary.withdrawable_balance.toFixed(2)} USDT</span>
+              <span className="owner-hint">{t('wallet_lock_withdrawable')}: {walletSummary.withdrawableBalance.toFixed(2)} USDT</span>
               <span className="owner-hint">
                 {t('wallet_lock_remaining_to_unlock')}: {withdrawSummary.remaining_profit_to_unlock.toFixed(2)} USDT
               </span>
@@ -587,18 +684,20 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
                   </button>
                 ))}
               </div>
-              <div className="owner-form-row">
+              <div className="owner-form-row wallet-withdraw-amount-row">
                 <input
                   type="number"
                   min={0}
                   step="any"
-                  className="field-input owner-amount-input wallet-amount-input-lg"
+                  className="field-input owner-amount-input wallet-amount-input-lg wallet-withdraw-amount-input"
                   placeholder={t('wallet_requests_amount')}
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                 />
+              </div>
+              <div className="owner-form-row wallet-withdraw-method-row">
                 <select
-                  className="field-input owner-image-key"
+                  className="field-input owner-image-key wallet-withdraw-method-select"
                   value={withdrawMethod}
                   onChange={(e) => setWithdrawMethod(e.target.value)}
                 >

@@ -40,6 +40,9 @@ export function publishLiveUpdate(event) {
     userId: Number(event?.userId || 0) || undefined,
     source: String(event?.source || ''),
     key: String(event?.key || ''),
+    title: typeof event?.title === 'string' ? String(event.title).slice(0, 180) : undefined,
+    body: typeof event?.body === 'string' ? String(event.body).slice(0, 500) : undefined,
+    vibrate: Boolean(event?.vibrate),
     ts: Date.now(),
   }
   for (const client of clients.values()) {

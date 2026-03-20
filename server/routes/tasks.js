@@ -1,7 +1,9 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
-import { getMainBalance, createTaskReward } from '../services/wallet-service.js'
+import { adjustBalance, createStrategyPromoReward, createTaskReward, getMainBalance } from '../services/wallet-service.js'
+import { fetchBestQuote, sharedMarketFeed } from '../services/marketFeed.js'
+import { createLocalizedNotification } from '../services/notifications.js'
 
 const TASK_PERMISSION = 'انشاء مهام'
 
@@ -21,6 +23,71 @@ function normalizePercent(value, fallback = 0) {
   const n = Number(value)
   if (!Number.isFinite(n) || n < 0 || n > 1000) return fallback
   return Number(n.toFixed(4))
+}
+
+function normalizeDate(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const parsed = Date.parse(raw)
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
+}
+
+function normalizeFeatureType(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  return raw === 'promo_bonus' ? 'promo_bonus' : 'trial_trade'
+}
+
+function normalizeRewardMode(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  return raw === 'fixed' ? 'fixed' : 'percent'
+}
+
+function parseJsonSafe(value, fallback) {
+  try {
+    if (value == null || value === '') return fallback
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return fallback
+  }
+}
+
+async function resolveLiveQuote(symbol) {
+  const targetSymbol = String(symbol || 'BTCUSDT').trim().toUpperCase() || 'BTCUSDT'
+  const cached = sharedMarketFeed.getPair(targetSymbol)?.pair
+  if (cached?.symbol) return cached
+  const list = sharedMarketFeed.getQuotes().items || []
+  const fromList = list.find((item) => item.symbol === targetSymbol)
+  if (fromList) return fromList
+  return fetchBestQuote(targetSymbol)
+}
+
+function computePromoRewardAmount(balanceSnapshot, codeRow) {
+  const mode = normalizeRewardMode(codeRow?.reward_mode)
+  const value = Number(codeRow?.reward_value || 0)
+  if (mode === 'fixed') return Number(Math.max(0, value).toFixed(8))
+  return Number(Math.max(0, (Number(balanceSnapshot || 0) * value) / 100).toFixed(8))
+}
+
+function buildStrategyCodeRow(row) {
+  return {
+    id: Number(row.id),
+    code: String(row.code || ''),
+    title: String(row.title || ''),
+    description: String(row.description || ''),
+    featureType: normalizeFeatureType(row.feature_type),
+    rewardMode: normalizeRewardMode(row.reward_mode),
+    rewardValue: Number(row.reward_value || 0),
+    assetSymbol: String(row.asset_symbol || 'BTCUSDT').toUpperCase(),
+    tradeReturnPercent: Number(row.trade_return_percent || 0),
+    expiresAt: row.expires_at,
+    isActive: Number(row.is_active || 0) === 1,
+    createdBy: row.created_by == null ? null : Number(row.created_by),
+    createdByName: row.created_by_name || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    usageCount: Number(row.usage_count || 0),
+    consumedCount: Number(row.consumed_count || 0),
+  }
 }
 
 function normalizeTiers(raw) {
@@ -175,12 +242,11 @@ export function createTasksRouter(db) {
           currency: 'USDT',
           note: `Redeemed task code ${code}`,
         })
-        await run(
-          tx,
-          `INSERT INTO notifications (user_id, title, body)
-           VALUES (?, 'Task reward activated', ?)`,
-          [req.user.id, `Code ${code} applied successfully. Bonus +${rewardAmount.toFixed(2)} USDT.`],
-        )
+        await createLocalizedNotification(tx, req.user.id, 'task_reward_activated', {
+          code,
+          amount: rewardAmount,
+          currency: 'USDT',
+        })
         return { rewardAmount, rewardPercent, balanceSnapshot }
       })
       return res.json({ ok: true, ...payload })
@@ -271,6 +337,454 @@ export function createTasksRouter(db) {
     const id = Number(req.params.id)
     if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
     await run(db, `DELETE FROM task_reward_codes WHERE id = ?`, [id])
+    return res.json({ ok: true })
+  })
+
+  router.get('/strategy-codes/my', async (req, res) => {
+    const codeRows = await all(
+      db,
+      `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
+              sc.asset_symbol, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_at, sc.updated_at,
+              scu.id AS usage_id, scu.status AS usage_status, scu.selected_symbol, scu.balance_snapshot,
+              scu.stake_amount, scu.entry_price, scu.exit_price, scu.reward_value AS usage_reward_value,
+              scu.trade_return_percent AS usage_trade_return_percent, scu.confirmed_at, scu.settled_at, scu.created_at AS used_at
+       FROM strategy_codes sc
+       LEFT JOIN strategy_code_usages scu
+         ON scu.code_id = sc.id
+        AND scu.user_id = ?
+       ORDER BY sc.id DESC`,
+      [req.user.id],
+    )
+    const items = codeRows.map((row) => ({
+      id: Number(row.id),
+      code: String(row.code || ''),
+      title: String(row.title || ''),
+      description: String(row.description || ''),
+      featureType: normalizeFeatureType(row.feature_type),
+      rewardMode: normalizeRewardMode(row.reward_mode),
+      rewardValue: Number(row.reward_value || 0),
+      assetSymbol: String(row.asset_symbol || 'BTCUSDT').toUpperCase(),
+      tradeReturnPercent: Number(row.trade_return_percent || 0),
+      expiresAt: row.expires_at,
+      isActive: Number(row.is_active || 0) === 1,
+      alreadyUsed: row.usage_id != null,
+      usage: row.usage_id == null
+        ? null
+        : {
+            id: Number(row.usage_id),
+            status: String(row.usage_status || 'consumed'),
+            selectedSymbol: String(row.selected_symbol || row.asset_symbol || 'BTCUSDT').toUpperCase(),
+            balanceSnapshot: Number(row.balance_snapshot || 0),
+            stakeAmount: Number(row.stake_amount || 0),
+            entryPrice: row.entry_price == null ? null : Number(row.entry_price),
+            exitPrice: row.exit_price == null ? null : Number(row.exit_price),
+            rewardValue: Number(row.usage_reward_value || 0),
+            tradeReturnPercent: Number(row.usage_trade_return_percent || 0),
+            confirmedAt: row.confirmed_at,
+            settledAt: row.settled_at,
+            usedAt: row.used_at,
+          },
+    }))
+    return res.json({ items })
+  })
+
+  router.post('/strategy-codes/preview', async (req, res) => {
+    const code = normalizeCode(req.body?.code)
+    const requestedSymbol = String(req.body?.symbol || '').trim().toUpperCase()
+    if (!code) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const row = await get(
+      db,
+      `SELECT id, code, title, description, feature_type, reward_mode, reward_value, asset_symbol,
+              trade_return_percent, expires_at, is_active
+       FROM strategy_codes
+       WHERE code = ?
+       LIMIT 1`,
+      [code],
+    )
+    if (!row || Number(row.is_active || 0) !== 1) {
+      return res.status(404).json({ error: 'CODE_NOT_FOUND' })
+    }
+    if (row.expires_at && Date.parse(row.expires_at) < Date.now()) {
+      return res.status(400).json({ error: 'CODE_EXPIRED' })
+    }
+    const existing = await get(
+      db,
+      `SELECT id, status FROM strategy_code_usages WHERE code_id = ? AND user_id = ? LIMIT 1`,
+      [row.id, req.user.id],
+    )
+    if (existing) {
+      return res.status(400).json({ error: 'CODE_ALREADY_USED', status: existing.status })
+    }
+    const balanceSnapshot = await getMainBalance(db, req.user.id, 'USDT')
+    const featureType = normalizeFeatureType(row.feature_type)
+    const symbol = requestedSymbol || String(row.asset_symbol || 'BTCUSDT').toUpperCase()
+    const quote = await resolveLiveQuote(symbol).catch(() => null)
+
+    if (featureType === 'trial_trade') {
+      const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
+      if (stakeAmount <= 0) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
+      return res.json({
+        ok: true,
+        codeId: Number(row.id),
+        title: row.title,
+        description: row.description,
+        featureType,
+        assetSymbol: symbol,
+        currentPrice: Number(quote?.price || 0),
+        requiresConfirmation: true,
+        preview: {
+          action: 'trial_trade',
+          stakeAmount,
+          tradeReturnPercent: Number(row.trade_return_percent || 0),
+          balanceSnapshot,
+          confirmationMessage: 'سيتم خصم نصف رصيدك الحالي لفتح صفقة تجريبية، وعند الإغلاق سيعاد المبلغ مع نسبة العائد المحددة.',
+        },
+      })
+    }
+
+    const rewardAmount = computePromoRewardAmount(balanceSnapshot, row)
+    if (rewardAmount <= 0) return res.status(400).json({ error: 'INVALID_REWARD_RULE' })
+    return res.json({
+      ok: true,
+      codeId: Number(row.id),
+      title: row.title,
+      description: row.description,
+      featureType,
+      assetSymbol: symbol,
+      currentPrice: Number(quote?.price || 0),
+      requiresConfirmation: true,
+      preview: {
+        action: 'promo_bonus',
+        rewardMode: normalizeRewardMode(row.reward_mode),
+        rewardValue: Number(row.reward_value || 0),
+        rewardAmount,
+        balanceSnapshot,
+        confirmationMessage: 'سيتم تفعيل مكافأة ترويجية واضحة على حسابك بعد التأكيد، ولن يتم خصم أي مبلغ.',
+      },
+    })
+  })
+
+  router.post('/strategy-codes/redeem', async (req, res) => {
+    const code = normalizeCode(req.body?.code)
+    const requestedSymbol = String(req.body?.symbol || '').trim().toUpperCase()
+    const confirmed = req.body?.confirmed === true
+    if (!code) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (!confirmed) return res.status(400).json({ error: 'CONFIRMATION_REQUIRED' })
+
+    try {
+      const payload = await withTransaction(db, async (tx) => {
+        const row = await get(
+          tx,
+          `SELECT id, code, title, description, feature_type, reward_mode, reward_value, asset_symbol,
+                  trade_return_percent, expires_at, is_active
+           FROM strategy_codes
+           WHERE code = ?
+           LIMIT 1`,
+          [code],
+        )
+        if (!row || Number(row.is_active || 0) !== 1) throw new Error('CODE_NOT_FOUND')
+        if (row.expires_at && Date.parse(row.expires_at) < Date.now()) throw new Error('CODE_EXPIRED')
+        const existing = await get(
+          tx,
+          `SELECT id FROM strategy_code_usages WHERE code_id = ? AND user_id = ? LIMIT 1`,
+          [row.id, req.user.id],
+        )
+        if (existing) throw new Error('CODE_ALREADY_USED')
+
+        const featureType = normalizeFeatureType(row.feature_type)
+        const symbol = requestedSymbol || String(row.asset_symbol || 'BTCUSDT').toUpperCase()
+        const liveQuote = await resolveLiveQuote(symbol)
+        const balanceSnapshot = await getMainBalance(tx, req.user.id, 'USDT')
+
+        if (featureType === 'trial_trade') {
+          const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
+          if (stakeAmount <= 0) throw new Error('INSUFFICIENT_BALANCE')
+          const debit = await adjustBalance(tx, {
+            userId: req.user.id,
+            currency: 'USDT',
+            delta: -stakeAmount,
+            referenceType: 'strategy_trade_open',
+            referenceId: Number(row.id),
+            idempotencyKey: `strategy_trade_open_${row.id}_${req.user.id}`,
+            createdBy: req.user.id,
+          })
+          const inserted = await run(
+            tx,
+            `INSERT INTO strategy_code_usages (
+              code_id, user_id, status, selected_symbol, feature_type, balance_snapshot, stake_amount,
+              reward_value, trade_return_percent, entry_price, wallet_debit_txn_id, metadata_json, confirmed_at
+            )
+             VALUES (?, ?, 'trade_active', ?, ?, ?, ?, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             RETURNING id`,
+            [
+              row.id,
+              req.user.id,
+              symbol,
+              featureType,
+              balanceSnapshot,
+              stakeAmount,
+              Number(row.trade_return_percent || 0),
+              Number(liveQuote.price || 0),
+              debit.walletTxnId,
+              JSON.stringify({ code: row.code, title: row.title, confirmedByUser: req.user.id }),
+            ],
+          )
+          const usageId = Number(inserted.rows?.[0]?.id || inserted.lastID || 0)
+          await createLocalizedNotification(tx, req.user.id, 'strategy_trade_activated', {
+            code: row.code,
+            amount: stakeAmount,
+            currency: 'USDT',
+          })
+          return {
+            codeId: Number(row.id),
+            usageId,
+            featureType,
+            status: 'trade_active',
+            assetSymbol: symbol,
+            stakeAmount,
+            tradeReturnPercent: Number(row.trade_return_percent || 0),
+            entryPrice: Number(liveQuote.price || 0),
+            balanceAfter: debit.balanceAfter,
+          }
+        }
+
+        const rewardAmount = computePromoRewardAmount(balanceSnapshot, row)
+        if (rewardAmount <= 0) throw new Error('INVALID_REWARD_RULE')
+        const inserted = await run(
+          tx,
+          `INSERT INTO strategy_code_usages (
+            code_id, user_id, status, selected_symbol, feature_type, balance_snapshot,
+            reward_value, trade_return_percent, metadata_json, confirmed_at
+          )
+           VALUES (?, ?, 'promo_granted', ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)
+           RETURNING id`,
+          [
+            row.id,
+            req.user.id,
+            symbol,
+            featureType,
+            balanceSnapshot,
+            rewardAmount,
+            JSON.stringify({ code: row.code, title: row.title, rewardMode: normalizeRewardMode(row.reward_mode) }),
+          ],
+        )
+        const usageId = Number(inserted.rows?.[0]?.id || inserted.lastID || 0)
+        const reward = await createStrategyPromoReward(tx, {
+          userId: req.user.id,
+          amount: rewardAmount,
+          usageId,
+          currency: 'USDT',
+        })
+        await run(
+          tx,
+          `UPDATE strategy_code_usages
+           SET wallet_credit_txn_id = ?, settled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [reward?.walletTxnId || null, usageId],
+        )
+        await createLocalizedNotification(tx, req.user.id, 'strategy_bonus_activated', {
+          code: row.code,
+          amount: rewardAmount,
+          currency: 'USDT',
+        })
+        return {
+          codeId: Number(row.id),
+          usageId,
+          featureType,
+          status: 'promo_granted',
+          rewardAmount,
+          balanceAfter: reward?.balanceAfter || balanceSnapshot,
+        }
+      })
+      return res.json({ ok: true, ...payload })
+    } catch (error) {
+      const codeMap = new Set([
+        'CODE_NOT_FOUND',
+        'CODE_EXPIRED',
+        'CODE_ALREADY_USED',
+        'INVALID_REWARD_RULE',
+        'INSUFFICIENT_BALANCE',
+        'QUOTE_UNAVAILABLE',
+      ])
+      if (error instanceof Error && codeMap.has(error.message)) {
+        return res.status(400).json({ error: error.message })
+      }
+      throw error
+    }
+  })
+
+  router.post('/strategy-codes/:usageId/settle', async (req, res) => {
+    const usageId = Number(req.params.usageId || 0)
+    if (!usageId) return res.status(400).json({ error: 'INVALID_INPUT' })
+    try {
+      const payload = await withTransaction(db, async (tx) => {
+        const usage = await get(
+          tx,
+          `SELECT scu.id, scu.user_id, scu.code_id, scu.status, scu.selected_symbol, scu.stake_amount,
+                  scu.trade_return_percent, scu.wallet_credit_txn_id
+           FROM strategy_code_usages scu
+           WHERE scu.id = ? AND scu.user_id = ?
+           LIMIT 1`,
+          [usageId, req.user.id],
+        )
+        if (!usage) throw new Error('NOT_FOUND')
+        if (String(usage.status || '') !== 'trade_active') throw new Error('NOT_ACTIVE')
+        if (usage.wallet_credit_txn_id) throw new Error('ALREADY_SETTLED')
+        const liveQuote = await resolveLiveQuote(String(usage.selected_symbol || 'BTCUSDT'))
+        const stakeAmount = Number(usage.stake_amount || 0)
+        const returnPercent = Number(usage.trade_return_percent || 0)
+        const profitAmount = Number(((stakeAmount * returnPercent) / 100).toFixed(8))
+        const payoutAmount = Number((stakeAmount + profitAmount).toFixed(8))
+        const credit = await adjustBalance(tx, {
+          userId: req.user.id,
+          currency: 'USDT',
+          delta: payoutAmount,
+          referenceType: 'strategy_trade_settlement',
+          referenceId: Number(usage.code_id),
+          idempotencyKey: `strategy_trade_settlement_${usageId}`,
+          createdBy: req.user.id,
+        })
+        await run(
+          tx,
+          `UPDATE strategy_code_usages
+           SET status = 'trade_settled',
+               exit_price = ?,
+               reward_value = ?,
+               wallet_credit_txn_id = ?,
+               settled_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [Number(liveQuote.price || 0), profitAmount, credit.walletTxnId, usageId],
+        )
+        await createLocalizedNotification(tx, req.user.id, 'strategy_trade_settled', {
+          amount: payoutAmount,
+          currency: 'USDT',
+        })
+        return {
+          usageId,
+          status: 'trade_settled',
+          exitPrice: Number(liveQuote.price || 0),
+          payoutAmount,
+          profitAmount,
+          balanceAfter: credit.balanceAfter,
+        }
+      })
+      return res.json({ ok: true, ...payload })
+    } catch (error) {
+      const codeMap = new Set(['NOT_FOUND', 'NOT_ACTIVE', 'ALREADY_SETTLED', 'QUOTE_UNAVAILABLE'])
+      if (error instanceof Error && codeMap.has(error.message)) {
+        return res.status(400).json({ error: error.message })
+      }
+      throw error
+    }
+  })
+
+  router.get('/admin/strategy-codes', requirePermission(db, TASK_PERMISSION), async (_req, res) => {
+    const rows = await all(
+      db,
+      `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
+              sc.asset_symbol, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_by, sc.created_at, sc.updated_at,
+              creator.display_name AS created_by_name,
+              COUNT(scu.id) AS usage_count,
+              COUNT(CASE WHEN scu.status IN ('promo_granted', 'trade_settled', 'trade_active') THEN 1 END) AS consumed_count
+       FROM strategy_codes sc
+       LEFT JOIN users creator ON creator.id = sc.created_by
+       LEFT JOIN strategy_code_usages scu ON scu.code_id = sc.id
+       GROUP BY sc.id, creator.display_name
+       ORDER BY sc.id DESC`,
+    )
+    const usages = await all(
+      db,
+      `SELECT scu.id, scu.code_id, scu.user_id, scu.status, scu.selected_symbol, scu.balance_snapshot,
+              scu.stake_amount, scu.reward_value, scu.trade_return_percent, scu.entry_price, scu.exit_price,
+              scu.confirmed_at, scu.settled_at, scu.created_at,
+              u.display_name, u.email, u.phone
+       FROM strategy_code_usages scu
+       LEFT JOIN users u ON u.id = scu.user_id
+       ORDER BY scu.id DESC
+       LIMIT 400`,
+    )
+    return res.json({
+      items: rows.map(buildStrategyCodeRow),
+      usages: usages.map((row) => ({
+        id: Number(row.id),
+        codeId: Number(row.code_id),
+        userId: Number(row.user_id),
+        userDisplayName: row.display_name || null,
+        userEmail: row.email || null,
+        userPhone: row.phone || null,
+        status: String(row.status || ''),
+        selectedSymbol: String(row.selected_symbol || '').toUpperCase(),
+        balanceSnapshot: Number(row.balance_snapshot || 0),
+        stakeAmount: Number(row.stake_amount || 0),
+        rewardValue: Number(row.reward_value || 0),
+        tradeReturnPercent: Number(row.trade_return_percent || 0),
+        entryPrice: row.entry_price == null ? null : Number(row.entry_price),
+        exitPrice: row.exit_price == null ? null : Number(row.exit_price),
+        confirmedAt: row.confirmed_at,
+        settledAt: row.settled_at,
+        usedAt: row.created_at,
+      })),
+    })
+  })
+
+  router.post('/admin/strategy-codes', requirePermission(db, TASK_PERMISSION), async (req, res) => {
+    const id = Number(req.body?.id || 0)
+    const code = normalizeCode(req.body?.code)
+    const title = normalizeText(req.body?.title, 90)
+    const description = normalizeText(req.body?.description, 220)
+    const featureType = normalizeFeatureType(req.body?.featureType)
+    const rewardMode = normalizeRewardMode(req.body?.rewardMode)
+    const rewardValue = Math.max(0, Number(req.body?.rewardValue || 0))
+    const assetSymbol = normalizeCode(req.body?.assetSymbol || 'BTCUSDT') || 'BTCUSDT'
+    const tradeReturnPercent = normalizePercent(req.body?.tradeReturnPercent, 0)
+    const expiresAt = normalizeDate(req.body?.expiresAt)
+    const isActive = req.body?.isActive === false ? 0 : 1
+    if (!code || !title) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    if (id > 0) {
+      await run(
+        db,
+        `UPDATE strategy_codes
+         SET code = ?, title = ?, description = ?, feature_type = ?, reward_mode = ?, reward_value = ?,
+             asset_symbol = ?, trade_return_percent = ?, expires_at = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, tradeReturnPercent, expiresAt, isActive, id],
+      )
+      return res.json({ ok: true, id })
+    }
+    const inserted = await run(
+      db,
+      `INSERT INTO strategy_codes (
+        code, title, description, feature_type, reward_mode, reward_value,
+        asset_symbol, trade_return_percent, expires_at, is_active, created_by
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id`,
+      [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, tradeReturnPercent, expiresAt, isActive, req.user.id],
+    )
+    return res.json({ ok: true, id: Number(inserted.lastID || inserted.rows?.[0]?.id || 0) })
+  })
+
+  router.post('/admin/strategy-codes/:id/toggle', requirePermission(db, TASK_PERMISSION), async (req, res) => {
+    const id = Number(req.params.id || 0)
+    const isActive = req.body?.isActive === false ? 0 : 1
+    if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
+    await run(
+      db,
+      `UPDATE strategy_codes
+       SET is_active = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [isActive, id],
+    )
+    return res.json({ ok: true })
+  })
+
+  router.delete('/admin/strategy-codes/:id', requirePermission(db, TASK_PERMISSION), async (req, res) => {
+    const id = Number(req.params.id || 0)
+    if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
+    await run(db, `DELETE FROM strategy_codes WHERE id = ?`, [id])
     return res.json({ ok: true })
   })
 

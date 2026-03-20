@@ -22,7 +22,9 @@ const asyncRoute = (handler) => async (req, res) => {
 function toPublicAvatarPath(avatarPath) {
   if (!avatarPath) return null
   const rel = path.relative(path.join(process.cwd(), 'server'), avatarPath).replaceAll('\\', '/')
-  return `/uploads/${rel.replace(/^uploads\//, '')}`
+  const publicPath = `/uploads/${rel.replace(/^uploads\//, '')}`
+  const version = path.basename(avatarPath).replace(/[^a-zA-Z0-9._-]/g, '')
+  return version ? `${publicPath}?v=${encodeURIComponent(version)}` : publicPath
 }
 
 function toSafeUser(user) {
@@ -65,6 +67,23 @@ function normalizeRecoveryCode(value) {
     .trim()
     .toUpperCase()
     .replace(/\s+/g, '')
+}
+
+function normalizePreferredLanguage(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'ar' || raw === 'en' || raw === 'tr') return raw
+  return 'ar'
+}
+
+function normalizeRecoveryContact(value) {
+  const raw = String(value || '').trim().slice(0, 120)
+  if (!raw) return { value: '', channel: '' }
+  const compact = raw.replace(/\s+/g, '')
+  const channel = compact.includes('@') ? 'email' : 'phone'
+  return {
+    value: compact,
+    channel,
+  }
 }
 
 async function getUniqueRecoveryCode(db) {
@@ -164,6 +183,7 @@ export function createAuthRouter(db) {
     const identifierRaw = String(req.body?.identifier || '').trim()
     const password = String(req.body?.password || '')
     const inviteCode = String(req.body?.inviteCode || '').trim() || null
+    const preferredLanguage = normalizePreferredLanguage(req.body?.preferredLanguage)
 
     if (!identifierRaw || password.length < 6) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
@@ -216,11 +236,11 @@ export function createAuthRouter(db) {
       db,
       `INSERT INTO users (
         email, phone, password_hash, role, is_approved, is_banned, is_frozen,
-        referral_code, invited_by, referred_by, total_deposit, points, is_owner,
+        referral_code, invited_by, referred_by, preferred_language, total_deposit, points, is_owner,
         verification_status, phone_verified, identity_submitted, blue_badge, vip_level
-      ) VALUES (?, ?, ?, 'user', ?, 0, 0, ?, ?, ?, 0, 0, 0, 'unverified', 0, 0, 0, 0)
+      ) VALUES (?, ?, ?, 'user', ?, 0, 0, ?, ?, ?, ?, 0, 0, 0, 'unverified', 0, 0, 0, 0)
       RETURNING id`,
-      [email, phone, passwordHash, approved, referralCode, invitedBy, invitedBy],
+      [email, phone, passwordHash, approved, referralCode, invitedBy, invitedBy, preferredLanguage],
     )
     const createdUserId = Number(result.rows?.[0]?.id)
     if (!createdUserId) {
@@ -273,6 +293,7 @@ export function createAuthRouter(db) {
   router.post('/login', asyncRoute(async (req, res) => {
     const identifierRaw = String(req.body?.identifier || '').trim()
     const password = String(req.body?.password || '')
+    const preferredLanguage = normalizePreferredLanguage(req.body?.preferredLanguage)
     const { ipAddress, userAgent, hasProxyHint } = getClientMeta(req)
     if (!identifierRaw || !password) {
       await logLoginAttempt(db, {
@@ -358,10 +379,11 @@ export function createAuthRouter(db) {
       db,
       `UPDATE users
        SET last_login_at = CURRENT_TIMESTAMP,
+           preferred_language = ?,
            last_ip = ?,
            last_user_agent = ?
        WHERE id = ?`,
-      [ipAddress || null, userAgent || null, user.id],
+      [preferredLanguage, ipAddress || null, userAgent || null, user.id],
     )
     await run(
       db,
@@ -526,11 +548,21 @@ export function createAuthRouter(db) {
 
   router.post('/recovery-code/request-review', asyncRoute(async (req, res) => {
     const recoveryCode = normalizeRecoveryCode(req.body?.recoveryCode)
+    const contact = normalizeRecoveryContact(req.body?.contactValue)
     if (!recoveryCode) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
     if (!/^[A-Z2-9-]{16,40}$/.test(recoveryCode)) {
       return res.status(400).json({ error: 'CODE_INVALID' })
+    }
+    if (!contact.value) {
+      return res.status(400).json({ error: 'CONTACT_REQUIRED' })
+    }
+    if (contact.channel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.value)) {
+      return res.status(400).json({ error: 'CONTACT_INVALID' })
+    }
+    if (contact.channel === 'phone' && !/^\+?[0-9]{6,20}$/.test(contact.value)) {
+      return res.status(400).json({ error: 'CONTACT_INVALID' })
     }
 
     const codeRow = await get(
@@ -564,10 +596,12 @@ export function createAuthRouter(db) {
          user_id,
          recovery_code,
          request_status,
+         contact_channel,
+         contact_value,
          submitted_ip,
          submitted_user_agent
-       ) VALUES (?, ?, 'pending', ?, ?)`,
-      [codeRow.user_id, recoveryCode, ipAddress || null, userAgent || null],
+       ) VALUES (?, ?, 'pending', ?, ?, ?, ?)` ,
+      [codeRow.user_id, recoveryCode, contact.channel, contact.value, ipAddress || null, userAgent || null],
     )
     return res.json({ ok: true, status: 'pending' })
   }))

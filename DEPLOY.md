@@ -1,5 +1,29 @@
 # دليل النشر للإنتاج | Production Deployment Guide
 
+## مصدر النشر الوحيد
+
+- **المصدر الوحيد المعتمد للتعديل والنشر هو هذا المجلد نفسه فقط:**
+  - `C:\Users\bffh1\Desktop\تطبيق تداول\breakcash.cash`
+- **ممنوع النشر من أي نسخة أخرى** مثل:
+  - `C:\Users\bffh1\Desktop\النتاج النهائي`
+- إذا وُجدت نسخ أخرى من المشروع على سطح المكتب أو في مجلدات أرشيف، فهي **نسخ حفظ فقط** وليست مصدرًا للتشغيل أو النشر.
+
+## أوامر النشر الصحيحة من هذا المجلد فقط
+
+```bash
+# من داخل C:\Users\bffh1\Desktop\تطبيق تداول\breakcash.cash
+npm run build
+vercel deploy --prod --yes
+railway up --service break-cash-api
+```
+
+## تحقق سريع بعد النشر
+
+```bash
+curl https://breakcash.cash/api/health/live
+curl https://break-cash.up.railway.app/api/health/live
+```
+
 ## البنية الحالية
 
 - **Frontend**: React + Vite (يُبنى في `dist/`)

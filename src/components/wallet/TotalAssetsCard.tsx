@@ -14,6 +14,7 @@ type TotalAssetsCardProps = {
   className?: string
   /** 'hero' = larger, near full-width hero on homepage; default = compact */
   variant?: 'default' | 'hero'
+  isLoading?: boolean
 }
 
 export function TotalAssetsCard({
@@ -23,6 +24,7 @@ export function TotalAssetsCard({
   onClick,
   className = '',
   variant = 'default',
+  isLoading = false,
 }: TotalAssetsCardProps) {
   const { t, direction } = useI18n()
   const isRtl = direction === 'rtl'
@@ -34,15 +36,15 @@ export function TotalAssetsCard({
       <div
         className={
           isHero
-            ? 'absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(0,230,118,0.12)_0%,transparent_55%)] [direction:ltr] rtl:bg-[radial-gradient(ellipse_at_top_left,_rgba(0,230,118,0.12)_0%,transparent_55%)]'
-            : 'absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(0,230,118,0.08)_0%,transparent_60%)] [direction:ltr] rtl:bg-[radial-gradient(ellipse_at_top_left,_rgba(0,230,118,0.08)_0%,transparent_60%)]'
+            ? 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_35%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%)]'
+            : 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.1),transparent_32%)]'
         }
       />
       <p
         className={
           isHero
-            ? 'relative mb-4 text-sm font-medium uppercase tracking-wider text-white/50 sm:mb-5 sm:text-base'
-            : 'relative mb-2 text-sm font-medium uppercase tracking-wider text-white/50'
+            ? 'relative mb-4 text-sm font-medium uppercase tracking-wider text-[var(--text-secondary)] sm:mb-5 sm:text-base'
+            : 'relative mb-2 text-sm font-medium uppercase tracking-wider text-[var(--text-secondary)]'
         }
       >
         {t(titleKey)}
@@ -50,18 +52,18 @@ export function TotalAssetsCard({
       <p
         className={
           isHero
-            ? 'relative text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl'
-            : 'relative text-3xl font-bold tracking-tight text-white sm:text-4xl'
+            ? 'relative text-4xl font-bold tracking-tight text-[var(--text-primary)] sm:text-5xl md:text-6xl'
+            : 'relative text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl'
         }
       >
-        {formatAmount(totalAssets, currency)}
+        {isLoading ? '...' : formatAmount(totalAssets, currency)}
       </p>
       {onClick ? (
         <span
           className={
             isHero
-              ? 'relative mt-4 inline-flex items-center gap-2 text-xs font-medium text-white/40 sm:mt-5 sm:text-sm'
-              : 'relative mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-white/40'
+              ? 'relative mt-4 inline-flex items-center gap-2 text-xs font-medium text-[var(--text-muted)] sm:mt-5 sm:text-sm'
+              : 'relative mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)]'
           }
         >
           <span>{t('wallet_overview_link')}</span>
@@ -72,13 +74,13 @@ export function TotalAssetsCard({
   )
 
   const cardClassName =
-    'relative w-full min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.02] shadow-xl ' +
+    'wallet-hero-card relative w-full min-w-0 overflow-hidden rounded-2xl shadow-xl ' +
     (isHero
       ? 'p-8 shadow-[0_8px_32px_rgba(0,0,0,0.24)] sm:p-10 md:rounded-3xl ' +
         'min-h-[140px] sm:min-h-[160px] '
       : 'p-6 ') +
     (onClick
-      ? 'cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-2xl hover:shadow-emerald-500/5 active:scale-[0.99] '
+      ? 'cursor-pointer transition-all duration-200 hover:border-[var(--border-glass)] hover:shadow-[var(--shadow-card),var(--glow-blue)] active:scale-[0.99] '
       : '') +
     className
 

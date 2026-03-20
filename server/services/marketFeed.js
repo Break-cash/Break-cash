@@ -6,6 +6,8 @@ const DEFAULT_SYMBOLS = [
   'TRXUSDT', 'ETCUSDT', 'APTUSDT', 'ARBUSDT', 'OPUSDT', 'INJUSDT',
 ]
 const REST_ENDPOINT = 'https://api.binance.com/api/v3/ticker/24hr'
+const BYBIT_ENDPOINT = 'https://api.bybit.com/v5/market/tickers?category=spot'
+const MEXC_ENDPOINT = 'https://api.mexc.com/api/v3/ticker/24hr'
 
 function toQuote(row) {
   const price = Number(row?.lastPrice ?? row?.price ?? 0)
@@ -32,6 +34,55 @@ function toMiniTickerQuote(mini) {
   }
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'BreakCash/1.0 (Market Data)' },
+    signal: AbortSignal.timeout(10000),
+  })
+  if (!response.ok) throw new Error(`UPSTREAM_${response.status}`)
+  return response.json()
+}
+
+async function fetchFromBinance(symbol) {
+  const row = await fetchJson(`${REST_ENDPOINT}?symbol=${encodeURIComponent(symbol)}`)
+  return toQuote(row)
+}
+
+async function fetchFromBybit(symbol) {
+  const row = await fetchJson(`${BYBIT_ENDPOINT}&symbol=${encodeURIComponent(symbol)}`)
+  const item = row?.result?.list?.[0]
+  return {
+    symbol: String(item?.symbol || symbol).toUpperCase(),
+    price: Number(item?.lastPrice ?? 0) || 0,
+    change24h: Number(item?.price24hPcnt ?? 0) * 100 || 0,
+    volume: Number(item?.turnover24h ?? 0) || 0,
+  }
+}
+
+async function fetchFromMexc(symbol) {
+  const row = await fetchJson(`${MEXC_ENDPOINT}?symbol=${encodeURIComponent(symbol)}`)
+  return {
+    symbol: String(row?.symbol || symbol).toUpperCase(),
+    price: Number(row?.lastPrice ?? 0) || 0,
+    change24h: Number(row?.priceChangePercent ?? 0) || 0,
+    volume: Number(row?.quoteVolume ?? 0) || 0,
+  }
+}
+
+export async function fetchBestQuote(symbol) {
+  const normalizedSymbol = String(symbol || '').trim().toUpperCase()
+  const providers = [fetchFromBinance, fetchFromBybit, fetchFromMexc]
+  for (const provider of providers) {
+    try {
+      const quote = await provider(normalizedSymbol)
+      if (quote?.symbol && Number.isFinite(quote.price) && quote.price > 0) return quote
+    } catch {
+      // try next provider
+    }
+  }
+  throw new Error('QUOTE_UNAVAILABLE')
+}
+
 export function createMarketFeed(symbols = DEFAULT_SYMBOLS) {
   const trackedSymbols = symbols.map((s) => s.toUpperCase())
   const quotes = new Map()
@@ -39,15 +90,30 @@ export function createMarketFeed(symbols = DEFAULT_SYMBOLS) {
   let ws = null
 
   async function refreshFromRest() {
-    const query = encodeURIComponent(JSON.stringify(trackedSymbols))
-    const res = await fetch(`${REST_ENDPOINT}?symbols=${query}`)
-    if (!res.ok) throw new Error(`REST_${res.status}`)
-    const rows = await res.json()
-    for (const row of rows) {
-      const q = toQuote(row)
-      if (q.symbol) quotes.set(q.symbol, q)
+    try {
+      const query = encodeURIComponent(JSON.stringify(trackedSymbols))
+      const rows = await fetchJson(`${REST_ENDPOINT}?symbols=${query}`)
+      for (const row of rows) {
+        const q = toQuote(row)
+        if (q.symbol) quotes.set(q.symbol, q)
+      }
+      refreshedAt = new Date().toISOString()
+      return
+    } catch {
+      const rows = await Promise.all(
+        trackedSymbols.map(async (symbol) => {
+          try {
+            return await fetchBestQuote(symbol)
+          } catch {
+            return null
+          }
+        }),
+      )
+      for (const row of rows.filter(Boolean)) {
+        quotes.set(row.symbol, row)
+      }
+      refreshedAt = new Date().toISOString()
     }
-    refreshedAt = new Date().toISOString()
   }
 
   function connectWebSocket() {
@@ -68,7 +134,7 @@ export function createMarketFeed(symbols = DEFAULT_SYMBOLS) {
     })
 
     ws.on('error', () => {
-      // noop: fallback is periodic REST refresh
+      // fallback is periodic REST refresh
     })
 
     ws.on('close', () => {
@@ -116,3 +182,5 @@ export function createMarketFeed(symbols = DEFAULT_SYMBOLS) {
     },
   }
 }
+
+export const sharedMarketFeed = createMarketFeed()

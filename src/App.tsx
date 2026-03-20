@@ -55,12 +55,6 @@ const AdminPermissionsPage = lazy(() =>
 const AdminDashboardPage = lazy(() =>
   import('./pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })),
 )
-const OwnerPremiumDashboardPage = lazy(() =>
-  import('./pages/owner/OwnerPremiumDashboardPage').then((m) => ({ default: m.OwnerPremiumDashboardPage })),
-)
-const OwnerUnifiedControlPage = lazy(() =>
-  import('./pages/owner/OwnerUnifiedControlPage').then((m) => ({ default: m.OwnerUnifiedControlPage })),
-)
 const OwnerDashboardPage = lazy(() =>
   import('./pages/owner/OwnerDashboardPage').then((m) => ({ default: m.OwnerDashboardPage })),
 )
@@ -443,8 +437,8 @@ function App() {
                       }
                     />
                     <Route path="/owner/*" element={<OwnerGuard user={user as AuthUser} />}>
-                      <Route index element={<OwnerUnifiedControlPage user={user as AuthUser} />} />
-                      <Route path="premium" element={<OwnerPremiumDashboardPage user={user as AuthUser} />} />
+                      <Route index element={<Navigate to="/owner/operations" replace />} />
+                      <Route path="premium" element={<Navigate to="/owner/operations" replace />} />
                       <Route path="operations" element={<OwnerDashboardPage user={user as AuthUser} />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/portfolio" replace />} />
@@ -458,20 +452,20 @@ function App() {
       </Routes>
       {logoutConfirmOpen ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-app-border bg-app-card p-4 shadow-[0_20px_44px_rgba(0,0,0,0.35)]">
-            <h3 className="text-base font-semibold text-white">{dict.logout_confirm_title}</h3>
-            <p className="mt-2 text-sm text-white/70">{dict.logout_confirm_message}</p>
+          <div className="glass-panel w-full max-w-sm rounded-2xl p-4 shadow-[0_20px_44px_rgba(0,0,0,0.35)]">
+            <h3 className="text-base font-semibold text-[var(--text-primary)]">{dict.logout_confirm_title}</h3>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{dict.logout_confirm_message}</p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-app-border bg-app-elevated px-3 py-1.5 text-sm text-white/80 hover:bg-[#343945]"
+                className="glass-pill rounded-lg px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:bg-white/10"
                 onClick={cancelLogout}
               >
                 {dict.logout_confirm_cancel}
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-white hover:brightness-110"
+                className="action-button action-button-withdraw rounded-lg px-3 py-1.5 text-sm font-medium text-white hover:brightness-110"
                 onClick={confirmLogout}
               >
                 {dict.logout_confirm_confirm}
@@ -482,10 +476,10 @@ function App() {
       ) : null}
       {recoveryModalOpen ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-brand-blue/35 bg-app-card p-4 shadow-[0_22px_50px_rgba(0,0,0,0.45)]">
-            <h3 className="text-base font-semibold text-white">{dict.recovery_code_title}</h3>
-            <p className="mt-2 text-sm text-white/75">{dict.recovery_code_message}</p>
-            <div className="mt-3 rounded-xl border border-app-border bg-app-elevated p-3">
+          <div className="glass-panel w-full max-w-md rounded-2xl border border-brand-blue/35 p-4 shadow-[0_22px_50px_rgba(0,0,0,0.45)]">
+            <h3 className="text-base font-semibold text-[var(--text-primary)]">{dict.recovery_code_title}</h3>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{dict.recovery_code_message}</p>
+            <div className="glass-panel-soft mt-3 rounded-xl p-3">
               <div className="select-all text-center font-mono text-base font-semibold tracking-[0.14em] text-brand-blue">
                 {recoveryCode}
               </div>
@@ -496,14 +490,14 @@ function App() {
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-brand-blue/35 bg-brand-blue/10 px-3 py-2 text-sm text-white hover:bg-brand-blue/20"
+                className="action-button action-button-withdraw rounded-lg px-3 py-2 text-sm text-white hover:bg-brand-blue/20"
                 onClick={copyRecoveryCode}
               >
                 {recoveryCopyDone ? dict.recovery_code_copied : dict.recovery_code_copy}
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                className="action-button action-button-withdraw rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
                 onClick={confirmRecoveryCodeSeen}
                 disabled={recoveryCountdown > 0 || recoverySaving}
               >

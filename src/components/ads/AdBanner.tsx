@@ -25,6 +25,7 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
   const filtered = items.filter((x) => x && x.isActive)
   const canRotate = filtered.length > 1
   const current = filtered[activeIndex] || null
+  const currentIsVideo = current?.type === 'video'
 
   useEffect(() => {
     const el = containerRef.current
@@ -38,12 +39,12 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
   }, [])
 
   useEffect(() => {
-    if (!canRotate || manualPause || !isVisible || filtered.length <= 1) return
+    if (!canRotate || manualPause || !isVisible || filtered.length <= 1 || currentIsVideo) return
     const id = window.setInterval(() => {
       setActiveIndex((prev) => (prev + 1) % filtered.length)
     }, ROTATE_INTERVAL_MS)
     return () => window.clearInterval(id)
-  }, [canRotate, manualPause, isVisible, filtered.length])
+  }, [canRotate, manualPause, isVisible, filtered.length, currentIsVideo])
 
   useEffect(() => {
     setActiveIndex((prev) => (filtered.length ? Math.min(prev, filtered.length - 1) : 0))
@@ -54,6 +55,14 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
       if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current)
     }
   }, [])
+
+  function clearManualPause() {
+    if (pauseTimeoutRef.current) {
+      clearTimeout(pauseTimeoutRef.current)
+      pauseTimeoutRef.current = null
+    }
+    setManualPause(false)
+  }
 
   function pauseAutoTemporarily() {
     if (!canRotate) return
@@ -113,7 +122,16 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
               className="absolute inset-0"
             >
               {current.type === 'video' ? (
-                <AdVideo src={current.mediaUrl} isVisible={isVisible} />
+                <AdVideo
+                  src={current.mediaUrl}
+                  isVisible={isVisible}
+                  loop={!canRotate}
+                  onEnded={() => {
+                    if (!canRotate) return
+                    clearManualPause()
+                    goTo(activeIndex + 1, false)
+                  }}
+                />
               ) : (
                 <img
                   src={current.mediaUrl}
@@ -126,17 +144,6 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
             </motion.div>
           </AnimatePresence>
         </div>
-
-        {(current.title || current.description) && (
-          <div className="mt-2 px-1">
-            {current.title && (
-              <h3 className="truncate text-sm font-semibold text-white">{current.title}</h3>
-            )}
-            {current.description && (
-              <p className="mt-0.5 line-clamp-2 text-xs text-white/70">{current.description}</p>
-            )}
-          </div>
-        )}
 
         {canRotate && (
           <div className="mt-3 flex items-center justify-between gap-2">
@@ -185,7 +192,17 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
   )
 }
 
-function AdVideo({ src, isVisible }: { src: string; isVisible: boolean }) {
+function AdVideo({
+  src,
+  isVisible,
+  loop,
+  onEnded,
+}: {
+  src: string
+  isVisible: boolean
+  loop: boolean
+  onEnded?: () => void
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -203,7 +220,7 @@ function AdVideo({ src, isVisible }: { src: string; isVisible: boolean }) {
       autoPlay
       muted
       playsInline
-      loop
+      loop={loop}
       preload="metadata"
       className="h-full w-full object-cover"
       style={{ pointerEvents: 'none' }}
@@ -211,6 +228,7 @@ function AdVideo({ src, isVisible }: { src: string; isVisible: boolean }) {
       disableRemotePlayback
       controls={false}
       controlsList="nodownload nofullscreen noremoteplayback"
+      onEnded={onEnded}
     />
   )
 }

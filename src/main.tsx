@@ -6,8 +6,6 @@ import './tailwind.css'
 import './index.css'
 import App from './App.tsx'
 
-const ACTIVE_SW_CACHE = 'breakcash-cache-v3'
-
 const sentryDsn = (import.meta.env.VITE_SENTRY_DSN || '').trim()
 if (sentryDsn) {
   Sentry.init({
@@ -30,44 +28,25 @@ createRoot(document.getElementById('root')!).render(
 if ('caches' in window) {
   caches
     .keys()
-    .then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key.includes('cache') && key !== ACTIVE_SW_CACHE)
-          .map((key) => caches.delete(key)),
-      ),
-    )
+    .then((keys) => Promise.all(keys.filter((key) => key.includes('breakcash-cache')).map((key) => caches.delete(key))))
     .catch(() => {
       // ignore cache cleanup failures
     })
 }
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (sessionStorage.getItem('breakcash_sw_reload_done') === '1') return
-    sessionStorage.setItem('breakcash_sw_reload_done', '1')
-    window.location.reload()
-  })
-
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
-      .then((registration) => {
-        if (registration.waiting) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
-        }
-        registration.addEventListener('updatefound', () => {
-          const nextWorker = registration.installing
-          if (!nextWorker) return
-          nextWorker.addEventListener('statechange', () => {
-            if (nextWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              nextWorker.postMessage({ type: 'SKIP_WAITING' })
-            }
+      .getRegistrations()
+      .then((registrations) => {
+        registrations.forEach((registration) => {
+          registration.unregister().catch(() => {
+            // ignore unregister failures
           })
         })
       })
       .catch(() => {
-        // ignore pwa registration failures in development
+        // ignore service worker cleanup failures
       })
   })
 }

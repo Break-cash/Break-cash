@@ -6,24 +6,22 @@ import {
   apiFetch,
   getMyProfile,
   getAds,
-  getWalletOverview,
   subscribeToLiveUpdates,
   type AuthUser,
   type AdItem,
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
-import { TotalAssetsCard } from '../components/wallet/TotalAssetsCard'
+import { WalletSummaryPanel } from '../components/wallet/WalletSummaryPanel'
+import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 import { getPremiumProfileColorClass } from '../premiumIdentity'
 import { appData } from '../data'
 import { walletDashboardMock } from '../ui/mobileMock'
-import { mapWalletApiToSummary, type WalletSummary } from '../walletSummary'
 
 export function Profile() {
   const { t } = useI18n()
   const navigate = useNavigate()
-  const [walletSummary, setWalletSummary] = useState<WalletSummary | null>(null)
   const [profile, setProfile] = useState<AuthUser | null>(null)
   const [holdings, setHoldings] = useState<{ id: number; symbol: string; quantity: number }[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,6 +32,8 @@ export function Profile() {
   const pullStartYRef = useRef(0)
   const pullActiveRef = useRef(false)
   const liveRefreshTimerRef = useRef<number | null>(null)
+  const { summary: walletSummary, loading: walletSummaryLoading, refresh: refreshWalletSummary } =
+    useWalletSummary({ subscribeLive: false })
   const dailyEarnings = Number(appData.balance_info.today_earnings || 0)
   const earningsCurrency = appData.balance_info.currency || 'USDT'
 
@@ -41,19 +41,16 @@ export function Profile() {
     const results = await Promise.allSettled([
       getMyProfile(),
       apiFetch('/api/portfolio/holdings'),
-      getWalletOverview('USDT'),
+      refreshWalletSummary(),
     ])
-    const [profileRes, holdingsRes, overviewRes] = results
+    const [profileRes, holdingsRes] = results
     if (profileRes?.status === 'fulfilled') setProfile(profileRes.value.profile)
     if (holdingsRes?.status === 'fulfilled') {
       setHoldings(
         (holdingsRes.value as { holdings: { id: number; symbol: string; quantity: number }[] }).holdings,
       )
     }
-    if (overviewRes?.status === 'fulfilled' && overviewRes.value != null) {
-      setWalletSummary(mapWalletApiToSummary(overviewRes.value as unknown as { total_assets?: unknown; main_balance?: unknown; locked_balance?: unknown; withdrawable_balance?: unknown }))
-    }
-  }, [])
+  }, [refreshWalletSummary])
 
   const loadAdsData = useCallback(async () => {
     getAds('profile')
@@ -128,7 +125,6 @@ export function Profile() {
     }
   }, [loadCoreDashboardData, loadAdsData, refreshDashboard])
 
-  const dashboardBalance = walletSummary?.totalAssets ?? walletDashboardMock.total_balance_usd
   const assetsToRender = useMemo(() => {
     return walletDashboardMock.my_assets.map((item) => {
       const found = holdings.find((holding) => holding.symbol === item.symbol)
@@ -147,12 +143,12 @@ export function Profile() {
     () =>
       profile?.role === 'owner'
         ? [
-            { label: t('nav_owner'), to: '/owner' },
-            { label: t('owner_premium_dashboard'), to: '/owner/premium' },
+            { label: t('nav_owner'), to: '/owner/operations' },
             { label: t('owner_quick_operations'), to: '/owner/operations' },
             { label: t('nav_admin'), to: '/admin/dashboard' },
             { label: t('admin_users'), to: '/admin/users' },
-            { label: t('admin_balances'), to: '/admin/balances' },
+            { label: t('admin_invites'), to: '/admin/invites' },
+            { label: t('admin_permissions'), to: '/admin/permissions' },
           ]
         : [],
     [profile?.role, t],
@@ -227,42 +223,44 @@ export function Profile() {
         className={`elite-enter w-full max-w-full space-y-4 ${premiumProfileColorClass}`}
       >
         <div className="flex min-w-0 flex-col gap-3">
-          <TotalAssetsCard
-            totalAssets={dashboardBalance}
+          <WalletSummaryPanel
+            summary={walletSummary}
             currency="USDT"
-            titleKey="wallet_overview_total_assets"
-            onClick={() => navigate('/assets')}
-            variant="hero"
+            isLoading={walletSummaryLoading}
+            cardVariant="hero"
+            onCardClick={() => navigate('/wallet')}
+            actionsSlot={(
+              <div className="grid min-w-0 grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/deposit')}
+                  className="action-button action-button-deposit icon-interactive flex min-h-[54px] min-w-0 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition active:scale-[0.98]"
+                >
+                  <ArrowDownLeft size={20} strokeWidth={2} className="shrink-0" />
+                  <span className="truncate">{t('deposit')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/withdraw')}
+                  className="action-button action-button-withdraw icon-interactive flex min-h-[54px] min-w-0 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition active:scale-[0.98]"
+                >
+                  <ArrowUpRight size={20} strokeWidth={2} className="shrink-0" />
+                  <span className="truncate">{t('withdraw')}</span>
+                </button>
+              </div>
+            )}
           />
-          <div className="grid min-w-0 grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => navigate('/deposit')}
-              className="icon-interactive flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-400 transition hover:border-emerald-500/50 hover:bg-emerald-500/15 active:scale-[0.98]"
-            >
-              <ArrowDownLeft size={20} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">{t('deposit')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/withdraw')}
-              className="icon-interactive flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-4 py-3 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/50 hover:bg-brand-blue/15 active:scale-[0.98]"
-            >
-              <ArrowUpRight size={20} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">{t('withdraw')}</span>
-            </button>
-          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+        <div className="glass-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
           <div>
-            <p className="text-[11px] text-white/50">{t('home_today_earnings')}</p>
+            <p className="text-[11px] text-[var(--text-muted)]">{t('home_today_earnings')}</p>
             <p className={`text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
               {dailyEarnings.toFixed(2)} {earningsCurrency}
             </p>
           </div>
           {profile ? (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1">
-              <span className="text-xs font-medium text-white/90">{profile.display_name || `#${profile.id}`}</span>
+            <div className="inline-flex items-center gap-2 rounded-xl border border-[var(--border-soft)] bg-white/[0.03] px-2.5 py-1.5">
+              <span className="text-xs font-medium text-[var(--text-primary)]">{profile.display_name || `#${profile.id}`}</span>
               <UserIdentityBadges
                 badgeColor={profile.badge_color || 'none'}
                 vipLevel={profile.vip_level || 0}
@@ -273,15 +271,15 @@ export function Profile() {
           ) : null}
         </div>
       </motion.section>
-      <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
+      <section className="glass-panel elite-enter rounded-3xl p-3">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-semibold text-white">{t('home_announcement_board')}</p>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_announcement_board')}</p>
         </div>
         <AdBanner items={profileAds} placement="profile" className="my-0 opacity-95" />
       </section>
 
-      <section className="elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(165deg,#252b36,#202632)] p-3 shadow-[0_10px_34px_rgba(0,0,0,0.24)]">
-        <div className="mb-3 text-sm font-semibold text-white">{t('home_quick_actions_title')}</div>
+      <section className="glass-panel elite-enter rounded-3xl p-3">
+        <div className="mb-3 text-sm font-semibold text-[var(--text-primary)]">{t('home_quick_actions_title')}</div>
         <div className="grid grid-cols-2 gap-2">
           {quickActions.map((item) => {
             const Icon = item.icon
@@ -290,12 +288,12 @@ export function Profile() {
                 key={item.key}
                 type="button"
                 onClick={() => navigate(item.to)}
-                className="icon-interactive elite-hover-lift flex items-center gap-3 rounded-xl border border-app-border bg-app-card px-4 py-3 text-start"
+                className="icon-interactive elite-hover-lift glass-panel-soft flex items-center gap-3 rounded-xl px-4 py-3 text-start"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-elevated">
-                  <Icon size={20} className="text-brand-blue" />
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border-soft)] bg-[var(--bg-elevated)]">
+                  <Icon size={20} className="text-[var(--accent-blue-soft)]" />
                 </span>
-                <span className="text-sm font-medium text-white/90">{item.label}</span>
+                <span className="text-sm font-medium text-[var(--text-primary)]">{item.label}</span>
               </button>
             )
           })}
@@ -306,14 +304,14 @@ export function Profile() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.33, ease: 'easeOut', delay: 0.08 }}
-        className="elite-enter rounded-2xl border border-app-border bg-app-card p-3"
+        className="glass-panel elite-enter rounded-2xl p-3"
       >
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-white">{t('home_most_traded')}</p>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_most_traded')}</p>
           <button
             type="button"
             onClick={() => navigate('/market')}
-            className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2.5 py-1 text-[11px] text-white/80"
+            className="glass-pill icon-interactive rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
           >
             {t('nav_markets')}
           </button>
@@ -329,14 +327,14 @@ export function Profile() {
                 key={asset.symbol}
                 layout
                 transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-                className="elite-hover-lift flex items-center justify-between rounded-xl border border-app-border bg-app-elevated px-3 py-2"
+                className="elite-hover-lift glass-panel-soft flex items-center justify-between rounded-xl px-3 py-2"
               >
                 <div>
-                  <p className="text-sm font-semibold">{asset.symbol}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{asset.symbol}</p>
                   <p className="text-xs text-app-muted">${asset.price_usd.toLocaleString()}</p>
                 </div>
                 <div className="text-end">
-                  <p className="text-sm font-semibold">{asset.balance.toFixed(4)}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{asset.balance.toFixed(4)}</p>
                   <p className={`text-xs ${asset.change_24h_percent >= 0 ? 'text-positive' : 'text-negative'}`}>
                     {asset.change_24h_percent >= 0 ? '+' : ''}
                     {asset.change_24h_percent.toFixed(2)}%

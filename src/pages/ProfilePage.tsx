@@ -56,6 +56,11 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   }, [])
 
   useEffect(() => {
+    setAvatarBroken(false)
+    setAvatarPreview(user.avatar_url || null)
+  }, [user.avatar_url])
+
+  useEffect(() => {
     setLoadingRecoveryCode(true)
     getRecoveryCodeStatus()
       .then((res) => {

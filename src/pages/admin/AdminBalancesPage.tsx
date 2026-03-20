@@ -155,6 +155,8 @@ export function AdminBalancesPage() {
         depositMethods: rules.depositMethods.map((x) => x.trim()).filter(Boolean),
         withdrawalMethods: rules.withdrawalMethods.map((x) => x.trim()).filter(Boolean),
       }
+      if (cleaned.depositMethods.length === 0) cleaned.depositMethods = ['USDT TRC20']
+      if (cleaned.withdrawalMethods.length === 0) cleaned.withdrawalMethods = ['USDT TRC20']
       const res = await updateBalanceRules(cleaned)
       setRules(res.rules)
       setMessage({ type: 'success', text: t('admin_wallet_rules_saved') })
@@ -294,107 +296,166 @@ export function AdminBalancesPage() {
 
       <div className="card login-form">
         <h3 className="owner-wallet-heading">{t('admin_wallet_rules_title')}</h3>
-        <div className="owner-form-row">
-          <input
-            className="field-input"
-            type="number"
-            min={0}
-            step="any"
-            placeholder={t('wallet_requests_min_deposit')}
-            value={String(rules.minDeposit)}
-            onChange={(e) => setRules((prev) => ({ ...prev, minDeposit: Number(e.target.value || 0) }))}
-          />
-          <input
-            className="field-input"
-            type="number"
-            min={0}
-            step="any"
-            placeholder={t('wallet_requests_min_withdraw')}
-            value={String(rules.minWithdrawal)}
-            onChange={(e) => setRules((prev) => ({ ...prev, minWithdrawal: Number(e.target.value || 0) }))}
-          />
+        <p className="owner-hint">
+          هذه القواعد مرتبطة مباشرة بالنظام المالي الجديد فقط، وتُطبَّق على طلبات الإيداع والسحب الجديدة فور الحفظ.
+        </p>
+        <div className="owner-history-card" style={{ marginBottom: 14 }}>
+          <h4 className="owner-wallet-heading">شرح الأدوات</h4>
+          <div className="owner-hint" style={{ marginTop: 0 }}>
+            <div>1. `الحد الأدنى للإيداع`: أقل مبلغ يستطيع المستخدم إرسال طلب إيداع به.</div>
+            <div>2. `طرق الإيداع`: الشبكات أو الطرق المقبولة، وتُكتب مفصولة بفاصلة.</div>
+            <div>3. `الحد الأدنى للسحب`: أقل مبلغ مسموح للمستخدم بطلب سحبه.</div>
+            <div>4. `رسوم السحب`: نسبة مئوية تخصم عند تنفيذ السحب في النظام المالي الجديد.</div>
+            <div>5. `مراجعة يدوية`: إذا كانت مفعلة تبقى الطلبات بحاجة لاعتماد إداري قبل الإتمام.</div>
+            <div>6. `الحد الأدنى للربح لفك الأصل`: يحدد مقدار الربح المطلوب قبل السماح بسحب أصل الإيداع.</div>
+            <div>7. `نسبة الفتح الافتراضية`: نسبة الربح المطلوبة مقارنة بأصل الإيداع إذا لم يوجد تخصيص حسب VIP.</div>
+            <div>8. `نسب VIP`: تسمح لك بتخفيف أو تشديد شرط فك أصل الإيداع حسب مستوى المستخدم.</div>
+          </div>
         </div>
-        <input
-          className="field-input"
-          type="number"
-          min={0}
-          step="any"
-          placeholder={t('wallet_requests_withdraw_fee')}
-          value={String(rules.withdrawalFeePercent)}
-          onChange={(e) => setRules((prev) => ({ ...prev, withdrawalFeePercent: Number(e.target.value || 0) }))}
-        />
-        <div className="owner-form-row">
-          <input
-            className="field-input"
-            type="number"
-            min={0}
-            step="any"
-            placeholder={t('wallet_lock_min_profit_to_unlock')}
-            value={String(rules.minimumProfitToUnlock)}
-            onChange={(e) => setRules((prev) => ({ ...prev, minimumProfitToUnlock: Number(e.target.value || 0) }))}
-          />
-          <input
-            className="field-input"
-            type="number"
-            min={0}
-            step="any"
-            placeholder={t('wallet_lock_default_unlock_ratio')}
-            value={String(rules.defaultUnlockRatio)}
-            onChange={(e) => setRules((prev) => ({ ...prev, defaultUnlockRatio: Number(e.target.value || 0) }))}
-          />
-        </div>
-        <div className="owner-form-row">
-          {[0, 1, 2, 3, 4, 5].map((lvl) => (
+        <div className="owner-history-card" style={{ marginBottom: 14 }}>
+          <h4 className="owner-wallet-heading">قواعد الإيداع</h4>
+          <p className="owner-hint" style={{ marginTop: 0 }}>
+            حدّد أقل مبلغ إيداع والطرق المقبولة لإنشاء طلبات الإيداع.
+          </p>
+          <div className="owner-form-row">
             <input
-              key={lvl}
               className="field-input"
               type="number"
               min={0}
               step="any"
-              placeholder={`${t('wallet_lock_level_ratio')} VIP ${lvl}`}
-              value={String(Number(rules.unlockRatioByLevel?.[String(lvl)] ?? rules.defaultUnlockRatio))}
+              placeholder={t('wallet_requests_min_deposit')}
+              value={String(rules.minDeposit)}
+              onChange={(e) => setRules((prev) => ({ ...prev, minDeposit: Number(e.target.value || 0) }))}
+            />
+            <input
+              className="field-input"
+              placeholder={t('admin_wallet_deposit_methods')}
+              value={rules.depositMethods.join(', ')}
               onChange={(e) =>
                 setRules((prev) => ({
                   ...prev,
-                  unlockRatioByLevel: {
-                    ...(prev.unlockRatioByLevel || {}),
-                    [String(lvl)]: Number(e.target.value || 0),
-                  },
+                  depositMethods: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
                 }))
               }
             />
-          ))}
+          </div>
         </div>
-        <input
-          className="field-input"
-          placeholder={t('admin_wallet_deposit_methods')}
-          value={rules.depositMethods.join(', ')}
-          onChange={(e) =>
-            setRules((prev) => ({
-              ...prev,
-              depositMethods: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
-            }))
-          }
-        />
-        <input
-          className="field-input"
-          placeholder={t('admin_wallet_withdraw_methods')}
-          value={rules.withdrawalMethods.join(', ')}
-          onChange={(e) =>
-            setRules((prev) => ({
-              ...prev,
-              withdrawalMethods: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
-            }))
-          }
-        />
-        <label className="owner-hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="owner-history-card" style={{ marginBottom: 14 }}>
+          <h4 className="owner-wallet-heading">قواعد السحب</h4>
+          <p className="owner-hint" style={{ marginTop: 0 }}>
+            حدّد الحد الأدنى والرسوم وطرق السحب المسموح بها. الرسوم تُحتسب عند تنفيذ السحب في النظام المالي الجديد.
+          </p>
+          <div className="owner-form-row">
+            <input
+              className="field-input"
+              type="number"
+              min={0}
+              step="any"
+              placeholder={t('wallet_requests_min_withdraw')}
+              value={String(rules.minWithdrawal)}
+              onChange={(e) => setRules((prev) => ({ ...prev, minWithdrawal: Number(e.target.value || 0) }))}
+            />
+            <input
+              className="field-input"
+              type="number"
+              min={0}
+              step="any"
+              placeholder={t('wallet_requests_withdraw_fee')}
+              value={String(rules.withdrawalFeePercent)}
+              onChange={(e) => setRules((prev) => ({ ...prev, withdrawalFeePercent: Number(e.target.value || 0) }))}
+            />
+          </div>
           <input
-            type="checkbox"
-            checked={rules.manualReview}
-            onChange={(e) => setRules((prev) => ({ ...prev, manualReview: e.target.checked }))}
+            className="field-input"
+            placeholder={t('admin_wallet_withdraw_methods')}
+            value={rules.withdrawalMethods.join(', ')}
+            onChange={(e) =>
+              setRules((prev) => ({
+                ...prev,
+                withdrawalMethods: e.target.value.split(',').map((x) => x.trim()).filter(Boolean),
+              }))
+            }
           />
-          {t('admin_wallet_manual_review')}
-        </label>
+          <label className="owner-hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={rules.manualReview}
+              onChange={(e) => setRules((prev) => ({ ...prev, manualReview: e.target.checked }))}
+            />
+            {t('admin_wallet_manual_review')}
+          </label>
+        </div>
+        <div className="owner-history-card" style={{ marginBottom: 14 }}>
+          <h4 className="owner-wallet-heading">قواعد فتح أصل الإيداع</h4>
+          <p className="owner-hint" style={{ marginTop: 0 }}>
+            هذه القواعد تضبط متى يصبح أصل الإيداع قابلاً للسحب بحسب الربح ونسبة الفتح الافتراضية أو حسب مستوى VIP.
+          </p>
+          <div className="owner-unlock-grid">
+            <div className="owner-unlock-field">
+              <label className="owner-unlock-label">الربح المطلوب قبل سحب أصل الإيداع</label>
+              <p className="owner-unlock-help">
+                اكتب مقدار الربح الذي يجب أن يحققه المستخدم أولًا قبل السماح له بسحب أصل الإيداع.
+              </p>
+              <input
+                className="field-input"
+                type="number"
+                min={0}
+                step="any"
+                placeholder={t('wallet_lock_min_profit_to_unlock')}
+                value={String(rules.minimumProfitToUnlock)}
+                onChange={(e) => setRules((prev) => ({ ...prev, minimumProfitToUnlock: Number(e.target.value || 0) }))}
+              />
+            </div>
+            <div className="owner-unlock-field">
+              <label className="owner-unlock-label">النسبة الافتراضية لفتح أصل الإيداع</label>
+              <p className="owner-unlock-help">
+                هذه النسبة تُستخدم لجميع المستخدمين ما لم يكن هناك تخصيص مختلف حسب مستوى VIP.
+              </p>
+              <input
+                className="field-input"
+                type="number"
+                min={0}
+                step="any"
+                placeholder={t('wallet_lock_default_unlock_ratio')}
+                value={String(rules.defaultUnlockRatio)}
+                onChange={(e) => setRules((prev) => ({ ...prev, defaultUnlockRatio: Number(e.target.value || 0) }))}
+              />
+            </div>
+          </div>
+          <div className="owner-unlock-vip-head">
+            <strong>نسب الفتح حسب مستويات VIP</strong>
+            <span className="owner-unlock-help">
+              خصص نسبة مختلفة لكل مستوى VIP إذا كنت لا تريد الاعتماد على النسبة الافتراضية.
+            </span>
+          </div>
+          <div className="owner-unlock-vip-grid">
+            {[0, 1, 2, 3, 4, 5].map((lvl) => (
+              <div key={lvl} className="owner-unlock-vip-card">
+                <label className="owner-unlock-label">{lvl === 0 ? 'مستخدم عادي' : `VIP ${lvl}`}</label>
+                <input
+                  className="field-input"
+                  type="number"
+                  min={0}
+                  step="any"
+                  placeholder={`${t('wallet_lock_level_ratio')} VIP ${lvl}`}
+                  value={String(Number(rules.unlockRatioByLevel?.[String(lvl)] ?? rules.defaultUnlockRatio))}
+                  onChange={(e) =>
+                    setRules((prev) => ({
+                      ...prev,
+                      unlockRatioByLevel: {
+                        ...(prev.unlockRatioByLevel || {}),
+                        [String(lvl)]: Number(e.target.value || 0),
+                      },
+                    }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="owner-hint" style={{ marginBottom: 12 }}>
+          طريقة الاستخدام: افصل طرق الإيداع أو السحب بفاصلة مثل <span dir="ltr">USDT TRC20, Bank Transfer</span> ثم احفظ القواعد لتُطبَّق على الطلبات الجديدة فقط.
+        </div>
         <button className="wallet-action-btn owner-set-btn" type="button" onClick={saveRules} disabled={rulesSaving}>
           {rulesSaving ? t('common_loading') : t('admin_wallet_save_rules')}
         </button>

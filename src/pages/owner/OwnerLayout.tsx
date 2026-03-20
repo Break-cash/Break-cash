@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, Wallet, ArrowDownLeft, ArrowUpRight, Sparkles, Crown, Megaphone, Settings, Shield, FileSearch, UserCog } from 'lucide-react'
+import { LayoutDashboard, Users, Sparkles, Shield } from 'lucide-react'
 import type { AuthUser } from '../../api'
 import { useI18n } from '../../i18nCore'
 import { ownerNavItems } from '../../owner/navConfig'
@@ -13,16 +13,8 @@ type OwnerLayoutProps = {
 const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   gauge: LayoutDashboard,
   users: Users,
-  wallet: Wallet,
-  'arrow-down': ArrowDownLeft,
-  'arrow-up': ArrowUpRight,
   sparkles: Sparkles,
-  crown: Crown,
-  megaphone: Megaphone,
-  settings: Settings,
   shield: Shield,
-  'file-search': FileSearch,
-  'user-cog': UserCog,
 }
 
 function resolveAdminRole(user: AuthUser): AdminRole {
