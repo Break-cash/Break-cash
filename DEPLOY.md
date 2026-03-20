@@ -8,6 +8,13 @@
   - `C:\Users\bffh1\Desktop\النتاج النهائي`
 - إذا وُجدت نسخ أخرى من المشروع على سطح المكتب أو في مجلدات أرشيف، فهي **نسخ حفظ فقط** وليست مصدرًا للتشغيل أو النشر.
 
+## Railway Production Path
+
+- Railway production is linked to GitHub repo `Break-cash/Break-cash`
+- Railway auto-deploys from branch `main`
+- Use `git push origin main` as the primary Railway deployment path
+- Do not rely on `railway up` as the primary deployment path for this project, because local snapshot uploads have been timing out during `Initialization > Snapshot code`
+
 ## أوامر النشر الصحيحة من هذا المجلد فقط
 
 ```bash
