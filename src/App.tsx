@@ -276,25 +276,29 @@ function App() {
     () => (permission: string) => Boolean(isOwner || grantedPermissions.includes(permission)),
     [grantedPermissions, isOwner],
   )
+  const hasAnyGrantedPermission = useMemo(
+    () => (permissions: string[]) => Boolean(isOwner || permissions.some((permission) => grantedPermissions.includes(permission))),
+    [grantedPermissions, isOwner],
+  )
   const canManageUsers = useMemo(
-    () => hasGrantedPermission('manage_users'),
-    [hasGrantedPermission],
+    () => hasAnyGrantedPermission(['manage_users', 'users.manage']),
+    [hasAnyGrantedPermission],
   )
   const canManageInvites = useMemo(
     () => hasGrantedPermission('manage_invites'),
     [hasGrantedPermission],
   )
   const canManageBalances = useMemo(
-    () => hasGrantedPermission('manage_balances'),
-    [hasGrantedPermission],
+    () => hasAnyGrantedPermission(['manage_balances', 'wallets.manage']),
+    [hasAnyGrantedPermission],
   )
   const canManagePermissions = useMemo(
-    () => hasGrantedPermission('manage_permissions'),
-    [hasGrantedPermission],
+    () => hasAnyGrantedPermission(['manage_permissions', 'staff_permissions.manage']),
+    [hasAnyGrantedPermission],
   )
   const canViewReports = useMemo(
-    () => hasGrantedPermission('view_reports'),
-    [hasGrantedPermission],
+    () => hasAnyGrantedPermission(['view_reports', 'reports.view', 'dashboard.overview.view']),
+    [hasAnyGrantedPermission],
   )
 
   function handleAuthSuccess() {

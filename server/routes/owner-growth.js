@@ -1185,16 +1185,16 @@ export function createOwnerGrowthRouter(db) {
       [userId, adminRole, req.user.id],
     )
     const permissionPresets = {
-      read_only: ['dashboard.overview.view', 'reports.view'],
-      finance: ['dashboard.overview.view', 'wallets.manage', 'deposits.manage', 'withdrawals.manage', 'reports.view'],
-      kyc: ['dashboard.overview.view', 'kyc.manage', 'reports.view'],
-      trading: ['dashboard.overview.view', 'trades.manage', 'assets.manage', 'reports.view'],
-      marketing: ['dashboard.overview.view', 'notifications.manage', 'bonuses.manage', 'referrals.manage', 'reports.view'],
-      support: ['dashboard.overview.view', 'support.manage', 'users.manage', 'reports.view'],
+      read_only: ['dashboard.overview.view', 'reports.view', 'view_reports'],
+      finance: ['dashboard.overview.view', 'wallets.manage', 'deposits.manage', 'withdrawals.manage', 'reports.view', 'manage_balances', 'view_reports'],
+      kyc: ['dashboard.overview.view', 'kyc.manage', 'reports.view', 'view_reports'],
+      trading: ['dashboard.overview.view', 'trades.manage', 'assets.manage', 'reports.view', 'view_reports'],
+      marketing: ['dashboard.overview.view', 'notifications.manage', 'bonuses.manage', 'referrals.manage', 'reports.view', 'view_reports'],
+      support: ['dashboard.overview.view', 'support.manage', 'users.manage', 'manage_users', 'reports.view', 'view_reports'],
       full_admin: [
-        'dashboard.overview.view', 'users.manage', 'wallets.manage', 'deposits.manage', 'withdrawals.manage',
+        'dashboard.overview.view', 'users.manage', 'manage_users', 'wallets.manage', 'manage_balances', 'deposits.manage', 'withdrawals.manage',
         'trades.manage', 'assets.manage', 'vip.manage', 'referrals.manage', 'bonuses.manage', 'kyc.manage',
-        'notifications.manage', 'support.manage', 'security.manage', 'reports.view', 'settings.manage',
+        'notifications.manage', 'support.manage', 'security.manage', 'reports.view', 'view_reports', 'settings.manage', 'manage_permissions',
       ],
     }
     const toGrant = permissionPresets[accessPreset] || permissionPresets.read_only
