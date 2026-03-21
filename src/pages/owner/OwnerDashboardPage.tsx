@@ -7,7 +7,9 @@ import {
   createContentCampaign,
   createAd,
   createDailyTradeCampaign,
+  getAdminUnlockOverride,
   getAdminStaffList,
+  getAdminUserWallet,
   deleteBonusRule,
   deleteDailyTradeCampaign,
   deleteAd,
@@ -40,6 +42,7 @@ import {
   toggleKycWatchlistEntry,
   upsertStrategyCodeAdmin,
   upsertPartnerProfile,
+  upsertAdminUnlockOverride,
   upsertVipTier,
   updateAd,
   updateAdminStaffRole,
@@ -62,6 +65,7 @@ import {
   type BonusRule,
   type ContentCampaign,
   type DailyTradeCampaign,
+  type EarningEntry,
   type IconAttractionAssignments,
   type IconAttractionTarget,
   type KycWatchlistItem,
@@ -74,8 +78,10 @@ import {
   type SecurityOverview,
   type StrategyCodeAdminItem,
   type StrategyCodeUsageAdminItem,
+  type UserUnlockOverride,
   type UserSessionItem,
   type VipTier,
+  type WithdrawalSummary,
   toggleBonusRule,
   toggleDailyTradeCampaign,
   updateIconAttractionKeys,
@@ -90,6 +96,20 @@ import { useI18n } from '../../i18nCore'
 
 type OwnerDashboardProps = {
   user: AuthUser | null
+}
+
+type OwnerProfitSnapshot = {
+  user: { id: number; email: string | null; phone: string | null; display_name: string | null } | null
+  overview: {
+    total_assets: number
+    by_currency: Record<string, number>
+    by_source: { source_type: string; currency: string; balance: number }[]
+    main_balance: number
+    locked_balance: number
+    withdrawable_balance: number
+  }
+  withdraw_summary: WithdrawalSummary
+  earning_entries: EarningEntry[]
 }
 
 export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
@@ -262,6 +282,18 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   })
   const [monthlyFinanceMonth, setMonthlyFinanceMonth] = useState(new Date().toISOString().slice(0, 7))
   const [monthlyFinance, setMonthlyFinance] = useState<OwnerMonthlyFinanceReport | null>(null)
+  const [profitPanelUserId, setProfitPanelUserId] = useState('')
+  const [profitPanelCurrency, setProfitPanelCurrency] = useState('USDT')
+  const [profitSnapshot, setProfitSnapshot] = useState<OwnerProfitSnapshot | null>(null)
+  const [profitOverride, setProfitOverride] = useState<UserUnlockOverride | null>(null)
+  const [profitOverrideDraft, setProfitOverrideDraft] = useState({
+    forceUnlockPrincipal: false,
+    customUnlockRatio: '',
+    customMinProfit: '',
+    note: '',
+  })
+  const [profitPanelLoading, setProfitPanelLoading] = useState(false)
+  const [profitPanelSaving, setProfitPanelSaving] = useState(false)
   const [ownerExtraSaving, setOwnerExtraSaving] = useState(false)
 
   const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
@@ -1301,6 +1333,73 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     }
   }
 
+  async function handleLoadProfitPanel() {
+    const userId = Number(profitPanelUserId || 0)
+    const currency = String(profitPanelCurrency || 'USDT').trim().toUpperCase() || 'USDT'
+    if (!userId) {
+      setMessage({ type: 'error', text: 'أدخل رقم المستخدم أولًا لتحميل لوحة الأرباح.' })
+      return
+    }
+    setProfitPanelLoading(true)
+    setMessage(null)
+    try {
+      const [walletRes, overrideRes] = await Promise.all([
+        getAdminUserWallet(userId, currency, 120),
+        getAdminUnlockOverride(userId),
+      ])
+      setProfitSnapshot({
+        user: walletRes.user,
+        overview: walletRes.overview,
+        withdraw_summary: walletRes.withdraw_summary,
+        earning_entries: walletRes.earning_entries || [],
+      })
+      setProfitOverride(overrideRes.override)
+      setProfitOverrideDraft({
+        forceUnlockPrincipal: Number(overrideRes.override?.force_unlock_principal || 0) === 1,
+        customUnlockRatio:
+          overrideRes.override?.custom_unlock_ratio == null ? '' : String(overrideRes.override.custom_unlock_ratio),
+        customMinProfit:
+          overrideRes.override?.custom_min_profit == null ? '' : String(overrideRes.override.custom_min_profit),
+        note: String(overrideRes.override?.note || ''),
+      })
+      setProfitPanelCurrency(currency)
+      setMessage({ type: 'success', text: `تم تحميل لوحة الأرباح للمستخدم #${userId}.` })
+    } catch (e) {
+      setProfitSnapshot(null)
+      setProfitOverride(null)
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحميل لوحة الأرباح.' })
+    } finally {
+      setProfitPanelLoading(false)
+    }
+  }
+
+  async function handleSaveProfitOverride() {
+    const userId = Number(profitPanelUserId || 0)
+    if (!userId) {
+      setMessage({ type: 'error', text: 'أدخل رقم المستخدم أولًا قبل حفظ إعدادات فك القيد.' })
+      return
+    }
+    setProfitPanelSaving(true)
+    setMessage(null)
+    try {
+      await upsertAdminUnlockOverride({
+        userId,
+        forceUnlockPrincipal: profitOverrideDraft.forceUnlockPrincipal,
+        customUnlockRatio:
+          profitOverrideDraft.customUnlockRatio.trim() === '' ? null : Number(profitOverrideDraft.customUnlockRatio),
+        customMinProfit:
+          profitOverrideDraft.customMinProfit.trim() === '' ? null : Number(profitOverrideDraft.customMinProfit),
+        note: profitOverrideDraft.note.trim(),
+      })
+      await handleLoadProfitPanel()
+      setMessage({ type: 'success', text: `تم حفظ إعدادات القابل للسحب للمستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ إعدادات فك القيد.' })
+    } finally {
+      setProfitPanelSaving(false)
+    }
+  }
+
   if (user && !isOwner) return <Navigate to="/portfolio" replace />
 
   const attractionKeyOptions = [
@@ -1341,6 +1440,55 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       tone: 'default',
     },
   ] as const
+  const profitSourceLabels: Record<string, string> = {
+    mining: 'التعدين',
+    tasks: 'المهام',
+    bonuses: 'البونصات',
+    rewards: 'المكافآت',
+    referrals: 'الإحالات',
+    deposits: 'الإيداعات',
+    strategy_codes: 'أكواد الاستراتيجية',
+    strategy: 'الاستراتيجية',
+    trades: 'الصفقات',
+  }
+  const profitEntriesBySource = Object.values(
+    (profitSnapshot?.earning_entries || []).reduce<
+      Record<
+        string,
+        {
+          source: string
+          transferred: number
+          pending: number
+          total: number
+          count: number
+        }
+      >
+    >((acc, entry) => {
+      const source = String(entry.source_type || 'other').trim().toLowerCase() || 'other'
+      if (!acc[source]) {
+        acc[source] = {
+          source,
+          transferred: 0,
+          pending: 0,
+          total: 0,
+          count: 0,
+        }
+      }
+      const amount = Number(entry.amount || 0)
+      const transferred = Boolean(entry.transferred_at) || String(entry.status || '').toLowerCase() === 'transferred'
+      acc[source].count += 1
+      acc[source].total += amount
+      if (transferred) acc[source].transferred += amount
+      else acc[source].pending += amount
+      return acc
+    }, {}),
+  ).sort((a, b) => b.total - a.total)
+  const transferredEarningsTotal = Number(
+    profitEntriesBySource.reduce((acc, item) => acc + Number(item.transferred || 0), 0).toFixed(2),
+  )
+  const pendingEarningsTotal = Number(
+    profitEntriesBySource.reduce((acc, item) => acc + Number(item.pending || 0), 0).toFixed(2),
+  )
 
   return (
     <div className="page owner-dashboard owner-dashboard-clean">
@@ -2904,6 +3052,112 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 </>
               ) : (
                 <p className="owner-empty">لا يوجد تقرير شهري محمل حاليًا.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">الأرباح القابلة وغير القابلة للسحب</h2>
+            <p className="owner-hint">حمّل حساب مستخدم واحدًا لترى الأرباح المرحّلة إلى المحفظة، والأرباح غير المرحّلة بعد، والمبلغ القابل للسحب الآن، والمبلغ المقيد بسبب أصل الإيداع.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input
+                  className="field-input"
+                  inputMode="numeric"
+                  placeholder="رقم المستخدم"
+                  value={profitPanelUserId}
+                  onChange={(e) => setProfitPanelUserId(e.target.value)}
+                />
+                <input
+                  className="field-input"
+                  placeholder="العملة"
+                  value={profitPanelCurrency}
+                  onChange={(e) => setProfitPanelCurrency(e.target.value.toUpperCase())}
+                />
+                <button
+                  type="button"
+                  className="wallet-action-btn owner-set-btn"
+                  onClick={handleLoadProfitPanel}
+                  disabled={profitPanelLoading || profitPanelSaving}
+                >
+                  {profitPanelLoading ? '...' : 'تحميل لوحة الأرباح'}
+                </button>
+              </div>
+              <div className="owner-form-row">
+                <label className="owner-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={profitOverrideDraft.forceUnlockPrincipal}
+                    onChange={(e) =>
+                      setProfitOverrideDraft((prev) => ({ ...prev, forceUnlockPrincipal: e.target.checked }))
+                    }
+                  />
+                  <span>فك قيد أصل الإيداع يدويًا</span>
+                </label>
+                <input
+                  className="field-input"
+                  placeholder="نسبة فك القيد المخصصة"
+                  value={profitOverrideDraft.customUnlockRatio}
+                  onChange={(e) => setProfitOverrideDraft((prev) => ({ ...prev, customUnlockRatio: e.target.value }))}
+                />
+                <input
+                  className="field-input"
+                  placeholder="الربح الأدنى المخصص"
+                  value={profitOverrideDraft.customMinProfit}
+                  onChange={(e) => setProfitOverrideDraft((prev) => ({ ...prev, customMinProfit: e.target.value }))}
+                />
+              </div>
+              <textarea
+                className="field-input"
+                rows={2}
+                placeholder="ملاحظة الاستثناء أو سبب تعديل القيد"
+                value={profitOverrideDraft.note}
+                onChange={(e) => setProfitOverrideDraft((prev) => ({ ...prev, note: e.target.value }))}
+              />
+              <div className="owner-buttons">
+                <button
+                  type="button"
+                  className="wallet-action-btn wallet-action-deposit"
+                  onClick={handleSaveProfitOverride}
+                  disabled={profitPanelLoading || profitPanelSaving}
+                >
+                  {profitPanelSaving ? '...' : 'حفظ إعدادات القيد'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-history-card">
+              {!profitSnapshot ? (
+                <p className="owner-empty">لا توجد بيانات محملة بعد. أدخل رقم المستخدم ثم حمّل اللوحة.</p>
+              ) : (
+                <>
+                  <div className="owner-hint">
+                    {`المستخدم: ${
+                      profitSnapshot.user?.display_name || profitSnapshot.user?.email || profitSnapshot.user?.phone || `#${profitPanelUserId}`
+                    } | VIP ${Number(profitSnapshot.withdraw_summary.vip_level || 0)} | ${profitSnapshot.withdraw_summary.currency}`}
+                  </div>
+                  <div className="owner-hint">{`الأرباح المرحّلة إلى المحفظة: ${transferredEarningsTotal.toFixed(2)} ${profitSnapshot.withdraw_summary.currency} | الأرباح غير المرحّلة: ${pendingEarningsTotal.toFixed(2)} ${profitSnapshot.withdraw_summary.currency}`}</div>
+                  <div className="owner-hint">{`القابل للسحب الآن: ${Number(profitSnapshot.withdraw_summary.withdrawable_balance || 0).toFixed(2)} | أصل الإيداع المقيد: ${Number(profitSnapshot.withdraw_summary.locked_balance || 0).toFixed(2)} | الربح المحتسب: ${Number(profitSnapshot.withdraw_summary.earned_profit || 0).toFixed(2)}`}</div>
+                  <div className="owner-hint">{`المتبقي لفك القيد: ${Number(profitSnapshot.withdraw_summary.remaining_profit_to_unlock || 0).toFixed(2)} | هدف فك القيد: ${Number(profitSnapshot.withdraw_summary.unlock_target_profit || 0).toFixed(2)} | نسبة التقدم: ${Number(profitSnapshot.withdraw_summary.unlock_progress_pct || 0).toFixed(2)}%`}</div>
+                  <div className="owner-hint">{`الرصيد الحالي: ${Number(profitSnapshot.withdraw_summary.current_balance || 0).toFixed(2)} | أصل الإيداع المحسوب: ${Number(profitSnapshot.withdraw_summary.deposited_principal || 0).toFixed(2)} | فك قيد يدوي: ${profitSnapshot.withdraw_summary.force_unlock_principal ? 'نعم' : 'لا'}`}</div>
+                  <div className="owner-hint">{`الاستثناء الحالي: نسبة فك القيد ${profitOverride?.custom_unlock_ratio == null ? 'افتراضية' : profitOverride.custom_unlock_ratio} | الربح الأدنى ${profitOverride?.custom_min_profit == null ? 'افتراضي' : profitOverride.custom_min_profit}`}</div>
+                  <div className="owner-section-divider" />
+                  <h3 className="owner-wallet-heading">تفصيل الأرباح حسب المصدر</h3>
+                  {profitEntriesBySource.length === 0 ? (
+                    <p className="owner-empty">لا توجد أرباح مسجلة لهذا المستخدم حتى الآن.</p>
+                  ) : (
+                    <ul className="owner-history-list">
+                      {profitEntriesBySource.map((item) => (
+                        <li key={item.source} className="owner-history-item">
+                          <div className="owner-history-main">
+                            <strong>{profitSourceLabels[item.source] || item.source}</strong>
+                            <small>{`الإجمالي: ${item.total.toFixed(2)} | المرحّل: ${item.transferred.toFixed(2)} | غير المرحّل: ${item.pending.toFixed(2)}`}</small>
+                            <small>{`عدد السجلات: ${item.count}`}</small>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           </section>
