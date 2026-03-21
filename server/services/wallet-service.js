@@ -68,6 +68,58 @@ async function finalizeRewardTransfer(db, { userId, currency, entryId, idempoten
   }
 }
 
+async function moveBalanceBetweenBuckets(
+  db,
+  {
+    userId,
+    currency = 'USDT',
+    amount,
+    fromSourceType,
+    fromAccountType = 'main',
+    toSourceType,
+    toAccountType = 'main',
+    debitTransactionType = 'transfer',
+    creditTransactionType = debitTransactionType,
+    referenceType,
+    referenceId,
+    idempotencyKey,
+    createdBy,
+  },
+) {
+  if (!userId || !Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_INPUT')
+  if (!fromSourceType || !toSourceType) throw new Error('INVALID_INPUT')
+
+  const baseKey = idempotencyKey || `${referenceType || 'wallet_move'}_${userId}_${Date.now()}`
+  const debitTxn = await recordTransaction(db, {
+    userId,
+    currency,
+    transactionType: debitTransactionType,
+    sourceType: fromSourceType,
+    referenceType,
+    referenceId,
+    amount: -amount,
+    accountType: fromAccountType,
+    idempotencyKey: `${baseKey}_debit`,
+    createdBy,
+  })
+  await recordTransaction(db, {
+    userId,
+    currency,
+    transactionType: creditTransactionType,
+    sourceType: toSourceType,
+    referenceType,
+    referenceId,
+    amount,
+    accountType: toAccountType,
+    idempotencyKey: `${baseKey}_credit`,
+    createdBy,
+  })
+  return {
+    walletTxnId: debitTxn.id,
+    balanceAfter: await getMainBalance(db, userId, currency),
+  }
+}
+
 /**
  * Create deposit (credit main balance). Idempotent.
  * @param {object} db - Database handle
@@ -155,18 +207,20 @@ export async function createMiningSubscription(db, opts) {
   if (!userId || !Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_INPUT')
   const balance = await getMainBalance(db, userId, currency)
   if (balance < amount) throw new Error('INSUFFICIENT_BALANCE')
-  const txn = await recordTransaction(db, {
+  return moveBalanceBetweenBuckets(db, {
     userId,
     currency,
-    transactionType: 'lock',
-    sourceType: 'mining',
+    amount,
+    fromSourceType: 'system',
+    fromAccountType: 'main',
+    toSourceType: 'mining',
+    toAccountType: 'locked',
+    debitTransactionType: 'lock',
+    creditTransactionType: 'lock',
     referenceType: 'mining_subscription',
     referenceId: userId,
-    amount: -amount,
     idempotencyKey: idempotencyKey || `mining_subscribe_${userId}_${Math.floor(Date.now() / 1000)}`,
   })
-  const balanceAfter = await getMainBalance(db, userId, currency)
-  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -222,19 +276,20 @@ export async function transferSourceEarningsToMain(db, opts) {
 export async function settleMiningAtMaturity(db, opts) {
   const { userId, principal, profileId, idempotencyKey } = opts
   if (!userId || !Number.isFinite(principal) || principal <= 0) throw new Error('INVALID_INPUT')
-  const key = idempotencyKey || `mining_release_${userId}`
-  const txn = await recordTransaction(db, {
+  return moveBalanceBetweenBuckets(db, {
     userId,
     currency: 'USDT',
-    transactionType: 'unlock',
-    sourceType: 'mining',
+    amount: principal,
+    fromSourceType: 'mining',
+    fromAccountType: 'locked',
+    toSourceType: 'system',
+    toAccountType: 'main',
+    debitTransactionType: 'unlock',
+    creditTransactionType: 'unlock',
     referenceType: 'mining_principal_release',
     referenceId: profileId,
-    amount: principal,
-    idempotencyKey: key,
+    idempotencyKey: idempotencyKey || `mining_release_${userId}`,
   })
-  const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { walletTxnId: txn.id, balanceAfter }
 }
 
 /**
@@ -248,20 +303,40 @@ export async function executeMiningEmergencyWithdrawal(db, opts) {
   const { userId, principal, feeAmount = 0, profileId, idempotencyKey } = opts
   if (!userId || !Number.isFinite(principal) || principal <= 0) throw new Error('INVALID_INPUT')
   const netAmount = Number(Math.max(0, principal - feeAmount).toFixed(8))
-  const key = idempotencyKey || `mining_emergency_${userId}`
-  const txn = await recordTransaction(db, {
+  const transfer = await moveBalanceBetweenBuckets(db, {
     userId,
     currency: 'USDT',
-    transactionType: 'transfer',
-    sourceType: 'mining',
+    amount: principal,
+    fromSourceType: 'mining',
+    fromAccountType: 'locked',
+    toSourceType: 'system',
+    toAccountType: 'main',
+    debitTransactionType: 'transfer',
+    creditTransactionType: 'transfer',
     referenceType: 'mining_emergency_withdraw',
     referenceId: profileId,
-    amount: principal,
-    feeAmount,
-    idempotencyKey: key,
+    idempotencyKey: idempotencyKey || `mining_emergency_${userId}`,
   })
-  const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { walletTxnId: txn.id, netAmount, balanceAfter }
+
+  if (feeAmount > 0) {
+    await recordTransaction(db, {
+      userId,
+      currency: 'USDT',
+      transactionType: 'fee',
+      sourceType: 'system',
+      referenceType: 'mining_emergency_fee',
+      referenceId: profileId,
+      amount: -feeAmount,
+      accountType: 'main',
+      idempotencyKey: `${idempotencyKey || `mining_emergency_${userId}`}_fee`,
+    })
+  }
+
+  return {
+    walletTxnId: transfer.walletTxnId,
+    netAmount,
+    balanceAfter: await getMainBalance(db, userId, 'USDT'),
+  }
 }
 
 /**
