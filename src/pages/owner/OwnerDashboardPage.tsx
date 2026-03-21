@@ -2,48 +2,80 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import {
   apiFetch,
+  createAdminStaff,
   createBonusRule,
+  createContentCampaign,
   createAd,
   createDailyTradeCampaign,
+  getAdminStaffList,
   deleteBonusRule,
   deleteDailyTradeCampaign,
   deleteAd,
   getAdsAdmin,
   getAssetImages,
   getBonusRules,
+  getContentCampaigns,
   getDailyTradeCampaigns,
   getIconAttractionKeys,
+  getKycWatchlist,
+  getOwnerGrowthSummary,
+  getOwnerMonthlyFinanceReport,
+  getPartnerProfiles,
   getRegistrationStatus,
+  getReferralDetails,
+  getReferralStats,
+  getReferralSummary,
   ownerUploadSettingImage,
   ownerUploadUserAvatar,
+  replaceAdminStaffPermissions,
   reorderAds,
+  revokeAllUserSessions,
+  runUnusualActivityDetection,
+  setAdminSensitiveAccess,
+  getSecurityOverview,
+  getSecuritySessions,
   getStrategyCodesAdmin,
+  getVipTiers,
   toggleAd,
+  toggleKycWatchlistEntry,
   upsertStrategyCodeAdmin,
+  upsertPartnerProfile,
+  upsertVipTier,
   updateAd,
+  updateAdminStaffRole,
   toggleStrategyCodeAdmin,
   deleteStrategyCodeAdmin,
   getMiningAdminConfig,
   getOwnerKycSubmissions,
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
+  updateUserTwoFactor,
   processAutoKycReviews,
   reviewOwnerKycSubmission,
   reviewRecoveryCodeRequest,
+  addKycWatchlistEntry,
   uploadAdMedia,
   uploadMiningMediaAdmin,
   type AdItem,
+  type AdminStaffItem,
   type AuthUser,
   type BonusRule,
+  type ContentCampaign,
   type DailyTradeCampaign,
   type IconAttractionAssignments,
   type IconAttractionTarget,
+  type KycWatchlistItem,
   type KycSubmissionRow,
   type MiningConfig,
+  type OwnerMonthlyFinanceReport,
+  type PartnerProfile,
   type RecoveryCodeReviewRequestItem,
   type RewardTierRule,
+  type SecurityOverview,
   type StrategyCodeAdminItem,
   type StrategyCodeUsageAdminItem,
+  type UserSessionItem,
+  type VipTier,
   toggleBonusRule,
   toggleDailyTradeCampaign,
   updateIconAttractionKeys,
@@ -162,8 +194,77 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [adDeleteLoading, setAdDeleteLoading] = useState<number | null>(null)
   const [adDeleteConfirmId, setAdDeleteConfirmId] = useState<number | null>(null)
   const [adReorderLoading, setAdReorderLoading] = useState(false)
+  const [ownerSummary, setOwnerSummary] = useState({
+    activeDailyTrades: 0,
+    activeBonusRules: 0,
+    activePartners: 0,
+    activeContent: 0,
+  })
+  const [vipTiers, setVipTiers] = useState<VipTier[]>([])
+  const [vipTierDraft, setVipTierDraft] = useState({
+    level: 1,
+    title: 'VIP 1',
+    minDeposit: '500',
+    minTradeVolume: '0',
+    referralMultiplier: '1',
+    referralPercent: '4',
+    perks: '',
+    isActive: true,
+  })
+  const [partnerProfiles, setPartnerProfiles] = useState<PartnerProfile[]>([])
+  const [partnerDraft, setPartnerDraft] = useState({
+    userId: '',
+    commissionRate: '4',
+    status: 'active',
+    notes: '',
+  })
+  const [referralStats, setReferralStats] = useState({
+    pendingCount: 0,
+    qualifiedCount: 0,
+    rewardReleasedCount: 0,
+    totalRewardsValue: 0,
+  })
+  const [referralSummary, setReferralSummary] = useState<Array<Record<string, unknown>>>([])
+  const [referralDetailUserId, setReferralDetailUserId] = useState('')
+  const [referralDetails, setReferralDetails] = useState<Array<Record<string, unknown>>>([])
+  const [contentCampaigns, setContentCampaigns] = useState<ContentCampaign[]>([])
+  const [contentDraft, setContentDraft] = useState({
+    campaignType: 'notification' as 'notification' | 'popup' | 'banner' | 'news',
+    title: '',
+    body: '',
+    language: 'all',
+    minVipLevel: '0',
+    vipOnly: false,
+    depositorsOnly: false,
+    nonDepositorsOnly: false,
+    isActive: true,
+  })
+  const [securityOverview, setSecurityOverview] = useState<SecurityOverview | null>(null)
+  const [securitySessions, setSecuritySessions] = useState<UserSessionItem[]>([])
+  const [securityUserId, setSecurityUserId] = useState('')
+  const [securityActionLoading, setSecurityActionLoading] = useState<number | string | null>(null)
+  const [staffItems, setStaffItems] = useState<AdminStaffItem[]>([])
+  const [staffDraft, setStaffDraft] = useState({
+    identifier: '',
+    password: '',
+    displayName: '',
+    adminRole: 'support' as 'super_admin' | 'admin' | 'finance' | 'support' | 'moderator',
+    accessPreset: 'support' as 'read_only' | 'finance' | 'kyc' | 'trading' | 'marketing' | 'support' | 'full_admin',
+  })
+  const [availablePermissions, setAvailablePermissions] = useState<string[]>([])
+  const [selectedStaffUserId, setSelectedStaffUserId] = useState('')
+  const [selectedStaffPermissions, setSelectedStaffPermissions] = useState<string[]>([])
+  const [watchlist, setWatchlist] = useState<KycWatchlistItem[]>([])
+  const [watchlistDraft, setWatchlistDraft] = useState({
+    userId: '',
+    note: '',
+    source: '',
+  })
+  const [monthlyFinanceMonth, setMonthlyFinanceMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [monthlyFinance, setMonthlyFinance] = useState<OwnerMonthlyFinanceReport | null>(null)
+  const [ownerExtraSaving, setOwnerExtraSaving] = useState(false)
 
-  const isOwner = user?.role === 'owner'
+  const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
   const firstDepositBonusRules = bonusRules.filter((rule) => rule.rule_type === 'first_deposit')
   const referralBonusRules = bonusRules.filter((rule) => rule.rule_type === 'referral')
 
@@ -221,6 +322,45 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     getRecoveryCodeReviewRequests('pending')
       .then((res) => setRecoveryRequests(res.items || []))
       .catch(() => setRecoveryRequests([]))
+  }, [])
+
+  useEffect(() => {
+    getOwnerGrowthSummary()
+      .then((res) => setOwnerSummary(res))
+      .catch(() => {})
+    getVipTiers()
+      .then((res) => setVipTiers(res.items || []))
+      .catch(() => setVipTiers([]))
+    getPartnerProfiles()
+      .then((res) => setPartnerProfiles(res.items || []))
+      .catch(() => setPartnerProfiles([]))
+    getReferralStats()
+      .then((res) => setReferralStats(res))
+      .catch(() => {})
+    getReferralSummary()
+      .then((res) => setReferralSummary(res.summary || []))
+      .catch(() => setReferralSummary([]))
+    getContentCampaigns()
+      .then((res) => setContentCampaigns(res.items || []))
+      .catch(() => setContentCampaigns([]))
+    getSecurityOverview()
+      .then((res) => setSecurityOverview(res))
+      .catch(() => setSecurityOverview(null))
+    getSecuritySessions()
+      .then((res) => setSecuritySessions(res.items || []))
+      .catch(() => setSecuritySessions([]))
+    getAdminStaffList()
+      .then((res) => setStaffItems(res.items || []))
+      .catch(() => setStaffItems([]))
+    apiFetch('/api/permissions/available')
+      .then((res) => setAvailablePermissions(((res as { permissions?: string[] }).permissions || []).filter(Boolean)))
+      .catch(() => setAvailablePermissions([]))
+    getKycWatchlist()
+      .then((res) => setWatchlist(res.items || []))
+      .catch(() => setWatchlist([]))
+    getOwnerMonthlyFinanceReport()
+      .then((res) => setMonthlyFinance(res))
+      .catch(() => setMonthlyFinance(null))
   }, [])
 
   useEffect(() => {
@@ -839,6 +979,325 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث الترتيب.' })
     } finally {
       setAdReorderLoading(false)
+    }
+  }
+
+  async function refreshAdvancedOwnerPanels() {
+    const [summaryRes, vipRes, partnerRes, referralStatsRes, referralSummaryRes, contentRes, securityRes, staffRes, watchlistRes] = await Promise.all([
+      getOwnerGrowthSummary(),
+      getVipTiers(),
+      getPartnerProfiles(),
+      getReferralStats(),
+      getReferralSummary(),
+      getContentCampaigns(),
+      getSecurityOverview(),
+      getAdminStaffList(),
+      getKycWatchlist(),
+    ])
+    setOwnerSummary(summaryRes)
+    setVipTiers(vipRes.items || [])
+    setPartnerProfiles(partnerRes.items || [])
+    setReferralStats(referralStatsRes)
+    setReferralSummary(referralSummaryRes.summary || [])
+    setContentCampaigns(contentRes.items || [])
+    setSecurityOverview(securityRes)
+    setStaffItems(staffRes.items || [])
+    setWatchlist(watchlistRes.items || [])
+  }
+
+  async function handleSaveVipTier() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await upsertVipTier({
+        level: Number(vipTierDraft.level || 1),
+        title: vipTierDraft.title.trim(),
+        minDeposit: Number(vipTierDraft.minDeposit || 0),
+        minTradeVolume: Number(vipTierDraft.minTradeVolume || 0),
+        referralMultiplier: Number(vipTierDraft.referralMultiplier || 1),
+        referralPercent: Number(vipTierDraft.referralPercent || 0),
+        perks: vipTierDraft.perks.split('\n').map((item) => item.trim()).filter(Boolean),
+        isActive: vipTierDraft.isActive,
+      })
+      const refreshed = await getVipTiers()
+      setVipTiers(refreshed.items || [])
+      setMessage({ type: 'success', text: 'تم حفظ مستوى VIP بنجاح.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ مستوى VIP.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleSavePartnerProfile() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await upsertPartnerProfile({
+        userId: Number(partnerDraft.userId || 0),
+        commissionRate: Number(partnerDraft.commissionRate || 0),
+        status: partnerDraft.status,
+        notes: partnerDraft.notes.trim(),
+      })
+      const refreshed = await getPartnerProfiles()
+      setPartnerProfiles(refreshed.items || [])
+      setMessage({ type: 'success', text: 'تم حفظ ملف الشريك بنجاح.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ الشريك.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleLoadReferralDetails() {
+    const userId = Number(referralDetailUserId || 0)
+    if (!userId) {
+      setMessage({ type: 'error', text: 'أدخل رقم المستخدم أولاً لعرض تفاصيل الإحالات.' })
+      return
+    }
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      const res = await getReferralDetails(userId)
+      setReferralDetails(res.referrals || [])
+      setMessage({ type: 'success', text: `تم تحميل إحالات المستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحميل تفاصيل الإحالات.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleCreateContentCampaign() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await createContentCampaign({
+        campaignType: contentDraft.campaignType,
+        title: contentDraft.title.trim(),
+        body: contentDraft.body.trim(),
+        targetFilters: {
+          language: contentDraft.language === 'all' ? undefined : contentDraft.language,
+          minVipLevel: Number(contentDraft.minVipLevel || 0),
+          vipOnly: contentDraft.vipOnly,
+          depositorsOnly: contentDraft.depositorsOnly,
+          nonDepositorsOnly: contentDraft.nonDepositorsOnly,
+        },
+        isActive: contentDraft.isActive,
+      })
+      const refreshed = await getContentCampaigns()
+      setContentCampaigns(refreshed.items || [])
+      setMessage({ type: 'success', text: 'تم حفظ الحملة/الإشعار بنجاح.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ الحملة.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleRefreshSecuritySessions() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      const userId = Number(securityUserId || 0)
+      const res = await getSecuritySessions(userId > 0 ? userId : undefined)
+      setSecuritySessions(res.items || [])
+      setMessage({ type: 'success', text: userId > 0 ? `تم تحميل جلسات المستخدم #${userId}.` : 'تم تحميل الجلسات النشطة.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحميل الجلسات.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleRevokeSessions(userId: number) {
+    setSecurityActionLoading(userId)
+    setMessage(null)
+    try {
+      await revokeAllUserSessions(userId)
+      const refreshed = await getSecuritySessions(Number(securityUserId || 0) > 0 ? Number(securityUserId || 0) : undefined)
+      setSecuritySessions(refreshed.items || [])
+      setMessage({ type: 'success', text: `تم إلغاء جميع الجلسات للمستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل إلغاء الجلسات.' })
+    } finally {
+      setSecurityActionLoading(null)
+    }
+  }
+
+  async function handleToggleTwoFactorAction(userId: number, enabled: boolean, forAdminActions = false) {
+    setSecurityActionLoading(`${userId}-${enabled ? 'on' : 'off'}`)
+    setMessage(null)
+    try {
+      await updateUserTwoFactor(userId, enabled, forAdminActions)
+      const refreshed = await getSecurityOverview()
+      setSecurityOverview(refreshed)
+      setMessage({ type: 'success', text: `تم تحديث المصادقة الثنائية للمستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث المصادقة الثنائية.' })
+    } finally {
+      setSecurityActionLoading(null)
+    }
+  }
+
+  async function handleDetectUnusualActivity() {
+    setSecurityActionLoading('detect')
+    setMessage(null)
+    try {
+      const res = await runUnusualActivityDetection()
+      const refreshed = await getSecurityOverview()
+      setSecurityOverview(refreshed)
+      setMessage({ type: 'success', text: `تم تنفيذ كشف النشاط غير المعتاد وإنشاء ${res.alertsCreated} تنبيه.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل فحص النشاط غير المعتاد.' })
+    } finally {
+      setSecurityActionLoading(null)
+    }
+  }
+
+  async function handleCreateStaffMember() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await createAdminStaff({
+        identifier: staffDraft.identifier.trim(),
+        password: staffDraft.password,
+        displayName: staffDraft.displayName.trim(),
+        adminRole: staffDraft.adminRole,
+        accessPreset: staffDraft.accessPreset,
+      })
+      const refreshed = await getAdminStaffList()
+      setStaffItems(refreshed.items || [])
+      setStaffDraft({
+        identifier: '',
+        password: '',
+        displayName: '',
+        adminRole: 'support',
+        accessPreset: 'support',
+      })
+      setMessage({ type: 'success', text: 'تم إنشاء عضو الطاقم بنجاح.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل إنشاء عضو الطاقم.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleLoadStaffPermissions() {
+    const userId = Number(selectedStaffUserId || 0)
+    if (!userId) {
+      setMessage({ type: 'error', text: 'اختر رقم عضو الطاقم أولاً.' })
+      return
+    }
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      const res = await apiFetch(`/api/permissions/user/${userId}`) as { permissions?: string[] }
+      setSelectedStaffPermissions(res.permissions || [])
+      setMessage({ type: 'success', text: `تم تحميل صلاحيات المستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحميل صلاحيات المستخدم.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleSaveStaffPermissions() {
+    const userId = Number(selectedStaffUserId || 0)
+    if (!userId) {
+      setMessage({ type: 'error', text: 'اختر رقم عضو الطاقم أولاً.' })
+      return
+    }
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await replaceAdminStaffPermissions(userId, selectedStaffPermissions)
+      const refreshed = await getAdminStaffList()
+      setStaffItems(refreshed.items || [])
+      setMessage({ type: 'success', text: `تم تحديث صلاحيات المستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث صلاحيات الطاقم.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleUpdateStaffRoleAction(userId: number, adminRole: 'super_admin' | 'admin' | 'finance' | 'support' | 'moderator', enabled: boolean) {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await updateAdminStaffRole(userId, adminRole, enabled)
+      const refreshed = await getAdminStaffList()
+      setStaffItems(refreshed.items || [])
+      setMessage({ type: 'success', text: `تم تحديث دور المستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث دور الطاقم.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleToggleSensitiveAccess(userId: number, canViewSensitive: boolean) {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await setAdminSensitiveAccess(userId, canViewSensitive)
+      const refreshed = await getAdminStaffList()
+      setStaffItems(refreshed.items || [])
+      setMessage({ type: 'success', text: `تم تحديث الوصول الحساس للمستخدم #${userId}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث الوصول الحساس.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleAddWatchlistItem() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await addKycWatchlistEntry({
+        userId: Number(watchlistDraft.userId || 0) || undefined,
+        note: watchlistDraft.note.trim(),
+        source: watchlistDraft.source.trim() || undefined,
+      })
+      const refreshed = await getKycWatchlist()
+      setWatchlist(refreshed.items || [])
+      setWatchlistDraft({ userId: '', note: '', source: '' })
+      setMessage({ type: 'success', text: 'تمت إضافة العنصر إلى قائمة المراقبة.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل إضافة عنصر المراقبة.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleToggleWatchlist(item: KycWatchlistItem) {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      await toggleKycWatchlistEntry(item.id, Number(item.is_active || 0) !== 1)
+      const refreshed = await getKycWatchlist()
+      setWatchlist(refreshed.items || [])
+      setMessage({ type: 'success', text: 'تم تحديث حالة عنصر المراقبة.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث عنصر المراقبة.' })
+    } finally {
+      setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleLoadMonthlyFinanceReport() {
+    setOwnerExtraSaving(true)
+    setMessage(null)
+    try {
+      const res = await getOwnerMonthlyFinanceReport(monthlyFinanceMonth)
+      setMonthlyFinance(res)
+      setMessage({ type: 'success', text: `تم تحميل تقرير ${res.month}.` })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحميل التقرير الشهري.' })
+    } finally {
+      setOwnerExtraSaving(false)
     }
   }
 
@@ -2029,6 +2488,422 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">الصلاحيات الإدارية الفعالة</h2>
+            <p className="owner-hint">هذه الأقسام مربوطة مباشرة بالصلاحيات والـ APIs الفعالة الموجودة فعليًا في النظام.</p>
+            <div className="owner-history-card">
+              <div className="owner-form-row">
+                <div className="owner-actions-card">
+                  <h3 className="owner-wallet-heading">ملخص النمو الفعلي</h3>
+                  <div className="owner-hint">{`لوحات يومية فعالة: ${ownerSummary.activeDailyTrades} | قواعد مكافآت فعالة: ${ownerSummary.activeBonusRules}`}</div>
+                  <div className="owner-hint">{`شركاء نشطون: ${ownerSummary.activePartners} | حملات محتوى فعالة: ${ownerSummary.activeContent}`}</div>
+                </div>
+                <div className="owner-actions-card">
+                  <h3 className="owner-wallet-heading">ملخص الإحالات</h3>
+                  <div className="owner-hint">{`معلّقة: ${referralStats.pendingCount} | مؤهلة: ${referralStats.qualifiedCount}`}</div>
+                  <div className="owner-hint">{`تم صرفها: ${referralStats.rewardReleasedCount} | القيمة: ${Number(referralStats.totalRewardsValue || 0).toFixed(2)} USDT`}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">إدارة مستويات VIP</h2>
+            <p className="owner-hint">تحكم مباشر بمستويات VIP الفعالة: الحد الأدنى، نسبة الإحالة، المضاعف، والمزايا النصية.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <select className="field-input" value={vipTierDraft.level} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, level: Number(e.target.value || 1) }))}>
+                  {[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{`VIP ${level}`}</option>)}
+                </select>
+                <input className="field-input" placeholder="اسم المستوى" value={vipTierDraft.title} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, title: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="الحد الأدنى للإيداع" value={vipTierDraft.minDeposit} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, minDeposit: e.target.value }))} />
+              </div>
+              <div className="owner-form-row">
+                <input type="number" className="field-input" placeholder="حجم الفريق/التداول" value={vipTierDraft.minTradeVolume} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, minTradeVolume: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="مضاعف الإحالة" value={vipTierDraft.referralMultiplier} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, referralMultiplier: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="نسبة الإحالة %" value={vipTierDraft.referralPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, referralPercent: e.target.value }))} />
+              </div>
+              <textarea className="field-input" rows={4} placeholder="مزايا المستوى، كل سطر ميزة مستقلة" value={vipTierDraft.perks} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, perks: e.target.value }))} />
+              <label className="owner-checkbox">
+                <input type="checkbox" checked={vipTierDraft.isActive} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, isActive: e.target.checked }))} />
+                <span>المستوى فعال</span>
+              </label>
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSaveVipTier} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'حفظ مستوى VIP'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-history-card">
+              {vipTiers.length === 0 ? (
+                <p className="owner-empty">لا توجد مستويات VIP محملة حاليًا.</p>
+              ) : (
+                <ul className="owner-history-list">
+                  {vipTiers.map((item) => (
+                    <li key={item.id} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{`VIP ${item.level} - ${item.title}`}</strong>
+                        <small>{`من ${Number(item.min_deposit || 0).toFixed(2)}$ | إحالة ${Number(item.referral_percent || 0).toFixed(2)}% | مضاعف ${Number(item.referral_multiplier || 1).toFixed(2)}`}</small>
+                        <small>{Array.isArray(item.perks) ? item.perks.join(' | ') : ''}</small>
+                      </div>
+                      <div className="owner-history-actions">
+                        <button
+                          type="button"
+                          className="wallet-action-btn owner-set-btn"
+                          onClick={() =>
+                            setVipTierDraft({
+                              level: item.level,
+                              title: item.title,
+                              minDeposit: String(item.min_deposit || 0),
+                              minTradeVolume: String(item.min_trade_volume || 0),
+                              referralMultiplier: String(item.referral_multiplier || 1),
+                              referralPercent: String(item.referral_percent || 0),
+                              perks: Array.isArray(item.perks) ? item.perks.join('\n') : '',
+                              isActive: Number(item.is_active || 0) === 1,
+                            })
+                          }
+                        >
+                          تعديل
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">إدارة الشركاء والإحالات</h2>
+            <p className="owner-hint">هذه اللوحة تربط الشريك مباشرة بملفه، ونسبة العمولة، والحالة، وتسمح بعرض تفاصيل الإحالات لمستخدم محدد.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input className="field-input" inputMode="numeric" placeholder="رقم المستخدم" value={partnerDraft.userId} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, userId: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="نسبة العمولة %" value={partnerDraft.commissionRate} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, commissionRate: e.target.value }))} />
+                <select className="field-input" value={partnerDraft.status} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, status: e.target.value }))}>
+                  <option value="active">نشط</option>
+                  <option value="inactive">معطل</option>
+                  <option value="paused">موقوف</option>
+                </select>
+              </div>
+              <input className="field-input" placeholder="ملاحظات الشريك" value={partnerDraft.notes} onChange={(e) => setPartnerDraft((prev) => ({ ...prev, notes: e.target.value }))} />
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSavePartnerProfile} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'حفظ الشريك'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input className="field-input" inputMode="numeric" placeholder="رقم المستخدم لعرض تفاصيل الإحالات" value={referralDetailUserId} onChange={(e) => setReferralDetailUserId(e.target.value)} />
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleLoadReferralDetails} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'عرض التفاصيل'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-history-card">
+              <h3 className="owner-wallet-heading">الشركاء الحاليون</h3>
+              {partnerProfiles.length === 0 ? <p className="owner-empty">لا توجد ملفات شركاء حتى الآن.</p> : (
+                <ul className="owner-history-list">
+                  {partnerProfiles.map((item) => (
+                    <li key={item.id} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{item.display_name || item.email || item.phone || `المستخدم #${item.user_id}`}</strong>
+                        <small>{`العمولة ${Number(item.commission_rate || 0).toFixed(2)}% | الحالة: ${item.status} | الإحالات: ${Number(item.referrals_count || 0)}`}</small>
+                        <small>{item.notes || 'بدون ملاحظات'}</small>
+                      </div>
+                      <div className="owner-history-actions">
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => setPartnerDraft({ userId: String(item.user_id), commissionRate: String(item.commission_rate || 0), status: item.status || 'active', notes: item.notes || '' })}>
+                          تعديل
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="owner-history-card">
+              <h3 className="owner-wallet-heading">ملخص الإحالات</h3>
+              {referralSummary.length === 0 ? <p className="owner-empty">لا يوجد ملخص إحالات متاح حاليًا.</p> : (
+                <ul className="owner-history-list">
+                  {referralSummary.slice(0, 8).map((item, index) => (
+                    <li key={index} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{String(item.display_name || item.referral_code || `المستخدم #${item.user_id || index}`)}</strong>
+                        <small>{`إجمالي الإحالات: ${Number(item.total_referrals || 0)} | النشطة: ${Number(item.active_count || 0)} | القيمة: ${Number(item.rewards_value || 0).toFixed(2)} USDT`}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {referralDetails.length > 0 ? (
+                <>
+                  <div className="owner-section-divider" />
+                  <h3 className="owner-wallet-heading">تفاصيل إحالات المستخدم المحدد</h3>
+                  <ul className="owner-history-list">
+                    {referralDetails.slice(0, 12).map((item, index) => (
+                      <li key={index} className="owner-history-item">
+                        <div className="owner-history-main">
+                          <strong>{String(item.display_name || item.email || item.phone || `إحالة #${index + 1}`)}</strong>
+                          <small>{`الحالة: ${String(item.status || 'unknown')} | أول إيداع: ${Number(item.first_deposit_amount || 0).toFixed(2)} | المكافأة: ${Number(item.reward_amount || 0).toFixed(2)}`}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">الحملات والمحتوى</h2>
+            <p className="owner-hint">لوحة حية للحملات والإشعارات والبنرات والنشرات، مرتبطة مباشرة بمسار المحتوى الفعال في النظام.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <select className="field-input" value={contentDraft.campaignType} onChange={(e) => setContentDraft((prev) => ({ ...prev, campaignType: e.target.value as 'notification' | 'popup' | 'banner' | 'news' }))}>
+                  <option value="notification">إشعار</option>
+                  <option value="popup">نافذة منبثقة</option>
+                  <option value="banner">بانر</option>
+                  <option value="news">خبر</option>
+                </select>
+                <input className="field-input" placeholder="عنوان الحملة" value={contentDraft.title} onChange={(e) => setContentDraft((prev) => ({ ...prev, title: e.target.value }))} />
+                <select className="field-input" value={contentDraft.language} onChange={(e) => setContentDraft((prev) => ({ ...prev, language: e.target.value }))}>
+                  <option value="all">كل اللغات</option>
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                  <option value="tr">Türkçe</option>
+                </select>
+              </div>
+              <textarea className="field-input" rows={4} placeholder="محتوى الحملة أو الإشعار" value={contentDraft.body} onChange={(e) => setContentDraft((prev) => ({ ...prev, body: e.target.value }))} />
+              <div className="owner-form-row">
+                <input type="number" className="field-input" placeholder="أقل مستوى VIP" value={contentDraft.minVipLevel} onChange={(e) => setContentDraft((prev) => ({ ...prev, minVipLevel: e.target.value }))} />
+                <label className="owner-checkbox"><input type="checkbox" checked={contentDraft.vipOnly} onChange={(e) => setContentDraft((prev) => ({ ...prev, vipOnly: e.target.checked }))} /><span>أعضاء VIP فقط</span></label>
+                <label className="owner-checkbox"><input type="checkbox" checked={contentDraft.depositorsOnly} onChange={(e) => setContentDraft((prev) => ({ ...prev, depositorsOnly: e.target.checked }))} /><span>المودعون فقط</span></label>
+                <label className="owner-checkbox"><input type="checkbox" checked={contentDraft.nonDepositorsOnly} onChange={(e) => setContentDraft((prev) => ({ ...prev, nonDepositorsOnly: e.target.checked }))} /><span>غير المودعين فقط</span></label>
+              </div>
+              <label className="owner-checkbox"><input type="checkbox" checked={contentDraft.isActive} onChange={(e) => setContentDraft((prev) => ({ ...prev, isActive: e.target.checked }))} /><span>الحملة فعالة</span></label>
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleCreateContentCampaign} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'إرسال/حفظ الحملة'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-history-card">
+              {contentCampaigns.length === 0 ? <p className="owner-empty">لا توجد حملات محفوظة حتى الآن.</p> : (
+                <ul className="owner-history-list">
+                  {contentCampaigns.map((item) => (
+                    <li key={item.id} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{item.title}</strong>
+                        <small>{`${item.campaign_type} | ${Number(item.is_active || 0) === 1 ? 'فعال' : 'معطل'}`}</small>
+                        <small>{item.body || 'بدون نص إضافي'}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">الأمن والجلسات</h2>
+            <p className="owner-hint">لوحة الصلاحيات الأمنية الفعالة: الجلسات، النشاط غير المعتاد، وسجلات المتابعة.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input className="field-input" inputMode="numeric" placeholder="رقم مستخدم لتحميل جلساته" value={securityUserId} onChange={(e) => setSecurityUserId(e.target.value)} />
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleRefreshSecuritySessions} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'تحميل الجلسات'}
+                </button>
+                <button type="button" className="wallet-action-btn wallet-action-withdraw" onClick={handleDetectUnusualActivity} disabled={securityActionLoading !== null}>
+                  {securityActionLoading === 'detect' ? '...' : 'فحص النشاط غير المعتاد'}
+                </button>
+              </div>
+              <div className="owner-hint">{`IP مشبوهة: ${securityOverview?.suspiciousIps?.length || 0} | أجهزة متعددة: ${securityOverview?.multiDeviceUsers?.length || 0} | Proxy/VPN: ${securityOverview?.proxyAlerts?.length || 0} | تنبيهات غير معتادة: ${securityOverview?.unusualActivity?.length || 0}`}</div>
+            </div>
+            <div className="owner-history-card">
+              {securitySessions.length === 0 ? <p className="owner-empty">لا توجد جلسات محملة حاليًا.</p> : (
+                <ul className="owner-history-list">
+                  {securitySessions.slice(0, 20).map((item) => (
+                    <li key={item.id} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{`المستخدم #${item.user_id} - ${item.is_active ? 'نشط' : 'مغلق'}`}</strong>
+                        <small>{`${item.ip_address || '-'} | ${item.created_at}`}</small>
+                        <small>{item.user_agent || 'بدون وكيل مستخدم'}</small>
+                      </div>
+                      <div className="owner-history-actions">
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleRevokeSessions(item.user_id)} disabled={securityActionLoading !== null}>
+                          {securityActionLoading === item.user_id ? '...' : 'إلغاء كل الجلسات'}
+                        </button>
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleToggleTwoFactorAction(item.user_id, true, true)} disabled={securityActionLoading !== null}>
+                          تفعيل 2FA
+                        </button>
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleToggleTwoFactorAction(item.user_id, false, false)} disabled={securityActionLoading !== null}>
+                          تعطيل 2FA
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">إدارة الطاقم والصلاحيات</h2>
+            <p className="owner-hint">لوحة إنشاء الطاقم، تعديل دوره، الوصول الحساس، واستبدال الصلاحيات الفعلية الموجودة بالنظام.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input className="field-input" placeholder="البريد أو الهاتف" value={staffDraft.identifier} onChange={(e) => setStaffDraft((prev) => ({ ...prev, identifier: e.target.value }))} />
+                <input className="field-input" placeholder="اسم العرض" value={staffDraft.displayName} onChange={(e) => setStaffDraft((prev) => ({ ...prev, displayName: e.target.value }))} />
+                <input className="field-input" placeholder="كلمة المرور" value={staffDraft.password} onChange={(e) => setStaffDraft((prev) => ({ ...prev, password: e.target.value }))} />
+              </div>
+              <div className="owner-form-row">
+                <select className="field-input" value={staffDraft.adminRole} onChange={(e) => setStaffDraft((prev) => ({ ...prev, adminRole: e.target.value as 'super_admin' | 'admin' | 'finance' | 'support' | 'moderator' }))}>
+                  <option value="support">Support</option>
+                  <option value="finance">Finance</option>
+                  <option value="moderator">Moderator</option>
+                  <option value="admin">Admin</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+                <select className="field-input" value={staffDraft.accessPreset} onChange={(e) => setStaffDraft((prev) => ({ ...prev, accessPreset: e.target.value as 'read_only' | 'finance' | 'kyc' | 'trading' | 'marketing' | 'support' | 'full_admin' }))}>
+                  <option value="read_only">Read only</option>
+                  <option value="support">Support</option>
+                  <option value="finance">Finance</option>
+                  <option value="kyc">KYC</option>
+                  <option value="trading">Trading</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="full_admin">Full admin</option>
+                </select>
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleCreateStaffMember} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'إنشاء عضو طاقم'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input className="field-input" inputMode="numeric" placeholder="رقم عضو الطاقم" value={selectedStaffUserId} onChange={(e) => setSelectedStaffUserId(e.target.value)} />
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleLoadStaffPermissions} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'تحميل صلاحياته'}
+                </button>
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSaveStaffPermissions} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'حفظ الصلاحيات'}
+                </button>
+              </div>
+              <div className="owner-history-list">
+                {availablePermissions.map((permission) => (
+                  <label key={permission} className="owner-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedStaffPermissions.includes(permission)}
+                      onChange={(e) =>
+                        setSelectedStaffPermissions((prev) =>
+                          e.target.checked ? [...prev, permission] : prev.filter((item) => item !== permission),
+                        )
+                      }
+                    />
+                    <span>{permission}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="owner-history-card">
+              {staffItems.length === 0 ? <p className="owner-empty">لا يوجد طاقم إداري محمل حاليًا.</p> : (
+                <ul className="owner-history-list">
+                  {staffItems.map((item) => (
+                    <li key={item.id} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{item.display_name || item.email || item.phone || `المستخدم #${item.id}`}</strong>
+                        <small>{`${item.admin_role} | ${Number(item.permissions_count || 0)} صلاحية | ${Number(item.can_view_sensitive || 0) === 1 ? 'وصول حساس' : 'وصول عادي'}`}</small>
+                      </div>
+                      <div className="owner-history-actions">
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleUpdateStaffRoleAction(item.id, item.admin_role, Number(item.is_active || 0) !== 1)} disabled={ownerExtraSaving}>
+                          {Number(item.is_active || 0) === 1 ? 'تعطيل العضو' : 'تفعيل العضو'}
+                        </button>
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleToggleSensitiveAccess(item.id, Number(item.can_view_sensitive || 0) !== 1)} disabled={ownerExtraSaving}>
+                          {Number(item.can_view_sensitive || 0) === 1 ? 'إلغاء الوصول الحساس' : 'تفعيل الوصول الحساس'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">قائمة مراقبة KYC</h2>
+            <p className="owner-hint">لوحة الصلاحية الفعالة الخاصة بقائمة المراقبة الأمنية/التحقيقية.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input className="field-input" inputMode="numeric" placeholder="رقم المستخدم - اختياري" value={watchlistDraft.userId} onChange={(e) => setWatchlistDraft((prev) => ({ ...prev, userId: e.target.value }))} />
+                <input className="field-input" placeholder="المصدر" value={watchlistDraft.source} onChange={(e) => setWatchlistDraft((prev) => ({ ...prev, source: e.target.value }))} />
+              </div>
+              <textarea className="field-input" rows={3} placeholder="ملاحظة عنصر المراقبة" value={watchlistDraft.note} onChange={(e) => setWatchlistDraft((prev) => ({ ...prev, note: e.target.value }))} />
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleAddWatchlistItem} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'إضافة إلى القائمة'}
+                </button>
+              </div>
+            </div>
+            <div className="owner-history-card">
+              {watchlist.length === 0 ? <p className="owner-empty">لا توجد عناصر مراقبة حاليًا.</p> : (
+                <ul className="owner-history-list">
+                  {watchlist.map((item) => (
+                    <li key={item.id} className="owner-history-item">
+                      <div className="owner-history-main">
+                        <strong>{item.user_id ? `المستخدم #${item.user_id}` : `عنصر #${item.id}`}</strong>
+                        <small>{`${item.source || 'بدون مصدر'} | ${Number(item.is_active || 0) === 1 ? 'فعال' : 'معطل'}`}</small>
+                        <small>{item.note}</small>
+                      </div>
+                      <div className="owner-history-actions">
+                        <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleToggleWatchlist(item)} disabled={ownerExtraSaving}>
+                          {Number(item.is_active || 0) === 1 ? 'تعطيل' : 'تفعيل'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">التقرير الشهري للتعدين والإيداعات</h2>
+            <p className="owner-hint">يعرض هذا التقرير اشتراكات التعدين الأصلية فقط بشكل منفصل عن الإيداعات العامة.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <input type="month" className="field-input" value={monthlyFinanceMonth} onChange={(e) => setMonthlyFinanceMonth(e.target.value)} />
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleLoadMonthlyFinanceReport} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'تحميل التقرير'}
+                </button>
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={refreshAdvancedOwnerPanels} disabled={ownerExtraSaving}>
+                  {ownerExtraSaving ? '...' : 'تحديث كل اللوحات'}
+                </button>
+              </div>
+              {monthlyFinance ? (
+                <>
+                  <div className="owner-hint">{`شهر التقرير: ${monthlyFinance.month}`}</div>
+                  <div className="owner-hint">{`اشتراكات التعدين الأصلية: ${monthlyFinance.mining.totalOriginalSubscriptions.toFixed(2)} USDT | المشتركون: ${monthlyFinance.mining.subscriberCount}`}</div>
+                  <div className="owner-hint">{`الإيداعات العامة: ${monthlyFinance.deposits.totalDeposits.toFixed(2)} USDT | المودعون: ${monthlyFinance.deposits.depositorCount}`}</div>
+                  <div className="owner-section-divider" />
+                  <h3 className="owner-wallet-heading">أعلى مشتركين تعدين</h3>
+                  <ul className="owner-history-list">
+                    {monthlyFinance.mining.items.slice(0, 8).map((item) => (
+                      <li key={`${item.user_id}-${item.last_subscription_at || 'm'}`} className="owner-history-item">
+                        <div className="owner-history-main">
+                          <strong>{item.display_name || item.email || item.phone || `المستخدم #${item.user_id}`}</strong>
+                          <small>{`${Number(item.original_subscription_total || 0).toFixed(2)} USDT | عدد الاشتراكات: ${Number(item.subscription_count || 0)}`}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="owner-empty">لا يوجد تقرير شهري محمل حاليًا.</p>
               )}
             </div>
           </section>

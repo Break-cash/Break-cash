@@ -1819,6 +1819,8 @@ export type RecoveryCodeReviewRequestItem = {
   recovery_code: string
   request_status: 'pending' | 'approved' | 'rejected' | string
   request_note?: string | null
+  contact_channel?: string | null
+  contact_value?: string | null
   submitted_ip?: string | null
   submitted_user_agent?: string | null
   reviewed_by?: number | null
@@ -1828,6 +1830,40 @@ export type RecoveryCodeReviewRequestItem = {
   display_name?: string | null
   email?: string | null
   phone?: string | null
+}
+
+export type OwnerMonthlyFinanceReport = {
+  month: string
+  mining: {
+    subscriberCount: number
+    subscriptionCount: number
+    totalOriginalSubscriptions: number
+    items: Array<{
+      user_id: number
+      display_name?: string | null
+      email?: string | null
+      phone?: string | null
+      subscription_count: number
+      original_subscription_total: number
+      first_subscription_at?: string | null
+      last_subscription_at?: string | null
+    }>
+  }
+  deposits: {
+    depositorCount: number
+    depositsCount: number
+    totalDeposits: number
+    items: Array<{
+      user_id: number
+      display_name?: string | null
+      email?: string | null
+      phone?: string | null
+      deposits_count: number
+      total_deposits: number
+      first_deposit_at?: string | null
+      last_deposit_at?: string | null
+    }>
+  }
 }
 
 export async function getSecurityOverview() {
@@ -1947,14 +1983,23 @@ export async function toggleKycWatchlistEntry(id: number, isActive: boolean) {
 
 export async function getRecoveryCodeReviewRequests(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : ''
-  return apiFetch(`/api/owner-growth/recovery-code/requests${query}`) as Promise<{ items: RecoveryCodeReviewRequestItem[] }>
+  return apiFetch(`/api/owner-growth/recovery-code-requests${query}`) as Promise<{ items: RecoveryCodeReviewRequestItem[] }>
 }
 
 export async function reviewRecoveryCodeRequest(payload: { id: number; decision: 'approve' | 'reject'; note?: string }) {
-  return apiFetch('/api/owner-growth/recovery-code/review', {
+  return apiFetch('/api/owner-growth/recovery-code-requests/review', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      requestId: payload.id,
+      decision: payload.decision,
+      requestNote: payload.note,
+    }),
   }) as Promise<{ ok: boolean }>
+}
+
+export async function getOwnerMonthlyFinanceReport(month?: string) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : ''
+  return apiFetch(`/api/owner-growth/reports/monthly-finance${query}`) as Promise<OwnerMonthlyFinanceReport>
 }
 
 export type RewardTierRule = {
