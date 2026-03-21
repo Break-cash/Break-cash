@@ -6,9 +6,27 @@ import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
 import { getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
 
 async function withTransaction(db, fn) {
+  if (typeof db.connect === 'function') {
+    const client = await db.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await fn(client)
+      await client.query('COMMIT')
+      return result
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // ignore rollback error
+      }
+      throw error
+    } finally {
+      client.release()
+    }
+  }
   await run(db, 'BEGIN')
   try {
-    const result = await fn()
+    const result = await fn(db)
     await run(db, 'COMMIT')
     return result
   } catch (error) {
@@ -380,8 +398,8 @@ export function createUsersRouter(db) {
     }
     const delta = type === 'add' ? amount : -amount
     try {
-      await withTransaction(db, async () => {
-        await adjustBalance(db, {
+      await withTransaction(db, async (tx) => {
+        await adjustBalance(tx, {
           userId,
           currency,
           delta,
@@ -419,8 +437,8 @@ export function createUsersRouter(db) {
 
     try {
       if (target === 'main') {
-        await withTransaction(db, async () => {
-          await adjustBalance(db, {
+        await withTransaction(db, async (tx) => {
+          await adjustBalance(tx, {
             userId,
             currency,
             delta: -amount,
@@ -448,9 +466,9 @@ export function createUsersRouter(db) {
       }
 
       let affectedEntries = 0
-      await withTransaction(db, async () => {
+      await withTransaction(db, async (tx) => {
         const pendingRows = await all(
-          db,
+          tx,
           `SELECT id, amount
            FROM earning_entries
            WHERE user_id = ?
@@ -471,9 +489,9 @@ export function createUsersRouter(db) {
           const consume = Math.min(entryAmount, remaining)
           const nextAmount = Number((entryAmount - consume).toFixed(8))
           if (nextAmount <= 0) {
-            await run(db, `DELETE FROM earning_entries WHERE id = ?`, [row.id])
+            await run(tx, `DELETE FROM earning_entries WHERE id = ?`, [row.id])
           } else {
-            await run(db, `UPDATE earning_entries SET amount = ? WHERE id = ?`, [nextAmount, row.id])
+            await run(tx, `UPDATE earning_entries SET amount = ? WHERE id = ?`, [nextAmount, row.id])
           }
           remaining = Number((remaining - consume).toFixed(8))
           affectedEntries += 1

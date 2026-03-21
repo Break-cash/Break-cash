@@ -35,6 +35,7 @@ import {
   replaceAdminStaffPermissions,
   reorderAds,
   revokeAllUserSessions,
+  runAdminAccountHealthScan,
   runUnusualActivityDetection,
   setAdminSensitiveAccess,
   getSecurityOverview,
@@ -65,6 +66,7 @@ import {
   uploadAdMedia,
   uploadMiningMediaAdmin,
   type AdItem,
+  type AdminAccountHealthScan,
   type AdminStaffItem,
   type AuthUser,
   type BonusRule,
@@ -119,6 +121,13 @@ type OwnerProfitSnapshot = {
   }
   withdraw_summary: WithdrawalSummary
   earning_entries: EarningEntry[]
+}
+
+function formatOwnerDateTime(value: string | null | undefined) {
+  if (!value) return 'غير محدد'
+  const ms = Date.parse(String(value))
+  if (Number.isNaN(ms)) return String(value)
+  return new Date(ms).toLocaleString('ar')
 }
 
 const REWARD_PAYOUT_SOURCE_OPTIONS: Array<{
@@ -384,6 +393,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [profitPanelLoading, setProfitPanelLoading] = useState(false)
   const [profitPanelSaving, setProfitPanelSaving] = useState(false)
   const [ownerExtraSaving, setOwnerExtraSaving] = useState(false)
+  const [staffHealthLoading, setStaffHealthLoading] = useState(false)
+  const [staffHealthScan, setStaffHealthScan] = useState<AdminAccountHealthScan | null>(null)
 
   const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
   const firstDepositBonusRules = bonusRules.filter((rule) => rule.rule_type === 'first_deposit')
@@ -630,21 +641,37 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     setUserProfitAdjustSaving(true)
     setMessage(null)
     try {
+      const selectedTarget = userProfitAdjustDraft.target
+      const selectedSourceType = userProfitAdjustDraft.sourceType
       const result = await adjustUserProfit({
         userId: uid,
         currency: 'USDT',
         amount,
-        target: userProfitAdjustDraft.target,
-        sourceType: userProfitAdjustDraft.sourceType,
+        target: selectedTarget,
+        sourceType: selectedSourceType,
         note: userProfitAdjustDraft.note.trim(),
       })
+      if (Number(profitPanelUserId || 0) === uid) {
+        const panelCurrency = String(profitPanelCurrency || 'USDT').trim().toUpperCase() || 'USDT'
+        const [walletRes, overrideRes] = await Promise.all([
+          getAdminUserWallet(uid, panelCurrency, 120),
+          getAdminUnlockOverride(uid),
+        ])
+        setProfitSnapshot({
+          user: walletRes.user,
+          overview: walletRes.overview,
+          withdraw_summary: walletRes.withdraw_summary,
+          earning_entries: walletRes.earning_entries || [],
+        })
+        setProfitOverride(overrideRes.override)
+      }
       setUserProfitAdjustDraft((prev) => ({ ...prev, amount: '', note: '' }))
       setMessage({
         type: 'success',
         text:
           result.target === 'main'
             ? `تم خصم ${amount.toFixed(2)} USDT من الأرباح العامة. الرصيد العام المتبقي: ${Number(result.remainingMainBalance || 0).toFixed(2)} USDT.`
-            : `تم خصم ${amount.toFixed(2)} USDT من الأرباح الخاصة ${userProfitAdjustDraft.sourceType === 'all' ? 'لكل المصادر' : `لمصدر ${userProfitAdjustDraft.sourceType}`}. المتبقي من الأرباح المعلقة: ${Number(result.remainingPendingAmount || 0).toFixed(2)} USDT عبر ${Number(result.affectedEntries || 0)} سجل.`,
+            : `تم خصم ${amount.toFixed(2)} USDT من الأرباح الخاصة ${selectedSourceType === 'all' ? 'لكل المصادر' : `لمصدر ${selectedSourceType}`}. المتبقي من الأرباح المعلقة: ${Number(result.remainingPendingAmount || 0).toFixed(2)} USDT عبر ${Number(result.affectedEntries || 0)} سجل.`,
       })
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل خصم الأرباح للمستخدم.' })
@@ -1522,6 +1549,23 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث الوصول الحساس.' })
     } finally {
       setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleRunStaffAccountHealthScan() {
+    setStaffHealthLoading(true)
+    setMessage(null)
+    try {
+      const result = await runAdminAccountHealthScan()
+      setStaffHealthScan(result)
+      setMessage({
+        type: 'success',
+        text: `تم فحص ${Number(result.summary.scanned_users || 0)} حساب. القيود الحالية: ${Number(result.summary.restricted_users || 0)} | المشاكل المرصودة: ${Number(result.summary.issues_total || 0)}.`,
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل فحص الحسابات.' })
+    } finally {
+      setStaffHealthLoading(false)
     }
   }
 
@@ -3523,6 +3567,75 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   </label>
                 ))}
               </div>
+            </div>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleRunStaffAccountHealthScan} disabled={staffHealthLoading}>
+                  {staffHealthLoading ? 'جارٍ فحص كل الحسابات...' : 'فحص كل الحسابات'}
+                </button>
+                <span className="owner-hint">
+                  {staffHealthScan ? `آخر فحص: ${formatOwnerDateTime(staffHealthScan.summary.scanned_at)}` : 'يفحص القيود والتعليق والجلسات ومخالفات المحفظة والصلاحيات.'}
+                </span>
+              </div>
+              {staffHealthScan ? (
+                <>
+                  <div className="owner-hero-grid">
+                    {[
+                      { label: 'الحسابات المفحوصة', value: String(Number(staffHealthScan.summary.scanned_users || 0)), tone: 'neutral' },
+                      { label: 'الحسابات المقيّدة', value: String(Number(staffHealthScan.summary.restricted_users || 0)), tone: Number(staffHealthScan.summary.restricted_users || 0) > 0 ? 'warning' : 'success' },
+                      { label: 'مشاكل الجلسات', value: String(Number(staffHealthScan.summary.active_blocked_session_issues || 0)), tone: Number(staffHealthScan.summary.active_blocked_session_issues || 0) > 0 ? 'danger' : 'success' },
+                      { label: 'مشاكل الصلاحيات', value: String(Number(staffHealthScan.summary.staff_permission_issues || 0)), tone: Number(staffHealthScan.summary.staff_permission_issues || 0) > 0 ? 'warning' : 'success' },
+                      { label: 'مشاكل المحفظة', value: String(Number(staffHealthScan.summary.wallet_integrity_issues || 0) + Number(staffHealthScan.summary.linkage_issues || 0) + Number(staffHealthScan.summary.earning_transfer_issues || 0) + Number(staffHealthScan.summary.zero_balance_issues || 0)), tone: Number(staffHealthScan.summary.wallet_integrity_issues || 0) + Number(staffHealthScan.summary.linkage_issues || 0) + Number(staffHealthScan.summary.earning_transfer_issues || 0) + Number(staffHealthScan.summary.zero_balance_issues || 0) > 0 ? 'danger' : 'success' },
+                      { label: 'إجمالي المشاكل', value: String(Number(staffHealthScan.summary.issues_total || 0)), tone: Number(staffHealthScan.summary.issues_total || 0) > 0 ? 'danger' : 'success' },
+                    ].map((item) => (
+                      <div key={item.label} className={`owner-stat-card owner-stat-card-${item.tone}`}>
+                        <span className="owner-stat-label">{item.label}</span>
+                        <strong className="owner-stat-value">{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="owner-history-card">
+                    <h3 className="owner-wallet-heading">الحسابات المقيّدة أو المعلّقة</h3>
+                    {staffHealthScan.restricted_accounts.length === 0 ? (
+                      <p className="owner-empty">لا توجد حسابات مقيّدة أو معلّقة في آخر فحص.</p>
+                    ) : (
+                      <ul className="owner-history-list">
+                        {staffHealthScan.restricted_accounts.map((item) => (
+                          <li key={`restricted-${item.user_id}`} className="owner-history-item">
+                            <div className="owner-history-main">
+                              <strong>{item.display_name || item.email || item.phone || `المستخدم #${item.user_id}`}</strong>
+                              <small>{item.states.join(' | ') || 'قيد غير محدد'}</small>
+                            </div>
+                            <div className="owner-history-meta">
+                              {item.banned_until ? <small>{`حتى ${formatOwnerDateTime(item.banned_until)}`}</small> : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="owner-history-card">
+                    <h3 className="owner-wallet-heading">المشاكل المكتشفة</h3>
+                    {staffHealthScan.issues.length === 0 ? (
+                      <p className="owner-empty">لم يتم رصد أخطاء تشغيلية أو تعارضات في آخر فحص.</p>
+                    ) : (
+                      <ul className="owner-history-list">
+                        {staffHealthScan.issues.map((item, index) => (
+                          <li key={`${item.kind}-${item.user_id || 'global'}-${index}`} className="owner-history-item">
+                            <div className="owner-history-main">
+                              <strong>{item.title}</strong>
+                              <small>{item.details}</small>
+                            </div>
+                            <div className="owner-history-meta">
+                              <small>{`${item.severity === 'error' ? 'خطأ' : 'تنبيه'}${item.user_id ? ` | المستخدم #${item.user_id}` : ''}`}</small>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
+              ) : null}
             </div>
             <div className="owner-history-card">
               {staffItems.length === 0 ? <p className="owner-empty">لا يوجد طاقم إداري محمل حاليًا.</p> : (

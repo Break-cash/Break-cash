@@ -11,6 +11,12 @@ import {
   normalizeRewardSourceType,
   reapplyRewardPoliciesToPendingEntries,
 } from '../services/wallet-service.js'
+import {
+  reconcileAll,
+  verifyDepositWithdrawalLinkage,
+  verifyEarningTransfers,
+  verifyUnexpectedZeroBalances,
+} from '../services/wallet-reconciliation.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -81,6 +87,17 @@ function parseVipTierPayload(row) {
     auto_reinvest: normalized.autoReinvest ? 1 : 0,
     daily_bonus: normalized.dailyBonus ? 1 : 0,
   }
+}
+
+function buildAccountRestrictionLabels(row) {
+  const labels = []
+  if (Number(row?.is_banned || 0) === 1) labels.push('محظور')
+  if (Number(row?.is_frozen || 0) === 1) labels.push('مجمّد')
+  if (Number(row?.is_approved || 0) !== 1) labels.push('بانتظار الاعتماد')
+  if (row?.banned_until && !Number.isNaN(Date.parse(String(row.banned_until))) && Date.parse(String(row.banned_until)) > Date.now()) {
+    labels.push(`حظر مؤقت حتى ${new Date(String(row.banned_until)).toISOString()}`)
+  }
+  return labels
 }
 
 const REWARD_PAYOUT_SOURCE_TYPES = ['mining', 'tasks', 'referrals', 'deposits']
@@ -1251,6 +1268,224 @@ export function createOwnerGrowthRouter(db) {
     )
     await logAudit(db, req.user.id, 'staff_permissions', 'set_sensitive_access', userId, { canViewSensitive })
     return res.json({ ok: true })
+  })
+
+  router.post('/staff/account-health-scan', async (req, res) => {
+    const [userStats, restrictedRows, blockedSessionRows, staffPermissionRows, reconcileIssues, linkageCheck, earningCheck, zeroCheck] = await Promise.all([
+      get(
+        db,
+        `SELECT
+           COUNT(*) AS total_users,
+           SUM(CASE WHEN COALESCE(is_banned, 0) = 1 THEN 1 ELSE 0 END) AS banned_users,
+           SUM(CASE WHEN COALESCE(is_frozen, 0) = 1 THEN 1 ELSE 0 END) AS frozen_users,
+           SUM(CASE WHEN COALESCE(is_approved, 0) != 1 THEN 1 ELSE 0 END) AS unapproved_users,
+           SUM(CASE WHEN banned_until IS NOT NULL AND banned_until > CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS temp_banned_users,
+           SUM(
+             CASE
+               WHEN COALESCE(is_banned, 0) = 1
+                 OR COALESCE(is_frozen, 0) = 1
+                 OR COALESCE(is_approved, 0) != 1
+                 OR (banned_until IS NOT NULL AND banned_until > CURRENT_TIMESTAMP)
+               THEN 1
+               ELSE 0
+             END
+           ) AS restricted_users
+         FROM users`,
+      ),
+      all(
+        db,
+        `SELECT id, display_name, email, phone, is_banned, is_frozen, is_approved, banned_until
+         FROM users
+         WHERE COALESCE(is_banned, 0) = 1
+            OR COALESCE(is_frozen, 0) = 1
+            OR COALESCE(is_approved, 0) != 1
+            OR (banned_until IS NOT NULL AND banned_until > CURRENT_TIMESTAMP)
+         ORDER BY id DESC
+         LIMIT 120`,
+      ),
+      all(
+        db,
+        `SELECT
+           u.id AS user_id,
+           u.display_name,
+           u.email,
+           u.phone,
+           u.is_banned,
+           u.is_frozen,
+           u.is_approved,
+           u.banned_until,
+           COUNT(us.id) AS active_sessions
+         FROM users u
+         INNER JOIN user_sessions us
+           ON us.user_id = u.id
+          AND COALESCE(us.is_active, 0) = 1
+         WHERE COALESCE(u.is_banned, 0) = 1
+            OR COALESCE(u.is_frozen, 0) = 1
+            OR COALESCE(u.is_approved, 0) != 1
+            OR (u.banned_until IS NOT NULL AND u.banned_until > CURRENT_TIMESTAMP)
+         GROUP BY u.id, u.display_name, u.email, u.phone, u.is_banned, u.is_frozen, u.is_approved, u.banned_until
+         ORDER BY active_sessions DESC, u.id DESC
+         LIMIT 120`,
+      ),
+      all(
+        db,
+        `SELECT
+           u.id AS user_id,
+           u.display_name,
+           u.email,
+           u.phone,
+           u.role,
+           COALESCE(s.admin_role, CASE WHEN u.role = 'moderator' THEN 'moderator' ELSE 'admin' END) AS admin_role,
+           COALESCE(s.is_active, 1) AS staff_active,
+           COALESCE(pc.permissions_count, 0) AS permissions_count
+         FROM users u
+         LEFT JOIN admin_staff_profiles s ON s.user_id = u.id
+         LEFT JOIN (
+           SELECT user_id, COUNT(*) AS permissions_count
+           FROM permissions
+           GROUP BY user_id
+         ) pc ON pc.user_id = u.id
+         WHERE u.role IN ('admin', 'moderator')
+           AND (
+             (COALESCE(s.is_active, 1) = 0 AND COALESCE(pc.permissions_count, 0) > 0)
+             OR (COALESCE(s.is_active, 1) = 1 AND COALESCE(pc.permissions_count, 0) = 0)
+           )
+         ORDER BY u.id DESC
+         LIMIT 120`,
+      ),
+      reconcileAll(db, 100000),
+      verifyDepositWithdrawalLinkage(db, 100000),
+      verifyEarningTransfers(db, 100000),
+      verifyUnexpectedZeroBalances(db, 100000),
+    ])
+
+    const issues = []
+    const pushIssue = (issue) => {
+      if (issues.length < 200) issues.push(issue)
+    }
+
+    for (const row of blockedSessionRows) {
+      pushIssue({
+        kind: 'blocked_active_session',
+        severity: 'error',
+        user_id: Number(row.user_id || 0),
+        display_name: row.display_name || null,
+        email: row.email || null,
+        phone: row.phone || null,
+        title: 'حساب مقيّد مع جلسات نشطة',
+        details: `يوجد ${Number(row.active_sessions || 0)} جلسة نشطة رغم حالة الحساب: ${buildAccountRestrictionLabels(row).join(' | ') || 'قيد غير محدد'}`,
+      })
+    }
+
+    for (const row of staffPermissionRows) {
+      pushIssue({
+        kind: 'staff_permission_mismatch',
+        severity: Number(row.staff_active || 0) === 0 ? 'warning' : 'error',
+        user_id: Number(row.user_id || 0),
+        display_name: row.display_name || null,
+        email: row.email || null,
+        phone: row.phone || null,
+        title: Number(row.staff_active || 0) === 0 ? 'عضو طاقم معطّل لكن صلاحياته ما زالت موجودة' : 'عضو طاقم مفعّل بدون أي صلاحيات',
+        details: `الدور ${row.admin_role || row.role || 'admin'} | عدد الصلاحيات الحالية: ${Number(row.permissions_count || 0)}`,
+      })
+    }
+
+    for (const item of reconcileIssues) {
+      pushIssue({
+        kind: 'wallet_integrity',
+        severity: 'error',
+        user_id: Number(item.userId || 0),
+        display_name: null,
+        email: null,
+        phone: null,
+        title: 'عدم تطابق في أرصدة المحفظة',
+        details: `${item.currency}: ${item.message}`,
+      })
+    }
+
+    for (const item of linkageCheck.issues || []) {
+      pushIssue({
+        kind: 'wallet_linkage',
+        severity: 'error',
+        user_id: Number(item.userId || 0),
+        display_name: null,
+        email: null,
+        phone: null,
+        title: 'طلب مالي معتمد بدون ربط بحركة محفظة',
+        details: `${item.type} #${item.id} | amount=${Number(item.amount || 0)} | status=${item.status || ''}`,
+      })
+    }
+
+    for (const item of earningCheck.issues || []) {
+      pushIssue({
+        kind: 'earning_transfer',
+        severity: 'error',
+        user_id: null,
+        display_name: null,
+        email: null,
+        phone: null,
+        title: 'خلل في تحويل الأرباح إلى المحفظة',
+        details: `earning_entry #${Number(item.earningEntryId || 0)} | ${item.issue}${item.txnAmount != null ? ` | txn=${item.txnAmount}` : ''}${item.entryAmount != null ? ` | entry=${item.entryAmount}` : ''}`,
+      })
+    }
+
+    for (const item of zeroCheck.issues || []) {
+      pushIssue({
+        kind: 'wallet_zero_balance_mismatch',
+        severity: 'error',
+        user_id: Number(item.userId || 0),
+        display_name: null,
+        email: null,
+        phone: null,
+        title: 'مخالفة بين الرصيد الحالي ومجموع القيود',
+        details: `${item.currency}: ledger=${Number(item.ledgerSum || 0)} | wallet=${Number(item.walletBalance || 0)}`,
+      })
+    }
+
+    const restrictedAccounts = restrictedRows.map((row) => ({
+      user_id: Number(row.id || 0),
+      display_name: row.display_name || null,
+      email: row.email || null,
+      phone: row.phone || null,
+      states: buildAccountRestrictionLabels(row),
+      banned_until: row.banned_until || null,
+    }))
+
+    const summary = {
+      scanned_users: Number(userStats?.total_users || 0),
+      restricted_users: Number(userStats?.restricted_users || 0),
+      banned_users: Number(userStats?.banned_users || 0),
+      frozen_users: Number(userStats?.frozen_users || 0),
+      unapproved_users: Number(userStats?.unapproved_users || 0),
+      temp_banned_users: Number(userStats?.temp_banned_users || 0),
+      active_blocked_session_issues: blockedSessionRows.length,
+      staff_permission_issues: staffPermissionRows.length,
+      wallet_integrity_issues: reconcileIssues.length,
+      linkage_issues: Number(linkageCheck?.issues?.length || 0),
+      earning_transfer_issues: Number(earningCheck?.issues?.length || 0),
+      zero_balance_issues: Number(zeroCheck?.issues?.length || 0),
+      issues_total:
+        blockedSessionRows.length +
+        staffPermissionRows.length +
+        reconcileIssues.length +
+        Number(linkageCheck?.issues?.length || 0) +
+        Number(earningCheck?.issues?.length || 0) +
+        Number(zeroCheck?.issues?.length || 0),
+      scanned_at: new Date().toISOString(),
+    }
+
+    await logAudit(db, req.user.id, 'staff_permissions', 'account_health_scan', null, {
+      scannedUsers: summary.scanned_users,
+      restrictedUsers: summary.restricted_users,
+      issuesTotal: summary.issues_total,
+    })
+
+    return res.json({
+      ok: true,
+      summary,
+      restricted_accounts: restrictedAccounts,
+      issues,
+    })
   })
 
   router.get('/kyc/submissions', async (req, res) => {

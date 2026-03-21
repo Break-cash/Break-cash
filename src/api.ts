@@ -1991,6 +1991,48 @@ export type AdminStaffItem = {
   permissions_count: number
 }
 
+export type AdminAccountHealthIssue = {
+  kind: string
+  severity: 'warning' | 'error' | string
+  user_id?: number | null
+  display_name?: string | null
+  email?: string | null
+  phone?: string | null
+  title: string
+  details: string
+}
+
+export type AdminRestrictedAccount = {
+  user_id: number
+  display_name?: string | null
+  email?: string | null
+  phone?: string | null
+  states: string[]
+  banned_until?: string | null
+}
+
+export type AdminAccountHealthScan = {
+  ok: boolean
+  summary: {
+    scanned_users: number
+    restricted_users: number
+    banned_users: number
+    frozen_users: number
+    unapproved_users: number
+    temp_banned_users: number
+    active_blocked_session_issues: number
+    staff_permission_issues: number
+    wallet_integrity_issues: number
+    linkage_issues: number
+    earning_transfer_issues: number
+    zero_balance_issues: number
+    issues_total: number
+    scanned_at: string
+  }
+  restricted_accounts: AdminRestrictedAccount[]
+  issues: AdminAccountHealthIssue[]
+}
+
 export type KycSubmissionRow = {
   id: number
   user_id: number
@@ -2142,6 +2184,13 @@ export async function setAdminSensitiveAccess(userId: number, canViewSensitive: 
     method: 'POST',
     body: JSON.stringify({ userId, canViewSensitive: canViewSensitive ? 1 : 0 }),
   }) as Promise<{ ok: boolean }>
+}
+
+export async function runAdminAccountHealthScan() {
+  return apiFetch('/api/owner-growth/staff/account-health-scan', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }) as Promise<AdminAccountHealthScan>
 }
 
 export async function getOwnerKycSubmissions(params: { status?: string; q?: string } = {}) {
