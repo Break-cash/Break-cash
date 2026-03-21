@@ -167,14 +167,12 @@ export function Profile() {
     { key: 'partners', label: t('home_action_partners'), to: '/friends', icon: Users },
   ]
 
-  if (Number(profile?.vip_level || 0) >= 2) {
-    quickActions.push({
-      key: 'support',
-      label: t('home_action_support_message'),
-      to: '/support',
-      icon: MessageCircle,
-    })
-  }
+  quickActions.push({
+    key: 'support',
+    label: t('home_action_support_message'),
+    to: '/support',
+    icon: MessageCircle,
+  })
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
     if (window.scrollY > 0 || isPullRefreshing) return
