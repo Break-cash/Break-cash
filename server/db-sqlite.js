@@ -906,11 +906,7 @@ async function ensureSchema(db) {
       db,
       `INSERT INTO vip_tiers (level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active)
        VALUES (?, ?, ?, 0, 1, ?, '[]', 1)
-       ON CONFLICT(level) DO UPDATE SET
-         title = excluded.title,
-         min_deposit = excluded.min_deposit,
-         referral_percent = excluded.referral_percent,
-         is_active = 1`,
+       ON CONFLICT(level) DO NOTHING`,
       [level, title, minDeposit, referralPercent],
     )
   }

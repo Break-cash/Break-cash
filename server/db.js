@@ -832,14 +832,7 @@ async function ensureSchema(db) {
           level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-        ON CONFLICT(level) DO UPDATE SET
-          title = excluded.title,
-          min_deposit = excluded.min_deposit,
-          min_trade_volume = excluded.min_trade_volume,
-          referral_multiplier = excluded.referral_multiplier,
-          referral_percent = excluded.referral_percent,
-          perks_json = excluded.perks_json,
-          is_active = 1`,
+        ON CONFLICT(level) DO NOTHING`,
       ),
       [
         tier.level,
