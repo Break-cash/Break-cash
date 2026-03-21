@@ -36,3 +36,34 @@ export async function sendPasswordResetEmail(toEmail, code) {
   })
   return { mode: 'smtp' }
 }
+
+export async function sendSupportTicketEmail(payload) {
+  const supportEmail = String(process.env.SUPPORT_EMAIL || 'support@breakcash.cash').trim()
+  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER
+  const transporter = getTransporter()
+
+  if (!transporter || !fromAddress || !supportEmail) {
+    return { mode: 'mock' }
+  }
+
+  const from = fromAddress.includes('<') ? fromAddress : `BREAK CASH <${fromAddress}>`
+  const userLabel = payload.userDisplayName || payload.userEmail || payload.userPhone || `#${payload.userId}`
+
+  await transporter.sendMail({
+    from,
+    to: supportEmail,
+    replyTo: payload.userEmail || undefined,
+    subject: `[BreakCash Support] #${payload.ticketId} ${payload.subject}`,
+    text: [
+      `Ticket ID: ${payload.ticketId}`,
+      `User: ${userLabel}`,
+      `User ID: ${payload.userId}`,
+      `Email: ${payload.userEmail || '-'}`,
+      `Phone: ${payload.userPhone || '-'}`,
+      '',
+      payload.message,
+    ].join('\n'),
+  })
+
+  return { mode: 'smtp' }
+}

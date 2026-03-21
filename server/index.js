@@ -25,6 +25,7 @@ import { createTasksRouter } from './routes/tasks.js'
 import { createMiningRouter } from './routes/mining.js'
 import { createRewardsRouter } from './routes/rewards.js'
 import { createAdsRouter } from './routes/ads.js'
+import { createSupportRouter } from './routes/support.js'
 import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-assets.js'
 
 const PORT = Number(process.env.PORT || 5174)
@@ -162,6 +163,7 @@ async function bootstrap() {
   app.use('/api/mining', createMiningRouter(db))
   app.use('/api/rewards', createRewardsRouter(db))
   app.use('/api/ads', createAdsRouter(db))
+  app.use('/api/support', createSupportRouter(db))
 
   app.get('/manifest.json', async (_req, res) => {
     const defaults = {

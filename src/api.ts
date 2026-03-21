@@ -1441,6 +1441,29 @@ export async function reviewUserVerification(userId: number, decision: 'approve'
   }) as Promise<{ ok: boolean }>
 }
 
+export type SupportTicketItem = {
+  id: number
+  subject: string
+  message: string
+  status: 'open' | 'in_progress' | 'resolved' | 'closed' | string
+  created_at: string
+  updated_at?: string | null
+  resolved_at?: string | null
+  email_delivery_status?: string | null
+  email_delivery_error?: string | null
+}
+
+export async function getMySupportTickets() {
+  return apiFetch('/api/support/my') as Promise<{ items: SupportTicketItem[] }>
+}
+
+export async function createSupportTicket(payload: { subject: string; message: string }) {
+  return apiFetch('/api/support/create', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean; item: SupportTicketItem }>
+}
+
 export type UserDailyTradeReward = {
   id: number
   title: string

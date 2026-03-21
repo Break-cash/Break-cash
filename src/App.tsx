@@ -40,6 +40,7 @@ const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ defaul
 const FriendsPage = lazy(() => import('./pages/FriendsPage').then((m) => ({ default: m.FriendsPage })))
 const VipPage = lazy(() => import('./pages/VipPage').then((m) => ({ default: m.VipPage })))
 const ReferralPage = lazy(() => import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })))
+const SupportPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportPage })))
 const AdminUsersPage = lazy(() =>
   import('./pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
 )
@@ -386,6 +387,7 @@ function App() {
                     <Route path="/mining" element={<MiningPage />} />
                     <Route path="/vip" element={<VipPage />} />
                     <Route path="/referral" element={<ReferralPage />} />
+                    <Route path="/support" element={<SupportPage />} />
                     <Route
                       path="/profile"
                       element={(
