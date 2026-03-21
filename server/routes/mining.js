@@ -466,6 +466,11 @@ export function createMiningRouter(db) {
       if (error instanceof Error && codes.has(error.message)) {
         return res.status(400).json({ error: error.message })
       }
+      console.error('[mining/subscribe] failed', {
+        userId: req.user?.id,
+        amount,
+        error: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
   })

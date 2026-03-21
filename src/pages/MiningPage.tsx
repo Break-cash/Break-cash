@@ -67,6 +67,7 @@ export function MiningPage() {
   const hasActiveSubscription = Boolean(profile && profile.status === 'active')
   const effectiveMinimumAmount = hasActiveSubscription ? 1 : Number(config?.minSubscription || 500)
   const nextMiningTotal = Number((Number(profile?.principal_amount || 0) + Math.max(0, amountToUse)).toFixed(2))
+  const availableTopUpBalance = Number(profile?.personal_balance || 0)
 
   function openConfirm(action: ConfirmAction) {
     setConfirmAction(action)
@@ -84,6 +85,13 @@ export function MiningPage() {
       const text = hasActiveSubscription ? 'أدخل مبلغ زيادة أكبر من صفر.' : t('mining_min_subscription_error')
       setMessage({ type: 'error', text })
       emitToast({ kind: 'error', errorCode: 'INVALID_AMOUNT', message: text })
+      subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    if (hasActiveSubscription && availableTopUpBalance + 1e-8 < amountToUse) {
+      const text = `الرصيد المتاح للإضافة ${availableTopUpBalance.toFixed(2)} USDT فقط، بينما طلبت ${amountToUse.toFixed(2)} USDT.`
+      setMessage({ type: 'error', text })
+      emitToast({ kind: 'error', errorCode: 'INSUFFICIENT_BALANCE', message: text })
       subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
@@ -116,8 +124,16 @@ export function MiningPage() {
       }
       setConfirmAction(null)
       await loadMining()
-    } catch {
-      setMessage({ type: 'error', text: t('toast_error_transaction_failed') })
+    } catch (error) {
+      const raw = error instanceof Error ? String(error.message || '').trim() : ''
+      const text =
+        raw === 'INSUFFICIENT_BALANCE'
+          ? `الرصيد المتاح للإضافة ${availableTopUpBalance.toFixed(2)} USDT فقط، بينما طلبت ${amountToUse.toFixed(2)} USDT.`
+          : raw === 'MIN_SUBSCRIPTION'
+            ? t('mining_min_subscription_error')
+            : raw || t('toast_error_transaction_failed')
+      setMessage({ type: 'error', text })
+      emitToast({ kind: 'error', errorCode: raw || 'REQUEST_FAILED', message: text })
     } finally {
       setSubmitting(false)
     }
@@ -143,6 +159,10 @@ export function MiningPage() {
         </p>
         {hasActiveSubscription ? (
           <div className="mt-3 space-y-2 rounded-xl border border-app-border bg-app-elevated p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-app-muted">الرصيد المتاح للإضافة</span>
+              <span className="font-semibold text-white">{availableTopUpBalance.toFixed(2)} USDT</span>
+            </div>
             <div className="flex items-center justify-between">
               <span className="text-app-muted">مبلغ التعدين الحالي</span>
               <span className="font-semibold text-white">{Number(profile?.principal_amount || 0).toFixed(2)} USDT</span>
