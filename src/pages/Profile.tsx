@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowDownLeft, ArrowUpRight, Crown, Gift, UserPlus, Users } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Crown, Gift, MessageCircle, UserPlus, Users, type LucideIcon } from 'lucide-react'
 import {
   apiFetch,
   getMyProfile,
@@ -154,12 +154,28 @@ export function Profile() {
     [profile?.role, t],
   )
   const premiumProfileColorClass = getPremiumProfileColorClass(profile?.profile_color)
-  const quickActions = [
+  const quickActions: Array<{
+    key: string
+    label: string
+    to: string
+    icon: LucideIcon
+    external?: boolean
+  }> = [
     { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', icon: Crown },
     { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', icon: UserPlus },
     { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', icon: Gift },
     { key: 'partners', label: t('home_action_partners'), to: '/friends', icon: Users },
-  ] as const
+  ]
+
+  if (Number(profile?.vip_level || 0) >= 2) {
+    quickActions.push({
+      key: 'support',
+      label: t('home_action_support_message'),
+      to: 'mailto:support@breakcash.cash',
+      icon: MessageCircle,
+      external: true,
+    })
+  }
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
     if (window.scrollY > 0 || isPullRefreshing) return
@@ -287,7 +303,13 @@ export function Profile() {
               <button
                 key={item.key}
                 type="button"
-                onClick={() => navigate(item.to)}
+                onClick={() => {
+                  if (item.external) {
+                    window.location.href = item.to
+                    return
+                  }
+                  navigate(item.to)
+                }}
                 className="icon-interactive elite-hover-lift glass-panel-soft flex items-center gap-3 rounded-xl px-4 py-3 text-start"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border-soft)] bg-[var(--bg-elevated)]">
