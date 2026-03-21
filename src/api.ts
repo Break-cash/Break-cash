@@ -28,6 +28,7 @@ export type AuthUser = {
   referred_by?: number | null
   is_owner?: number
   preferred_language?: 'ar' | 'en' | 'tr' | string | null
+  deposit_privacy_enabled?: number
   created_at?: string
 }
 
@@ -215,6 +216,7 @@ export async function updateMyProfile(payload: {
   displayName?: string | null
   bio?: string | null
   preferredLanguage?: 'ar' | 'en' | 'tr'
+  depositPrivacyEnabled?: boolean
 }) {
   return apiFetch('/api/profile/update', {
     method: 'POST',
@@ -785,7 +787,8 @@ export type FriendUser = {
   verificationStatus?: 'unverified' | 'pending' | 'verified' | string
   blueBadge?: number
   vipLevel?: number
-  tradingBalance?: number
+  tradingBalance?: number | null
+  depositPrivacyEnabled?: boolean
 }
 export type FriendItem = FriendUser & { id: number; userId: number; status: string; createdAt: string }
 
@@ -1429,6 +1432,13 @@ export type DailyTradeCampaign = {
   starts_at?: string | null
   ends_at?: string | null
   created_at?: string
+}
+
+export async function reviewUserVerification(userId: number, decision: 'approve' | 'reject') {
+  return apiFetch('/api/users/verification-review', {
+    method: 'POST',
+    body: JSON.stringify({ userId, decision }),
+  }) as Promise<{ ok: boolean }>
 }
 
 export type UserDailyTradeReward = {

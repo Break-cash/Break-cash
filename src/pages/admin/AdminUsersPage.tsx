@@ -8,6 +8,7 @@ import {
   getAdminUsersList,
   getPremiumIdentityOptions,
   resetUserPasswordByOwner,
+  reviewUserVerification,
   sendPrivateNotification,
   updateUserApproval,
   updateUserBan,
@@ -248,6 +249,25 @@ export function AdminUsersPage() {
                 </button>
                 <button className="wallet-action-btn wallet-action-withdraw" type="button" disabled={saving} onClick={() => runAction(() => updateUserBan(selectedUser.id, Number(selectedUser.is_banned) !== 1), t('admin_users_msg_ban_updated'))}>
                   {Number(selectedUser.is_banned) === 1 ? t('admin_users_unban') : t('admin_users_ban')}
+                </button>
+              </div>
+
+              <div className="owner-buttons">
+                <button
+                  className="wallet-action-btn wallet-action-deposit"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => runAction(() => reviewUserVerification(selectedUser.id, 'approve'), 'تم اعتماد التحقق بنجاح.')}
+                >
+                  اعتماد التحقق
+                </button>
+                <button
+                  className="wallet-action-btn wallet-action-withdraw"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => runAction(() => reviewUserVerification(selectedUser.id, 'reject'), 'تم رفض التحقق بنجاح.')}
+                >
+                  رفض التحقق
                 </button>
               </div>
 

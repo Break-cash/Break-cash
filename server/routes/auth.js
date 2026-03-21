@@ -271,7 +271,7 @@ export function createAuthRouter(db) {
         id, role, email, phone, is_approved, is_banned, is_frozen, banned_until, created_at,
         display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
         phone_verified, identity_submitted, verification_ready_at,
-        country, preferred_language, preferred_currency, referral_code, total_deposit, points,
+        country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
         invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
        FROM users
        WHERE id = ? LIMIT 1`,
@@ -315,14 +315,14 @@ export function createAuthRouter(db) {
             id, email, phone, password_hash, role, is_approved, is_banned, is_frozen, banned_until, created_at,
             display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
             phone_verified, identity_submitted, verification_ready_at,
-            country, preferred_language, preferred_currency, referral_code, total_deposit, points,
+            country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
             invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
            FROM users WHERE email=? LIMIT 1`
         : `SELECT
             id, email, phone, password_hash, role, is_approved, is_banned, is_frozen, banned_until, created_at,
             display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
             phone_verified, identity_submitted, verification_ready_at,
-            country, preferred_language, preferred_currency, referral_code, total_deposit, points,
+            country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
             invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
            FROM users WHERE phone=? LIMIT 1`,
       [identifierRaw],
@@ -407,7 +407,7 @@ export function createAuthRouter(db) {
         id, role, email, phone, is_approved, is_banned, is_frozen, banned_until, created_at,
         display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
         phone_verified, identity_submitted, verification_ready_at,
-        country, preferred_language, preferred_currency, referral_code, total_deposit, points,
+        country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
         invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
        FROM users WHERE id = ? LIMIT 1`,
       [user.id],
@@ -509,7 +509,7 @@ export function createAuthRouter(db) {
         id, role, email, phone, is_approved, is_banned, is_frozen, banned_until, created_at,
         display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
         phone_verified, identity_submitted, verification_ready_at,
-        country, preferred_language, preferred_currency, referral_code, total_deposit, points,
+        country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
         invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
        FROM users WHERE id = ? LIMIT 1`,
       [req.user.id],

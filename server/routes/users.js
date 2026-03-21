@@ -129,7 +129,7 @@ export function createUsersRouter(db) {
     const rows = await all(db, `SELECT
       u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
       u.display_name, u.verification_status, u.blue_badge, u.vip_level, u.profile_color, u.profile_badge,
-      u.phone_verified, u.identity_submitted, u.country, u.preferred_language, u.preferred_currency,
+      u.phone_verified, u.identity_submitted, u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled,
       u.referral_code, u.invited_by, u.referred_by, u.total_deposit, u.points, u.is_owner, u.last_login_at, u.last_ip, u.last_user_agent,
       COALESCE(bal.total_balance, 0) AS wallet_balance,
       COALESCE(dep.total_deposits, 0) AS deposits_total,
@@ -186,7 +186,7 @@ export function createUsersRouter(db) {
       `SELECT
         u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
         u.display_name, u.verification_status, u.blue_badge, u.vip_level, u.profile_color, u.profile_badge, u.phone_verified, u.identity_submitted,
-        u.country, u.preferred_language, u.preferred_currency, u.referral_code, u.invited_by, u.referred_by,
+        u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled, u.referral_code, u.invited_by, u.referred_by,
         u.total_deposit, u.points, u.is_owner,
         u.last_login_at, u.last_ip, u.last_user_agent,
         COALESCE(bal.total_balance, 0) AS wallet_balance,
@@ -263,6 +263,33 @@ export function createUsersRouter(db) {
     }
     
     await logAdminAction(db, req.user.id, 'users', 'approve_toggle', userId, { isApproved })
+    return res.json({ ok: true })
+  })
+
+  router.post('/verification-review', requirePermission(db, 'manage_users'), async (req, res) => {
+    const userId = Number(req.body?.userId)
+    const decision = String(req.body?.decision || '').trim().toLowerCase()
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'INVALID_USER' })
+    }
+    if (!['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+    const approved = decision === 'approve' ? 1 : 0
+    await run(
+      db,
+      `UPDATE users
+       SET verification_status = ?,
+           is_approved = ?,
+           verification_ready_at = NULL,
+           blue_badge = CASE WHEN ? = 1 THEN blue_badge ELSE 0 END
+       WHERE id = ?`,
+      [approved ? 'verified' : 'unverified', approved, approved, userId],
+    )
+    if (approved === 1) {
+      await markReferralAsVerifiedIfDeposited(db, userId)
+    }
+    await logAdminAction(db, req.user.id, 'users', approved ? 'verification_approved' : 'verification_rejected', userId, {})
     return res.json({ ok: true })
   })
 

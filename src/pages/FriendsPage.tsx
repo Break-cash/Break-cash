@@ -318,7 +318,11 @@ export function FriendsPage() {
 
             <div className="friends-profile-balance">
               <span>{t('friends_trading_balance')}</span>
-              <strong>{Number(selectedUser.tradingBalance || 0).toFixed(2)} USDT</strong>
+              <strong>
+                {selectedUser.depositPrivacyEnabled || selectedUser.tradingBalance == null
+                  ? t('contact_hidden')
+                  : `${Number(selectedUser.tradingBalance || 0).toFixed(2)} USDT`}
+              </strong>
             </div>
           </div>
         </div>

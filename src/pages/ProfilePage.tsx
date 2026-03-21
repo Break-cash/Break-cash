@@ -17,6 +17,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url || null)
   const [avatarBroken, setAvatarBroken] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [depositPrivacyEnabled, setDepositPrivacyEnabled] = useState(Number(user.deposit_privacy_enabled ?? 1) === 1)
   const [fullName, setFullName] = useState({
     firstName: '',
     fatherName: '',
@@ -36,7 +37,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   const [idCardFile, setIdCardFile] = useState<File | null>(null)
   const [selfieFile, setSelfieFile] = useState<File | null>(null)
   const [openSection, setOpenSection] = useState<
-    'avatar' | 'name' | 'bio' | 'identity' | 'splash' | 'recovery' | null
+    'avatar' | 'name' | 'bio' | 'identity' | 'splash' | 'recovery' | 'deposit_privacy' | null
   >(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +60,10 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
     setAvatarBroken(false)
     setAvatarPreview(user.avatar_url || null)
   }, [user.avatar_url])
+
+  useEffect(() => {
+    setDepositPrivacyEnabled(Number(user.deposit_privacy_enabled ?? 1) === 1)
+  }, [user.deposit_privacy_enabled])
 
   useEffect(() => {
     setLoadingRecoveryCode(true)
@@ -106,10 +111,29 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
       const parts = [fullName.firstName, fullName.fatherName, fullName.familyName]
         .map((p) => p.trim())
         .filter(Boolean)
-      if (parts.length > 0) {
-        await updateMyProfile({ displayName: parts.join(' '), bio: bio.trim() || null })
-      } else if ((user.bio || '') !== bio.trim()) {
-        await updateMyProfile({ bio: bio.trim() || null })
+      const nextDisplayName = parts.length > 0 ? parts.join(' ') : (user.display_name || null)
+      const nextBio = bio.trim() || null
+      const currentDisplayName = user.display_name || null
+      const currentBio = user.bio || null
+      const currentDepositPrivacyEnabled = Number(user.deposit_privacy_enabled ?? 1) === 1
+      const profilePayload: {
+        displayName?: string | null
+        bio?: string | null
+        depositPrivacyEnabled?: boolean
+      } = {}
+
+      if (parts.length > 0 && nextDisplayName !== currentDisplayName) {
+        profilePayload.displayName = nextDisplayName
+      }
+      if (nextBio !== currentBio) {
+        profilePayload.bio = nextBio
+      }
+      if (depositPrivacyEnabled !== currentDepositPrivacyEnabled) {
+        profilePayload.depositPrivacyEnabled = depositPrivacyEnabled
+      }
+
+      if (Object.keys(profilePayload).length > 0) {
+        await updateMyProfile(profilePayload)
       }
 
       if (avatarFile) {
@@ -208,6 +232,42 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
         </div>
       </div>
       <form className="profile-settings-grid gap-3" onSubmit={handleSubmit}>
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
+          <button
+            className="profile-settings-toggle"
+            type="button"
+            onClick={() => setOpenSection((key) => (key === 'deposit_privacy' ? null : 'deposit_privacy'))}
+          >
+            <span>خصوصية مبلغ الإيداع</span>
+            <span className="profile-settings-toggle-icon">
+              {openSection === 'deposit_privacy' ? 'â–´' : 'â–¾'}
+            </span>
+          </button>
+          {openSection === 'deposit_privacy' && (
+            <>
+              <p className="profile-settings-sub">
+                عند تفعيل هذا الخيار سيتم إخفاء مبلغك الظاهر عن المستخدمين الآخرين بشكل تلقائي.
+              </p>
+              <div className="captcha-row">
+                <button
+                  type="button"
+                  className={`wallet-action-btn ${depositPrivacyEnabled ? 'owner-set-btn' : 'wallet-action-withdraw'}`}
+                  onClick={() => setDepositPrivacyEnabled(true)}
+                >
+                  تفعيل الخصوصية
+                </button>
+                <button
+                  type="button"
+                  className={`wallet-action-btn ${!depositPrivacyEnabled ? 'owner-set-btn' : 'wallet-action-withdraw'}`}
+                  onClick={() => setDepositPrivacyEnabled(false)}
+                >
+                  تعطيل الخصوصية
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
         <section className="elite-enter elite-hover-lift elite-panel p-3">
           <button
             className="profile-settings-toggle"

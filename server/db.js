@@ -89,6 +89,7 @@ async function ensureSchema(db) {
       country TEXT,
       preferred_language TEXT,
       preferred_currency TEXT,
+      deposit_privacy_enabled INTEGER NOT NULL DEFAULT 1,
       referral_code TEXT UNIQUE,
       invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       referred_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -643,6 +644,8 @@ async function ensureSchema(db) {
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_privacy_enabled INTEGER NOT NULL DEFAULT 1;
   `)
 
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_frozen INTEGER NOT NULL DEFAULT 0`)
