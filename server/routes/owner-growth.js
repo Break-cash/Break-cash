@@ -76,6 +76,10 @@ function parseVipTierPayload(row) {
   }
 }
 
+function normalizeRewardPayoutMode(value) {
+  return String(value || '').trim().toLowerCase() === 'bonus_locked' ? 'bonus_locked' : 'withdrawable'
+}
+
 function getMonthRange(rawValue) {
   const raw = String(rawValue || '').trim()
   const now = new Date()
@@ -235,6 +239,36 @@ export function createOwnerGrowthRouter(db) {
     return res.json({
       items: items.map((row) => parseVipTierPayload(row)),
     })
+  })
+
+  router.get('/reward-payout-config', async (_req, res) => {
+    const [configRow, overridesRow] = await Promise.all([
+      get(db, `SELECT value FROM settings WHERE key = 'reward_payout_config' LIMIT 1`),
+      get(db, `SELECT COUNT(*) AS count FROM user_reward_mode_overrides`),
+    ])
+    let defaultMode = 'withdrawable'
+    try {
+      const parsed = JSON.parse(String(configRow?.value || '{}'))
+      defaultMode = normalizeRewardPayoutMode(parsed?.defaultMode)
+    } catch {
+      defaultMode = 'withdrawable'
+    }
+    return res.json({
+      defaultMode,
+      overridesCount: Number(overridesRow?.count || 0),
+    })
+  })
+
+  router.post('/reward-payout-config', async (req, res) => {
+    const defaultMode = normalizeRewardPayoutMode(req.body?.defaultMode)
+    await run(
+      db,
+      `INSERT INTO settings (key, value) VALUES ('reward_payout_config', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify({ defaultMode })],
+    )
+    publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'reward_payout_config' })
+    return res.json({ ok: true, defaultMode })
   })
 
   router.post('/vip-tiers', async (req, res) => {

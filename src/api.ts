@@ -1519,6 +1519,11 @@ export type VipTier = {
   is_active: number
 }
 
+export type RewardPayoutConfig = {
+  defaultMode: 'withdrawable' | 'bonus_locked'
+  overridesCount: number
+}
+
 export type UserVipTier = {
   level: number
   title: string
@@ -1717,6 +1722,17 @@ export async function deleteBonusRule(id: number) {
 
 export async function getVipTiers() {
   return apiFetch('/api/owner-growth/vip-tiers') as Promise<{ items: VipTier[] }>
+}
+
+export async function getRewardPayoutConfigOwner() {
+  return apiFetch('/api/owner-growth/reward-payout-config') as Promise<RewardPayoutConfig>
+}
+
+export async function updateRewardPayoutConfigOwner(defaultMode: 'withdrawable' | 'bonus_locked') {
+  return apiFetch('/api/owner-growth/reward-payout-config', {
+    method: 'POST',
+    body: JSON.stringify({ defaultMode }),
+  }) as Promise<{ ok: boolean; defaultMode: 'withdrawable' | 'bonus_locked' }>
 }
 
 export async function getMyVipSummary() {

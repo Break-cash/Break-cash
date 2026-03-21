@@ -23,6 +23,7 @@ import {
   getOwnerGrowthSummary,
   getOwnerMonthlyFinanceReport,
   getPartnerProfiles,
+  getRewardPayoutConfigOwner,
   getRegistrationStatus,
   getReferralDetails,
   getReferralStats,
@@ -52,6 +53,7 @@ import {
   getOwnerKycSubmissions,
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
+  updateRewardPayoutConfigOwner,
   updateUserTwoFactor,
   processAutoKycReviews,
   reviewOwnerKycSubmission,
@@ -73,6 +75,7 @@ import {
   type MiningConfig,
   type OwnerMonthlyFinanceReport,
   type PartnerProfile,
+  type RewardPayoutConfig,
   type RecoveryCodeReviewRequestItem,
   type RewardTierRule,
   type SecurityOverview,
@@ -221,6 +224,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     activeContent: 0,
   })
   const [vipTiers, setVipTiers] = useState<VipTier[]>([])
+  const [rewardPayoutConfig, setRewardPayoutConfig] = useState<RewardPayoutConfig>({ defaultMode: 'withdrawable', overridesCount: 0 })
+  const [rewardPayoutSaving, setRewardPayoutSaving] = useState(false)
   const [vipTierDraft, setVipTierDraft] = useState({
     level: 1,
     title: 'VIP 1',
@@ -372,6 +377,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     getOwnerGrowthSummary()
       .then((res) => setOwnerSummary(res))
       .catch(() => {})
+    getRewardPayoutConfigOwner()
+      .then((res) => setRewardPayoutConfig(res))
+      .catch(() => setRewardPayoutConfig({ defaultMode: 'withdrawable', overridesCount: 0 }))
     getVipTiers()
       .then((res) => setVipTiers(res.items || []))
       .catch(() => setVipTiers([]))
@@ -1082,6 +1090,27 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ مستوى VIP.' })
     } finally {
       setOwnerExtraSaving(false)
+    }
+  }
+
+  async function handleSaveRewardPayoutConfig() {
+    setRewardPayoutSaving(true)
+    setMessage(null)
+    try {
+      await updateRewardPayoutConfigOwner(rewardPayoutConfig.defaultMode)
+      const refreshed = await getRewardPayoutConfigOwner()
+      setRewardPayoutConfig(refreshed)
+      setMessage({
+        type: 'success',
+        text:
+          refreshed.defaultMode === 'bonus_locked'
+            ? 'تم ضبط الأرباح الجديدة لتكون غير قابلة للسحب افتراضيًا.'
+            : 'تم ضبط الأرباح الجديدة لتكون قابلة للسحب افتراضيًا.',
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ وضع الأرباح.' })
+    } finally {
+      setRewardPayoutSaving(false)
     }
   }
 
@@ -2679,6 +2708,44 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <div className="owner-hint">{`معلّقة: ${referralStats.pendingCount} | مؤهلة: ${referralStats.qualifiedCount}`}</div>
                   <div className="owner-hint">{`تم صرفها: ${referralStats.rewardReleasedCount} | القيمة: ${Number(referralStats.totalRewardsValue || 0).toFixed(2)} USDT`}</div>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">وضع أرباح المكافآت</h2>
+            <p className="owner-hint">تحكم افتراضي في أرباح الإحالات والمكافآت والمهام الجديدة: إما تُضاف كرصد قابل للسحب، أو تبقى أرباحًا مقيدة غير قابلة للسحب.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <select
+                  className="field-input"
+                  value={rewardPayoutConfig.defaultMode}
+                  onChange={(e) =>
+                    setRewardPayoutConfig((prev) => ({
+                      ...prev,
+                      defaultMode: e.target.value === 'bonus_locked' ? 'bonus_locked' : 'withdrawable',
+                    }))
+                  }
+                >
+                  <option value="withdrawable">قابلة للسحب</option>
+                  <option value="bonus_locked">غير قابلة للسحب</option>
+                </select>
+                <div className="owner-actions-card">
+                  <div className="owner-hint">
+                    {rewardPayoutConfig.defaultMode === 'bonus_locked'
+                      ? 'الوضع الحالي: الأرباح الجديدة ستبقى مقيدة.'
+                      : 'الوضع الحالي: الأرباح الجديدة ستدخل في الرصيد القابل للسحب.'}
+                  </div>
+                  <div className="owner-hint">{`عدد الاستثناءات الفردية الحالية: ${Number(rewardPayoutConfig.overridesCount || 0)}`}</div>
+                </div>
+              </div>
+              {Number(rewardPayoutConfig.overridesCount || 0) > 0 ? (
+                <p className="owner-hint">المستخدمون الذين لديهم override فردي لن يتأثروا بهذا الإعداد العام.</p>
+              ) : null}
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSaveRewardPayoutConfig} disabled={rewardPayoutSaving}>
+                  {rewardPayoutSaving ? '...' : 'حفظ وضع الأرباح'}
+                </button>
               </div>
             </div>
           </section>
