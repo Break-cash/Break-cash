@@ -12,6 +12,7 @@ import {
   reapplyRewardPoliciesToPendingEntries,
 } from '../services/wallet-service.js'
 import {
+  reconcileUserCurrency,
   reconcileAll,
   verifyDepositWithdrawalLinkage,
   verifyEarningTransfers,
@@ -1271,6 +1272,275 @@ export function createOwnerGrowthRouter(db) {
   })
 
   router.post('/staff/account-health-scan', async (req, res) => {
+    const requestedUserId = Number(req.body?.userId || 0)
+    const hasUserFilter = Number.isFinite(requestedUserId) && requestedUserId > 0
+    if (req.body?.userId != null && !hasUserFilter) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+
+    if (hasUserFilter) {
+      const targetUser = await get(
+        db,
+        `SELECT id, display_name, email, phone, role, is_banned, is_frozen, is_approved, banned_until
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [requestedUserId],
+      )
+      if (!targetUser) return res.status(404).json({ error: 'USER_NOT_FOUND' })
+
+      const [activeSessionsRow, staffPermissionRow, walletCurrencyRows, linkageCheck, earningRows, zeroRows] = await Promise.all([
+        get(
+          db,
+          `SELECT COUNT(us.id) AS active_sessions
+           FROM user_sessions us
+           WHERE us.user_id = ?
+             AND COALESCE(us.is_active, 0) = 1`,
+          [requestedUserId],
+        ),
+        get(
+          db,
+          `SELECT
+             u.id AS user_id,
+             u.display_name,
+             u.email,
+             u.phone,
+             u.role,
+             COALESCE(s.admin_role, CASE WHEN u.role = 'moderator' THEN 'moderator' ELSE 'admin' END) AS admin_role,
+             COALESCE(s.is_active, 1) AS staff_active,
+             COALESCE(pc.permissions_count, 0) AS permissions_count
+           FROM users u
+           LEFT JOIN admin_staff_profiles s ON s.user_id = u.id
+           LEFT JOIN (
+             SELECT user_id, COUNT(*) AS permissions_count
+             FROM permissions
+             GROUP BY user_id
+           ) pc ON pc.user_id = u.id
+           WHERE u.id = ?
+             AND u.role IN ('admin', 'moderator')
+             AND (
+               (COALESCE(s.is_active, 1) = 0 AND COALESCE(pc.permissions_count, 0) > 0)
+               OR (COALESCE(s.is_active, 1) = 1 AND COALESCE(pc.permissions_count, 0) = 0)
+             )
+           LIMIT 1`,
+          [requestedUserId],
+        ),
+        all(
+          db,
+          `SELECT DISTINCT currency FROM (
+             SELECT currency FROM wallet_accounts WHERE user_id = ?
+             UNION
+             SELECT currency FROM balances WHERE user_id = ?
+             UNION
+             SELECT currency FROM wallet_transactions WHERE user_id = ?
+           ) currencies
+           WHERE currency IS NOT NULL AND TRIM(currency) != ''`,
+          [requestedUserId, requestedUserId, requestedUserId],
+        ),
+        verifyDepositWithdrawalLinkage(db, 100000),
+        all(
+          db,
+          `SELECT ee.id, ee.user_id, ee.amount, ee.transferred_wallet_txn_id, ee.status
+           FROM earning_entries ee
+           WHERE ee.user_id = ?
+             AND ee.status = 'transferred'
+             AND ee.transferred_wallet_txn_id IS NOT NULL
+           ORDER BY ee.id DESC
+           LIMIT 100000`,
+          [requestedUserId],
+        ),
+        all(
+          db,
+          `SELECT user_id, currency, SUM(net_amount) AS ledger_sum
+           FROM wallet_transactions
+           WHERE user_id = ?
+             AND COALESCE(account_type_before, 'main') = 'main'
+             AND source_type = 'system'
+           GROUP BY user_id, currency
+           HAVING SUM(net_amount) > 0.00000001
+           LIMIT 100000`,
+          [requestedUserId],
+        ),
+      ])
+
+      const reconcileIssues = []
+      for (const currencyRow of walletCurrencyRows) {
+        const currency = String(currencyRow?.currency || '').trim().toUpperCase()
+        if (!currency) continue
+        const result = await reconcileUserCurrency(db, requestedUserId, currency)
+        if (!result.ok) reconcileIssues.push(result)
+      }
+
+      const earningIssues = []
+      for (const row of earningRows) {
+        const txn = await get(
+          db,
+          `SELECT id, net_amount FROM wallet_transactions WHERE id = ?`,
+          [row.transferred_wallet_txn_id],
+        )
+        if (!txn) {
+          earningIssues.push({ earningEntryId: row.id, userId: requestedUserId, issue: 'Missing wallet_transaction' })
+        } else if (Math.abs(Number(txn.net_amount) - Number(row.amount || 0)) > 0.00000001) {
+          earningIssues.push({
+            earningEntryId: row.id,
+            userId: requestedUserId,
+            issue: 'Amount mismatch',
+            txnAmount: txn.net_amount,
+            entryAmount: row.amount,
+          })
+        }
+      }
+
+      const zeroIssues = []
+      for (const row of zeroRows) {
+        const currency = String(row?.currency || '').trim().toUpperCase()
+        if (!currency) continue
+        const walletBalanceRow = await get(
+          db,
+          `SELECT balance_amount
+           FROM wallet_accounts
+           WHERE user_id = ? AND currency = ? AND account_type = 'main' AND source_type = 'system'
+           LIMIT 1`,
+          [requestedUserId, currency],
+        )
+        const walletBalance = Number(walletBalanceRow?.balance_amount || 0)
+        const ledgerSum = Number(row?.ledger_sum || 0)
+        if (Math.abs(walletBalance - ledgerSum) > 0.00000001) {
+          zeroIssues.push({ userId: requestedUserId, currency, ledgerSum, walletBalance })
+        }
+      }
+
+      const filteredLinkageIssues = (linkageCheck?.issues || []).filter((item) => Number(item?.userId || 0) === requestedUserId)
+      const restrictedAccounts = buildAccountRestrictionLabels(targetUser).length > 0
+        ? [{
+            user_id: Number(targetUser.id || 0),
+            display_name: targetUser.display_name || null,
+            email: targetUser.email || null,
+            phone: targetUser.phone || null,
+            states: buildAccountRestrictionLabels(targetUser),
+            banned_until: targetUser.banned_until || null,
+          }]
+        : []
+
+      const issues = []
+      const pushIssue = (issue) => {
+        if (issues.length < 200) issues.push(issue)
+      }
+
+      if (restrictedAccounts.length > 0 && Number(activeSessionsRow?.active_sessions || 0) > 0) {
+        pushIssue({
+          kind: 'blocked_active_session',
+          severity: 'error',
+          user_id: requestedUserId,
+          display_name: targetUser.display_name || null,
+          email: targetUser.email || null,
+          phone: targetUser.phone || null,
+          title: 'حساب مقيّد مع جلسات نشطة',
+          details: `يوجد ${Number(activeSessionsRow?.active_sessions || 0)} جلسة نشطة رغم حالة الحساب: ${buildAccountRestrictionLabels(targetUser).join(' | ') || 'قيد غير محدد'}`,
+        })
+      }
+
+      if (staffPermissionRow) {
+        pushIssue({
+          kind: 'staff_permission_mismatch',
+          severity: Number(staffPermissionRow.staff_active || 0) === 0 ? 'warning' : 'error',
+          user_id: requestedUserId,
+          display_name: staffPermissionRow.display_name || null,
+          email: staffPermissionRow.email || null,
+          phone: staffPermissionRow.phone || null,
+          title: Number(staffPermissionRow.staff_active || 0) === 0 ? 'عضو طاقم معطّل لكن صلاحياته ما زالت موجودة' : 'عضو طاقم مفعّل بدون أي صلاحيات',
+          details: `الدور ${staffPermissionRow.admin_role || staffPermissionRow.role || 'admin'} | عدد الصلاحيات الحالية: ${Number(staffPermissionRow.permissions_count || 0)}`,
+        })
+      }
+
+      for (const item of reconcileIssues) {
+        pushIssue({
+          kind: 'wallet_integrity',
+          severity: 'error',
+          user_id: requestedUserId,
+          display_name: targetUser.display_name || null,
+          email: targetUser.email || null,
+          phone: targetUser.phone || null,
+          title: 'عدم تطابق في أرصدة المحفظة',
+          details: `${item.currency}: ${item.message}`,
+        })
+      }
+
+      for (const item of filteredLinkageIssues) {
+        pushIssue({
+          kind: 'wallet_linkage',
+          severity: 'error',
+          user_id: requestedUserId,
+          display_name: targetUser.display_name || null,
+          email: targetUser.email || null,
+          phone: targetUser.phone || null,
+          title: 'طلب مالي معتمد بدون ربط بحركة محفظة',
+          details: `${item.type} #${item.id} | amount=${Number(item.amount || 0)} | status=${item.status || ''}`,
+        })
+      }
+
+      for (const item of earningIssues) {
+        pushIssue({
+          kind: 'earning_transfer',
+          severity: 'error',
+          user_id: requestedUserId,
+          display_name: targetUser.display_name || null,
+          email: targetUser.email || null,
+          phone: targetUser.phone || null,
+          title: 'خلل في تحويل الأرباح إلى المحفظة',
+          details: `earning_entry #${Number(item.earningEntryId || 0)} | ${item.issue}${item.txnAmount != null ? ` | txn=${item.txnAmount}` : ''}${item.entryAmount != null ? ` | entry=${item.entryAmount}` : ''}`,
+        })
+      }
+
+      for (const item of zeroIssues) {
+        pushIssue({
+          kind: 'wallet_zero_balance_mismatch',
+          severity: 'error',
+          user_id: requestedUserId,
+          display_name: targetUser.display_name || null,
+          email: targetUser.email || null,
+          phone: targetUser.phone || null,
+          title: 'مخالفة بين الرصيد الحالي ومجموع القيود',
+          details: `${item.currency}: ledger=${Number(item.ledgerSum || 0)} | wallet=${Number(item.walletBalance || 0)}`,
+        })
+      }
+
+      const summary = {
+        scanned_users: 1,
+        restricted_users: restrictedAccounts.length,
+        banned_users: Number(targetUser?.is_banned || 0) === 1 ? 1 : 0,
+        frozen_users: Number(targetUser?.is_frozen || 0) === 1 ? 1 : 0,
+        unapproved_users: Number(targetUser?.is_approved || 0) !== 1 ? 1 : 0,
+        temp_banned_users:
+          targetUser?.banned_until && !Number.isNaN(Date.parse(String(targetUser.banned_until))) && Date.parse(String(targetUser.banned_until)) > Date.now()
+            ? 1
+            : 0,
+        active_blocked_session_issues: issues.filter((item) => item.kind === 'blocked_active_session').length,
+        staff_permission_issues: issues.filter((item) => item.kind === 'staff_permission_mismatch').length,
+        wallet_integrity_issues: reconcileIssues.length,
+        linkage_issues: filteredLinkageIssues.length,
+        earning_transfer_issues: earningIssues.length,
+        zero_balance_issues: zeroIssues.length,
+        issues_total: issues.length,
+        scanned_at: new Date().toISOString(),
+        target_user_id: requestedUserId,
+      }
+
+      await logAudit(db, req.user.id, 'staff_permissions', 'account_health_scan', requestedUserId, {
+        scannedUsers: 1,
+        restrictedUsers: summary.restricted_users,
+        issuesTotal: summary.issues_total,
+        targetUserId: requestedUserId,
+      })
+
+      return res.json({
+        ok: true,
+        summary,
+        restricted_accounts: restrictedAccounts,
+        issues,
+      })
+    }
+
     const [userStats, restrictedRows, blockedSessionRows, staffPermissionRows, reconcileIssues, linkageCheck, earningCheck, zeroCheck] = await Promise.all([
       get(
         db,
@@ -1472,6 +1742,7 @@ export function createOwnerGrowthRouter(db) {
         Number(earningCheck?.issues?.length || 0) +
         Number(zeroCheck?.issues?.length || 0),
       scanned_at: new Date().toISOString(),
+      target_user_id: null,
     }
 
     await logAudit(db, req.user.id, 'staff_permissions', 'account_health_scan', null, {

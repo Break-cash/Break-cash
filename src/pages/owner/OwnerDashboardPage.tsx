@@ -395,6 +395,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [ownerExtraSaving, setOwnerExtraSaving] = useState(false)
   const [staffHealthLoading, setStaffHealthLoading] = useState(false)
   const [staffHealthScan, setStaffHealthScan] = useState<AdminAccountHealthScan | null>(null)
+  const [staffHealthUserId, setStaffHealthUserId] = useState('')
 
   const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
   const firstDepositBonusRules = bonusRules.filter((rule) => rule.rule_type === 'first_deposit')
@@ -673,6 +674,22 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
             ? `تم خصم ${amount.toFixed(2)} USDT من الأرباح العامة. الرصيد العام المتبقي: ${Number(result.remainingMainBalance || 0).toFixed(2)} USDT.`
             : `تم خصم ${amount.toFixed(2)} USDT من الأرباح الخاصة ${selectedSourceType === 'all' ? 'لكل المصادر' : `لمصدر ${selectedSourceType}`}. المتبقي من الأرباح المعلقة: ${Number(result.remainingPendingAmount || 0).toFixed(2)} USDT عبر ${Number(result.affectedEntries || 0)} سجل.`,
       })
+      if (false) {
+        const requestedUserId = 0
+        const result = { summary: { restricted_users: 0, issues_total: 0 } } as const
+        setMessage({
+          type: 'success',
+          text: `تم فحص المستخدم #${requestedUserId}. القيود الحالية: ${Number(result.summary.restricted_users || 0)} | المشاكل المرصودة: ${Number(result.summary.issues_total || 0)}.`,
+        })
+      }
+      if (false) {
+        const requestedUserId = 0
+        const result = { summary: { restricted_users: 0, issues_total: 0 } } as const
+        setMessage({
+          type: 'success',
+          text: `تم فحص المستخدم #${requestedUserId}. القيود الحالية: ${Number(result.summary.restricted_users || 0)} | المشاكل المرصودة: ${Number(result.summary.issues_total || 0)}.`,
+        })
+      }
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل خصم الأرباح للمستخدم.' })
     } finally {
@@ -1552,11 +1569,15 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     }
   }
 
-  async function handleRunStaffAccountHealthScan() {
+  async function handleRunStaffAccountHealthScan(target: 'all' | 'single' = 'all') {
     setStaffHealthLoading(true)
     setMessage(null)
     try {
-      const result = await runAdminAccountHealthScan()
+      const requestedUserId = Number(staffHealthUserId || 0)
+      if (target === 'single' && (!Number.isFinite(requestedUserId) || requestedUserId <= 0)) {
+        throw new Error('أدخل رقم مستخدم صحيحًا قبل تنفيذ الفحص المحدد.')
+      }
+      const result = await runAdminAccountHealthScan(target === 'single' ? { userId: requestedUserId } : undefined)
       setStaffHealthScan(result)
       setMessage({
         type: 'success',
@@ -3570,7 +3591,22 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
             </div>
             <div className="owner-actions-card">
               <div className="owner-form-row">
-                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleRunStaffAccountHealthScan} disabled={staffHealthLoading}>
+                <input
+                  className="field-input"
+                  inputMode="numeric"
+                  placeholder="رقم مستخدم محدد"
+                  value={staffHealthUserId}
+                  onChange={(e) => setStaffHealthUserId(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="wallet-action-btn owner-set-btn"
+                  onClick={() => handleRunStaffAccountHealthScan('single')}
+                  disabled={staffHealthLoading}
+                >
+                  {staffHealthLoading && staffHealthUserId ? 'جارٍ فحص المستخدم...' : 'فحص مستخدم محدد'}
+                </button>
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={() => handleRunStaffAccountHealthScan('all')} disabled={staffHealthLoading}>
                   {staffHealthLoading ? 'جارٍ فحص كل الحسابات...' : 'فحص كل الحسابات'}
                 </button>
                 <span className="owner-hint">

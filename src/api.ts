@@ -2015,6 +2015,7 @@ export type AdminAccountHealthScan = {
   ok: boolean
   summary: {
     scanned_users: number
+    target_user_id?: number | null
     restricted_users: number
     banned_users: number
     frozen_users: number
@@ -2186,10 +2187,10 @@ export async function setAdminSensitiveAccess(userId: number, canViewSensitive: 
   }) as Promise<{ ok: boolean }>
 }
 
-export async function runAdminAccountHealthScan() {
+export async function runAdminAccountHealthScan(payload?: { userId?: number }) {
   return apiFetch('/api/owner-growth/staff/account-health-scan', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify(payload || {}),
   }) as Promise<AdminAccountHealthScan>
 }
 
