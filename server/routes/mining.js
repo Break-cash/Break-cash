@@ -200,6 +200,16 @@ function computeAccrual(profile, nowMs) {
   return { dailyClaimable, monthlyAccrued }
 }
 
+function buildMiningReferenceId(userId, profileId, nowMs, granularity = 'second') {
+  const baseId = BigInt(Math.max(1, Number(profileId || userId || 0)))
+  const timeValue =
+    granularity === 'day'
+      ? BigInt(Math.floor(nowMs / DAY_MS))
+      : BigInt(Math.floor(nowMs / 1000))
+  const mixed = (baseId * 1000003n + timeValue) % 2147483647n
+  return Number(mixed === 0n ? 1n : mixed)
+}
+
 async function getUserTotalBalance(tx, userId) {
   return getMainBalance(tx, userId, 'USDT')
 }
@@ -348,7 +358,7 @@ export function createMiningRouter(db) {
         if (isTopUp) {
           const { dailyClaimable } = computeAccrual(currentProfile, nowMs)
           if (dailyClaimable > 0) {
-            const referenceId = Number(currentProfile.id || 0) * 10000000 + Math.floor(nowMs / 1000)
+            const referenceId = buildMiningReferenceId(req.user.id, currentProfile.id, nowMs, 'second')
             await recordMiningDailyProfit(tx, {
               userId: req.user.id,
               amount: dailyClaimable,
@@ -484,7 +494,7 @@ export function createMiningRouter(db) {
         const { dailyClaimable } = computeAccrual(profile, nowMs)
         if (!dailyClaimable || dailyClaimable <= 0) throw new Error('NO_DAILY_PROFIT')
 
-        const refId = Number(profile.id || 0) * 100000 + Math.floor(nowMs / 86400000)
+        const refId = buildMiningReferenceId(req.user.id, profile.id, nowMs, 'day')
         const result = await recordMiningDailyProfit(tx, {
           userId: req.user.id,
           amount: dailyClaimable,
