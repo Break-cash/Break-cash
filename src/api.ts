@@ -182,6 +182,10 @@ export async function getCurrentUser() {
   return apiFetch('/api/auth/me') as Promise<{ user: AuthUser }>
 }
 
+export async function getMyPermissions() {
+  return apiFetch('/api/permissions/my') as Promise<{ role: string; permissions: string[] }>
+}
+
 export type RecoveryCodeStatus = {
   shouldShow: boolean
   recoveryCode: string | null
@@ -898,6 +902,8 @@ export type EarningEntry = {
   currency: string
   amount: number
   status: string
+  payout_mode?: RewardPayoutMode
+  locked_until?: string | null
   transferred_at: string | null
   transferred_wallet_txn_id: number | null
   created_at: string
@@ -911,6 +917,10 @@ export type EarningGroup = {
   total_amount: number
   transferred_count: number
   pending_count: number
+  timed_locked_count?: number
+  timed_locked_amount?: number
+  permanent_locked_count?: number
+  next_unlock_at?: string | null
 }
 
 /** Earning entries history (source of truth: earning_entries) */
@@ -971,6 +981,28 @@ export async function adjustBalance(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   }) as Promise<{ ok: boolean; balance: { userId: number; currency: string; amount: number } }>
+}
+
+export async function adjustUserProfit(payload: {
+  userId: number
+  currency?: string
+  amount: number
+  target: 'main' | 'pending'
+  sourceType?: RewardPayoutSource
+  note?: string
+}) {
+  return apiFetch('/api/users/profit-adjust', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{
+    ok: boolean
+    target: 'main' | 'pending'
+    sourceType: RewardPayoutSource
+    amount: number
+    remainingMainBalance: number
+    remainingPendingAmount: number
+    affectedEntries: number
+  }>
 }
 
 export async function setBalance(payload: { userId: number; currency: string; amount: number; note?: string }) {
@@ -1524,6 +1556,48 @@ export type RewardPayoutConfig = {
   overridesCount: number
 }
 
+export type RewardPayoutMode = 'withdrawable' | 'bonus_locked'
+export type RewardPayoutSource = 'all' | 'mining' | 'tasks' | 'referrals' | 'deposits'
+
+export type RewardPayoutOverrideItem = {
+  overrideKey: string
+  id: number
+  legacy: boolean
+  userId: number
+  sourceType: RewardPayoutSource
+  payoutMode: RewardPayoutMode
+  lockHours?: number | null
+  note?: string | null
+  updatedBy?: number | null
+  updatedAt?: string | null
+  pendingCount: number
+  pendingAmount: number
+  user: {
+    displayName?: string | null
+    email?: string | null
+    phone?: string | null
+  }
+}
+
+export type RewardPayoutRulesResponse = {
+  defaultMode: RewardPayoutMode
+  sourceModes: Partial<Record<Exclude<RewardPayoutSource, 'all'>, RewardPayoutMode>>
+  defaultLockHours: number
+  sourceLockHours: Partial<Record<Exclude<RewardPayoutSource, 'all'>, number>>
+  overridesCount: number
+  overrides: RewardPayoutOverrideItem[]
+}
+
+export type RewardPayoutApplyResult = {
+  processedEntries: number
+  lockedEntries: number
+  lockedAmount: number
+  bonusLockedEntries: number
+  bonusLockedAmount: number
+  releasedEntries: number
+  releasedAmount: number
+}
+
 export type UserVipTier = {
   level: number
   title: string
@@ -1733,6 +1807,57 @@ export async function updateRewardPayoutConfigOwner(defaultMode: 'withdrawable' 
     method: 'POST',
     body: JSON.stringify({ defaultMode }),
   }) as Promise<{ ok: boolean; defaultMode: 'withdrawable' | 'bonus_locked' }>
+}
+
+export async function getRewardPayoutRulesOwner() {
+  return apiFetch('/api/owner-growth/reward-payout-rules') as Promise<RewardPayoutRulesResponse>
+}
+
+export async function updateRewardPayoutRulesOwner(payload: {
+  defaultMode: RewardPayoutMode
+  sourceModes: Partial<Record<Exclude<RewardPayoutSource, 'all'>, RewardPayoutMode>>
+  defaultLockHours: number
+  sourceLockHours: Partial<Record<Exclude<RewardPayoutSource, 'all'>, number>>
+  applyPending?: boolean
+}) {
+  return apiFetch('/api/owner-growth/reward-payout-rules/global', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{
+    ok: boolean
+    defaultMode: RewardPayoutMode
+    sourceModes: Partial<Record<Exclude<RewardPayoutSource, 'all'>, RewardPayoutMode>>
+    defaultLockHours: number
+    sourceLockHours: Partial<Record<Exclude<RewardPayoutSource, 'all'>, number>>
+    applyPendingResult: RewardPayoutApplyResult
+  }>
+}
+
+export async function upsertRewardPayoutOverridesOwner(payload: {
+  userIds?: number[]
+  userIdsText?: string
+  sourceType: RewardPayoutSource
+  payoutMode: RewardPayoutMode
+  lockHours?: number
+  note?: string
+  applyPending?: boolean
+}) {
+  return apiFetch('/api/owner-growth/reward-payout-rules/overrides', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{
+    ok: boolean
+    affectedUsers: number
+    lockHours: number
+    applyPendingResult: RewardPayoutApplyResult
+  }>
+}
+
+export async function deleteRewardPayoutOverrideOwner(overrideKey: string) {
+  return apiFetch('/api/owner-growth/reward-payout-rules/overrides/delete', {
+    method: 'POST',
+    body: JSON.stringify({ overrideKey }),
+  }) as Promise<{ ok: boolean }>
 }
 
 export async function getMyVipSummary() {

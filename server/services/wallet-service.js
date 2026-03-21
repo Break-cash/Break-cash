@@ -3,7 +3,7 @@
  * All balance-changing actions MUST go through these functions.
  * Source of truth: wallet_accounts + wallet_transactions + earning_entries.
  */
-import { get } from '../db.js'
+import { all, get, run } from '../db.js'
 import {
   getMainBalance,
   recordTransaction,
@@ -16,55 +16,293 @@ import {
 // Re-export for consumers
 export { getMainBalance, getWalletHistory, getEarningHistory }
 
-function normalizeRewardPayoutMode(value) {
+const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits'])
+const MAX_REWARD_LOCK_HOURS = 24 * 365
+
+export function normalizeRewardPayoutMode(value) {
   return String(value || '').trim().toLowerCase() === 'bonus_locked' ? 'bonus_locked' : 'withdrawable'
 }
 
-async function getRewardPayoutConfig(db) {
+export function normalizeRewardLockHours(value, fallback = 0) {
+  const raw = Number(value)
+  if (!Number.isFinite(raw)) return Math.max(0, Math.floor(Number(fallback) || 0))
+  return Math.max(0, Math.min(MAX_REWARD_LOCK_HOURS, Math.floor(raw)))
+}
+
+export function normalizeRewardSourceType(value, fallback = 'all') {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'all') return 'all'
+  return REWARD_SOURCE_TYPES.has(normalized) ? normalized : fallback
+}
+
+function normalizeRewardSourceModes(raw) {
+  const sourceModes = {}
+  if (!raw || typeof raw !== 'object') return sourceModes
+  for (const sourceType of REWARD_SOURCE_TYPES) {
+    if (sourceType in raw) sourceModes[sourceType] = normalizeRewardPayoutMode(raw[sourceType])
+  }
+  return sourceModes
+}
+
+function normalizeRewardSourceLockHours(raw) {
+  const sourceLockHours = {}
+  if (!raw || typeof raw !== 'object') return sourceLockHours
+  for (const sourceType of REWARD_SOURCE_TYPES) {
+    if (sourceType in raw) sourceLockHours[sourceType] = normalizeRewardLockHours(raw[sourceType], 0)
+  }
+  return sourceLockHours
+}
+
+export async function getRewardPayoutConfig(db) {
   const row = await get(db, `SELECT value FROM settings WHERE key = 'reward_payout_config' LIMIT 1`)
-  if (!row?.value) return { defaultMode: 'withdrawable' }
+  if (!row?.value) return { defaultMode: 'withdrawable', sourceModes: {}, defaultLockHours: 0, sourceLockHours: {} }
   try {
     const parsed = JSON.parse(String(row.value))
-    return { defaultMode: normalizeRewardPayoutMode(parsed?.defaultMode) }
+    return {
+      defaultMode: normalizeRewardPayoutMode(parsed?.defaultMode),
+      sourceModes: normalizeRewardSourceModes(parsed?.sourceModes),
+      defaultLockHours: normalizeRewardLockHours(parsed?.defaultLockHours, 0),
+      sourceLockHours: normalizeRewardSourceLockHours(parsed?.sourceLockHours),
+    }
   } catch {
-    return { defaultMode: 'withdrawable' }
+    return { defaultMode: 'withdrawable', sourceModes: {}, defaultLockHours: 0, sourceLockHours: {} }
   }
 }
 
-async function getRewardPayoutOverride(db, userId) {
+async function getRewardPayoutOverrideSet(db, userId, sourceType = 'all') {
   if (!userId) return null
-  return get(
+  const normalizedSourceType = normalizeRewardSourceType(sourceType, 'all')
+  const [specificOverride, globalOverride, legacyOverride] = await Promise.all([
+    normalizedSourceType === 'all'
+      ? Promise.resolve(null)
+      : get(
+          db,
+          `SELECT payout_mode, lock_hours, source_type
+           FROM user_reward_payout_overrides
+           WHERE user_id = ? AND source_type = ?
+           LIMIT 1`,
+          [userId, normalizedSourceType],
+        ),
+    get(
+      db,
+      `SELECT payout_mode, lock_hours, source_type
+       FROM user_reward_payout_overrides
+       WHERE user_id = ? AND source_type = 'all'
+       LIMIT 1`,
+      [userId],
+    ),
+    get(
+      db,
+      `SELECT payout_mode, 'all' AS source_type
+       FROM user_reward_mode_overrides
+       WHERE user_id = ? LIMIT 1`,
+      [userId],
+    ),
+  ])
+  return { specificOverride, globalOverride, legacyOverride }
+}
+
+export async function getEffectiveRewardPayoutMode(db, userId, sourceType = 'all') {
+  const policy = await getEffectiveRewardPayoutPolicy(db, userId, sourceType)
+  return policy.payoutMode
+}
+
+export async function getEffectiveRewardPayoutPolicy(db, userId, sourceType = 'all') {
+  const normalizedSourceType = normalizeRewardSourceType(sourceType, 'all')
+  const [config, overrideSet] = await Promise.all([
+    getRewardPayoutConfig(db),
+    getRewardPayoutOverrideSet(db, userId, normalizedSourceType),
+  ])
+  const sourceMode = config?.sourceModes?.[normalizedSourceType]
+  const sourceLockHours = config?.sourceLockHours?.[normalizedSourceType]
+  const specificOverride = overrideSet?.specificOverride || null
+  const globalOverride = overrideSet?.globalOverride || null
+  const legacyOverride = overrideSet?.legacyOverride || null
+  return {
+    payoutMode: normalizeRewardPayoutMode(
+      specificOverride?.payout_mode || globalOverride?.payout_mode || legacyOverride?.payout_mode || sourceMode || config.defaultMode,
+    ),
+    lockHours: normalizeRewardLockHours(
+      specificOverride?.lock_hours ?? globalOverride?.lock_hours ?? sourceLockHours ?? config?.defaultLockHours ?? 0,
+      0,
+    ),
+  }
+}
+
+function buildLockedUntilIso(lockHours, baseDate = new Date()) {
+  const safeLockHours = normalizeRewardLockHours(lockHours, 0)
+  return new Date(baseDate.getTime() + safeLockHours * 60 * 60 * 1000).toISOString()
+}
+
+async function updatePendingEarningPolicy(db, entryId, { payoutMode, lockedUntil = null }) {
+  await run(
     db,
-    `SELECT payout_mode
-     FROM user_reward_mode_overrides
-     WHERE user_id = ? LIMIT 1`,
-    [userId],
+    `UPDATE earning_entries
+     SET payout_mode = ?, locked_until = ?
+     WHERE id = ? AND status = 'pending'`,
+    [normalizeRewardPayoutMode(payoutMode), lockedUntil, entryId],
   )
 }
 
-export async function getEffectiveRewardPayoutMode(db, userId) {
-  const [config, override] = await Promise.all([
-    getRewardPayoutConfig(db),
-    getRewardPayoutOverride(db, userId),
-  ])
-  return normalizeRewardPayoutMode(override?.payout_mode || config.defaultMode)
-}
-
-async function finalizeRewardTransfer(db, { userId, currency, entryId, idempotencyKey }) {
-  const payoutMode = await getEffectiveRewardPayoutMode(db, userId)
+async function finalizeRewardTransfer(db, { userId, currency, entryId, idempotencyKey, sourceType = 'all' }) {
+  const policy = await getEffectiveRewardPayoutPolicy(db, userId, sourceType)
+  const payoutMode = policy.payoutMode
   if (payoutMode === 'bonus_locked') {
+    await updatePendingEarningPolicy(db, entryId, { payoutMode: 'bonus_locked', lockedUntil: null })
     return {
       walletTxnId: null,
       balanceAfter: await getMainBalance(db, userId, currency),
       payoutMode,
+      lockHours: 0,
+      lockedUntil: null,
     }
   }
+  if (policy.lockHours > 0) {
+    const lockedUntil = buildLockedUntilIso(policy.lockHours)
+    await updatePendingEarningPolicy(db, entryId, { payoutMode: 'withdrawable', lockedUntil })
+    return {
+      walletTxnId: null,
+      balanceAfter: await getMainBalance(db, userId, currency),
+      payoutMode,
+      lockHours: policy.lockHours,
+      lockedUntil,
+    }
+  }
+  await updatePendingEarningPolicy(db, entryId, { payoutMode: 'withdrawable', lockedUntil: null })
   const txn = await transferEarningToMain(db, entryId, idempotencyKey)
   if (!txn) return null
   return {
     walletTxnId: txn.id,
     balanceAfter: await getMainBalance(db, userId, currency),
     payoutMode,
+    lockHours: 0,
+    lockedUntil: null,
+  }
+}
+
+function buildRewardEntryScopeFilter(userIds = [], sourceType = 'all') {
+  const clauses = [`status = 'pending'`]
+  const params = []
+  if (Array.isArray(userIds) && userIds.length > 0) {
+    clauses.push(`user_id IN (${userIds.map(() => '?').join(', ')})`)
+    params.push(...userIds)
+  }
+  const normalizedSourceType = normalizeRewardSourceType(sourceType, 'all')
+  if (normalizedSourceType !== 'all') {
+    clauses.push(`source_type = ?`)
+    params.push(normalizedSourceType)
+  }
+  return {
+    whereClause: clauses.join(' AND '),
+    params,
+  }
+}
+
+export async function releaseEligibleRewardEntries(db, opts = {}) {
+  const { userIds = [], sourceType = 'all' } = opts || {}
+  const { whereClause, params } = buildRewardEntryScopeFilter(userIds, sourceType)
+  const rows = await all(
+    db,
+    `SELECT id, amount
+     FROM earning_entries
+     WHERE ${whereClause}
+       AND payout_mode <> 'bonus_locked'
+       AND (locked_until IS NULL OR locked_until <= CURRENT_TIMESTAMP)
+     ORDER BY id ASC`,
+    params,
+  )
+  if (rows.length === 0) {
+    return {
+      processedEntries: 0,
+      lockedEntries: 0,
+      lockedAmount: 0,
+      bonusLockedEntries: 0,
+      bonusLockedAmount: 0,
+      releasedEntries: 0,
+      releasedAmount: 0,
+    }
+  }
+
+  const stamp = Date.now()
+  let releasedAmount = 0
+  let releasedEntries = 0
+  for (const row of rows) {
+    const txn = await transferEarningToMain(db, Number(row.id), `reward_release_${stamp}_${Number(row.id)}`)
+    if (!txn) continue
+    releasedEntries += 1
+    releasedAmount += Number(row.amount || 0)
+  }
+  return {
+    processedEntries: releasedEntries,
+    lockedEntries: 0,
+    lockedAmount: 0,
+    bonusLockedEntries: 0,
+    bonusLockedAmount: 0,
+    releasedEntries,
+    releasedAmount: Number(releasedAmount.toFixed(8)),
+  }
+}
+
+export async function reapplyRewardPoliciesToPendingEntries(db, opts = {}) {
+  const { userIds = [], sourceType = 'all' } = opts || {}
+  const { whereClause, params } = buildRewardEntryScopeFilter(userIds, sourceType)
+  const rows = await all(
+    db,
+    `SELECT id, user_id, source_type, amount, locked_until
+     FROM earning_entries
+     WHERE ${whereClause}
+     ORDER BY id ASC`,
+    params,
+  )
+  if (rows.length === 0) {
+    return {
+      processedEntries: 0,
+      lockedEntries: 0,
+      lockedAmount: 0,
+      bonusLockedEntries: 0,
+      bonusLockedAmount: 0,
+      releasedEntries: 0,
+      releasedAmount: 0,
+    }
+  }
+
+  let lockedEntries = 0
+  let lockedAmount = 0
+  let bonusLockedEntries = 0
+  let bonusLockedAmount = 0
+  const nowMs = Date.now()
+
+  for (const row of rows) {
+    const policy = await getEffectiveRewardPayoutPolicy(db, Number(row.user_id), String(row.source_type || 'all'))
+    if (policy.payoutMode === 'bonus_locked') {
+      await updatePendingEarningPolicy(db, Number(row.id), { payoutMode: 'bonus_locked', lockedUntil: null })
+      bonusLockedEntries += 1
+      bonusLockedAmount += Number(row.amount || 0)
+      continue
+    }
+
+    if (policy.lockHours > 0) {
+      const currentLockMs = row.locked_until ? Date.parse(String(row.locked_until)) : Number.NaN
+      const baseMs = Number.isFinite(currentLockMs) && currentLockMs > nowMs ? currentLockMs : nowMs
+      const lockedUntil = buildLockedUntilIso(policy.lockHours, new Date(baseMs))
+      await updatePendingEarningPolicy(db, Number(row.id), { payoutMode: 'withdrawable', lockedUntil })
+      lockedEntries += 1
+      lockedAmount += Number(row.amount || 0)
+      continue
+    }
+
+    await updatePendingEarningPolicy(db, Number(row.id), { payoutMode: 'withdrawable', lockedUntil: null })
+  }
+
+  const released = await releaseEligibleRewardEntries(db, { userIds, sourceType })
+  return {
+    processedEntries: rows.length,
+    lockedEntries,
+    lockedAmount: Number(lockedAmount.toFixed(8)),
+    bonusLockedEntries,
+    bonusLockedAmount: Number(bonusLockedAmount.toFixed(8)),
+    releasedEntries: released.releasedEntries,
+    releasedAmount: released.releasedAmount,
   }
 }
 
@@ -243,10 +481,16 @@ export async function recordMiningDailyProfit(db, opts) {
   const entryRow = typeof earningResult?.id === 'number' ? earningResult : await get(db, `SELECT id FROM earning_entries WHERE source_type = 'mining' AND reference_type = 'mining_daily_claim' AND reference_id = ? LIMIT 1`, [referenceId])
   const entryId = entryRow?.id
   if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
-  const txn = await transferEarningToMain(db, entryId, `mining_daily_${userId}_${referenceId}`)
+  const txn = await finalizeRewardTransfer(db, {
+    userId,
+    currency: 'USDT',
+    entryId,
+    idempotencyKey: `mining_daily_${userId}_${referenceId}`,
+    sourceType: 'mining',
+  })
   if (!txn) return null
   const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { earningEntryId: entryId, walletTxnId: txn.id, balanceAfter }
+  return { earningEntryId: entryId, walletTxnId: txn.walletTxnId, balanceAfter, payoutMode: txn.payoutMode }
 }
 
 /**
@@ -386,6 +630,7 @@ export async function createReferralReward(db, opts) {
     currency,
     entryId: earningResult.id,
     idempotencyKey: `referral_reward_${referralRewardId}`,
+    sourceType: 'referrals',
   })
 }
 
@@ -410,6 +655,7 @@ export async function createTaskReward(db, opts) {
     currency,
     entryId,
     idempotencyKey: `task_redemption_${redemptionId}`,
+    sourceType: 'tasks',
   })
 }
 
@@ -445,6 +691,7 @@ export async function createStrategyPromoReward(db, opts) {
     currency,
     entryId,
     idempotencyKey: `strategy_code_bonus_${usageId}`,
+    sourceType: 'tasks',
   })
 }
 
@@ -480,5 +727,6 @@ export async function createFirstDepositBonusReward(db, opts) {
     currency,
     entryId,
     idempotencyKey: `first_deposit_bonus_${depositRequestId}`,
+    sourceType: 'deposits',
   })
 }

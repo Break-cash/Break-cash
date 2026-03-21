@@ -3,7 +3,7 @@ import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { hashPassword } from '../auth.js'
 import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
-import { getMainBalance, adjustBalance } from '../services/wallet-service.js'
+import { getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
 
 async function withTransaction(db, fn) {
   await run(db, 'BEGIN')
@@ -32,6 +32,26 @@ async function logAdminAction(db, actorUserId, section, action, targetUserId = n
      VALUES (?, ?, ?, ?, ?)`,
     [actorUserId, targetUserId, section, action, JSON.stringify(metadata || {})],
   )
+}
+
+async function getPendingProfitTotal(db, userId, sourceType = 'all') {
+  const normalizedSourceType = normalizeRewardSourceType(sourceType, 'all')
+  const params = [userId]
+  let sourceClause = ''
+  if (normalizedSourceType !== 'all') {
+    sourceClause = `AND source_type = ?`
+    params.push(normalizedSourceType)
+  }
+  const row = await get(
+    db,
+    `SELECT COALESCE(SUM(amount), 0) AS total
+     FROM earning_entries
+     WHERE user_id = ?
+       AND status = 'pending'
+       ${sourceClause}`,
+    params,
+  )
+  return Number(row?.total || 0)
 }
 
 export function createUsersRouter(db) {
@@ -380,6 +400,112 @@ export function createUsersRouter(db) {
     const next = await getMainBalance(db, userId, currency)
     await logAdminAction(db, req.user.id, 'finance', 'bonus_adjust', userId, { type, currency, amount })
     return res.json({ ok: true, balance: { userId, currency, amount: next } })
+  })
+
+  router.post('/profit-adjust', requirePermission(db, 'manage_users'), async (req, res) => {
+    const userId = Number(req.body?.userId)
+    const currency = String(req.body?.currency || 'USDT').trim().toUpperCase()
+    const amount = Number(req.body?.amount)
+    const target = String(req.body?.target || 'main').trim().toLowerCase()
+    const sourceType = normalizeRewardSourceType(req.body?.sourceType, 'all')
+    const note = String(req.body?.note || '').trim().slice(0, 260)
+
+    if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+    if (!['main', 'pending'].includes(target)) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+
+    try {
+      if (target === 'main') {
+        await withTransaction(db, async () => {
+          await adjustBalance(db, {
+            userId,
+            currency,
+            delta: -amount,
+            referenceType: 'owner_profit_deduct_general',
+            referenceId: req.user.id,
+            createdBy: req.user.id,
+            note: note || 'owner general profit deduction',
+          })
+        })
+        const remainingMainBalance = await getMainBalance(db, userId, currency)
+        await logAdminAction(db, req.user.id, 'finance', 'deduct_general_profit', userId, {
+          currency,
+          amount,
+          note,
+        })
+        return res.json({
+          ok: true,
+          target,
+          sourceType: 'all',
+          amount,
+          remainingMainBalance,
+          remainingPendingAmount: await getPendingProfitTotal(db, userId, 'all'),
+          affectedEntries: 0,
+        })
+      }
+
+      let affectedEntries = 0
+      await withTransaction(db, async () => {
+        const pendingRows = await all(
+          db,
+          `SELECT id, amount
+           FROM earning_entries
+           WHERE user_id = ?
+             AND status = 'pending'
+             ${sourceType === 'all' ? '' : 'AND source_type = ?'}
+           ORDER BY created_at ASC, id ASC`,
+          sourceType === 'all' ? [userId] : [userId, sourceType],
+        )
+        const pendingTotal = pendingRows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+        if (pendingTotal + 1e-8 < amount) {
+          throw new Error('INSUFFICIENT_PENDING_PROFIT')
+        }
+
+        let remaining = Number(amount.toFixed(8))
+        for (const row of pendingRows) {
+          if (remaining <= 0) break
+          const entryAmount = Number(row.amount || 0)
+          const consume = Math.min(entryAmount, remaining)
+          const nextAmount = Number((entryAmount - consume).toFixed(8))
+          if (nextAmount <= 0) {
+            await run(db, `DELETE FROM earning_entries WHERE id = ?`, [row.id])
+          } else {
+            await run(db, `UPDATE earning_entries SET amount = ? WHERE id = ?`, [nextAmount, row.id])
+          }
+          remaining = Number((remaining - consume).toFixed(8))
+          affectedEntries += 1
+        }
+      })
+
+      const remainingPendingAmount = await getPendingProfitTotal(db, userId, sourceType)
+      await logAdminAction(db, req.user.id, 'finance', 'deduct_private_profit', userId, {
+        currency,
+        amount,
+        sourceType,
+        note,
+        affectedEntries,
+      })
+      return res.json({
+        ok: true,
+        target,
+        sourceType,
+        amount,
+        remainingMainBalance: await getMainBalance(db, userId, currency),
+        remainingPendingAmount,
+        affectedEntries,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'INSUFFICIENT_BALANCE') {
+        return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
+      }
+      if (error instanceof Error && error.message === 'INSUFFICIENT_PENDING_PROFIT') {
+        return res.status(400).json({ error: 'INSUFFICIENT_PENDING_PROFIT' })
+      }
+      throw error
+    }
   })
 
   router.post('/notify', requirePermission(db, 'manage_users'), async (req, res) => {

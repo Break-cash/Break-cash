@@ -14,6 +14,7 @@ import {
   adjustBalance,
   createReferralReward,
   createFirstDepositBonusReward,
+  releaseEligibleRewardEntries,
 } from '../services/wallet-service.js'
 import { getWalletAccountsOverview } from '../services/wallet-ledger.js'
 import {
@@ -1051,6 +1052,7 @@ export function createBalanceRouter(db) {
 
   router.get('/overview', async (req, res) => {
     const currency = normalizeCurrency(req.query.currency || 'USDT')
+    await releaseEligibleRewardEntries(db, { userIds: [req.user.id] })
     const [accountsOverview, rules] = await Promise.all([
       getWalletAccountsOverview(db, req.user.id),
       getRules(db),
@@ -1090,6 +1092,7 @@ export function createBalanceRouter(db) {
     const sourceType = req.query.sourceType ? String(req.query.sourceType).trim().toLowerCase() : null
     const limit = Math.min(Number(req.query.limit) || 100, 200)
     const grouped = req.query.grouped === 'true' || req.query.grouped === '1'
+    await releaseEligibleRewardEntries(db, { userIds: [req.user.id], sourceType: sourceType || 'all' })
     const result = await getEarningHistory(db, req.user.id, { sourceType, limit, grouped })
     if (grouped && result && typeof result === 'object' && 'grouped' in result) {
       return res.json({ entries: result.entries, grouped: result.grouped })
@@ -1102,6 +1105,7 @@ export function createBalanceRouter(db) {
     const currency = normalizeCurrency(req.query.currency || 'USDT')
     const limit = Math.min(Number(req.query.limit) || 50, 100)
     if (!userId || userId <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+    await releaseEligibleRewardEntries(db, { userIds: [userId] })
     const [accountsOverview, rules, walletTxns, earningEntries] = await Promise.all([
       getWalletAccountsOverview(db, userId),
       getRules(db),

@@ -139,20 +139,6 @@ export function Profile() {
   }, [holdings, liveQuotes])
 
   const tabAssets = useMemo(() => assetsToRender.slice(0, 5), [assetsToRender])
-  const ownerTools = useMemo(
-    () =>
-      profile?.role === 'owner'
-        ? [
-            { label: t('nav_owner'), to: '/owner/operations' },
-            { label: t('owner_quick_operations'), to: '/owner/operations' },
-            { label: t('nav_admin'), to: '/admin/dashboard' },
-            { label: t('admin_users'), to: '/admin/users' },
-            { label: t('admin_invites'), to: '/admin/invites' },
-            { label: t('admin_permissions'), to: '/admin/permissions' },
-          ]
-        : [],
-    [profile?.role, t],
-  )
   const premiumProfileColorClass = getPremiumProfileColorClass(profile?.profile_color)
   const quickActions: Array<{
     key: string
@@ -213,22 +199,6 @@ export function Profile() {
           <span>{isPullRefreshing ? t('common_loading') : t('home_pull_to_refresh')}</span>
         </div>
       </div>
-      {ownerTools.length > 0 ? (
-        <section className="elite-enter overflow-x-auto rounded-2xl border border-white/10 bg-[#1e2430]/70 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <div className="flex min-w-max items-center gap-2">
-            {ownerTools.map((tool) => (
-              <button
-                key={tool.to}
-                type="button"
-                onClick={() => navigate(tool.to)}
-                className="icon-interactive rounded-full border border-white/10 bg-app-elevated px-3 py-1.5 text-xs font-medium text-white/85 hover:border-brand-blue/35 hover:bg-app-card"
-              >
-                {tool.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

@@ -4,6 +4,13 @@ import { hashPassword } from '../auth.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import { normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
+import {
+  getRewardPayoutConfig,
+  normalizeRewardLockHours,
+  normalizeRewardPayoutMode,
+  normalizeRewardSourceType,
+  reapplyRewardPoliciesToPendingEntries,
+} from '../services/wallet-service.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -76,9 +83,7 @@ function parseVipTierPayload(row) {
   }
 }
 
-function normalizeRewardPayoutMode(value) {
-  return String(value || '').trim().toLowerCase() === 'bonus_locked' ? 'bonus_locked' : 'withdrawable'
-}
+const REWARD_PAYOUT_SOURCE_TYPES = ['mining', 'tasks', 'referrals', 'deposits']
 
 function getMonthRange(rawValue) {
   const raw = String(rawValue || '').trim()
@@ -98,6 +103,165 @@ function getMonthRange(rawValue) {
     startAt: startAt.toISOString(),
     endAt: endAt.toISOString(),
   }
+}
+
+function normalizeRewardSourceModes(raw) {
+  const sourceModes = {}
+  if (!raw || typeof raw !== 'object') return sourceModes
+  for (const sourceType of REWARD_PAYOUT_SOURCE_TYPES) {
+    if (sourceType in raw) sourceModes[sourceType] = normalizeRewardPayoutMode(raw[sourceType])
+  }
+  return sourceModes
+}
+
+function normalizeRewardSourceLockHours(raw) {
+  const sourceLockHours = {}
+  if (!raw || typeof raw !== 'object') return sourceLockHours
+  for (const sourceType of REWARD_PAYOUT_SOURCE_TYPES) {
+    if (sourceType in raw) sourceLockHours[sourceType] = normalizeRewardLockHours(raw[sourceType], 0)
+  }
+  return sourceLockHours
+}
+
+function parseRewardUserIds(...values) {
+  const seen = new Set()
+  const userIds = []
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const id = Number(item)
+        if (Number.isInteger(id) && id > 0 && !seen.has(id)) {
+          seen.add(id)
+          userIds.push(id)
+        }
+      }
+      continue
+    }
+    const tokens = String(value || '')
+      .split(/[\s,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    for (const token of tokens) {
+      const id = Number(token)
+      if (Number.isInteger(id) && id > 0 && !seen.has(id)) {
+        seen.add(id)
+        userIds.push(id)
+      }
+    }
+  }
+  return userIds
+}
+
+function mapRewardOverrideRow(row) {
+  return {
+    overrideKey: `${String(row.override_kind || 'typed')}:${Number(row.id || 0)}`,
+    id: Number(row.id || 0),
+    legacy: String(row.override_kind || 'typed') === 'legacy',
+    userId: Number(row.user_id || 0),
+    sourceType: normalizeRewardSourceType(row.source_type, 'all'),
+    payoutMode: normalizeRewardPayoutMode(row.payout_mode),
+    lockHours: row.lock_hours == null ? null : normalizeRewardLockHours(row.lock_hours, 0),
+    note: row.note || null,
+    updatedBy: row.updated_by == null ? null : Number(row.updated_by),
+    updatedAt: row.updated_at || null,
+    pendingCount: Number(row.pending_count || 0),
+    pendingAmount: Number(row.pending_amount || 0),
+    user: {
+      displayName: row.display_name || null,
+      email: row.email || null,
+      phone: row.phone || null,
+    },
+  }
+}
+
+async function getRewardPayoutOverrides(db, limit = 200) {
+  const rows = await all(
+    db,
+    `SELECT *
+     FROM (
+       SELECT
+         'typed' AS override_kind,
+         o.id,
+         o.user_id,
+         o.source_type,
+         o.payout_mode,
+         o.lock_hours,
+         o.note,
+         o.updated_by,
+         o.updated_at,
+         u.display_name,
+         u.email,
+         u.phone,
+         COALESCE(p.pending_count, 0) AS pending_count,
+         COALESCE(p.pending_amount, 0) AS pending_amount
+       FROM user_reward_payout_overrides o
+       LEFT JOIN users u ON u.id = o.user_id
+       LEFT JOIN (
+         SELECT user_id, source_type, COUNT(*) AS pending_count, COALESCE(SUM(amount), 0) AS pending_amount
+         FROM earning_entries
+         WHERE status = 'pending'
+         GROUP BY user_id, source_type
+       ) p ON p.user_id = o.user_id AND p.source_type = o.source_type
+
+       UNION ALL
+
+       SELECT
+         'legacy' AS override_kind,
+         o.id,
+         o.user_id,
+         'all' AS source_type,
+         o.payout_mode,
+         NULL AS lock_hours,
+         o.note,
+         o.updated_by,
+         o.updated_at,
+         u.display_name,
+         u.email,
+         u.phone,
+         COALESCE(p.pending_count, 0) AS pending_count,
+         COALESCE(p.pending_amount, 0) AS pending_amount
+       FROM user_reward_mode_overrides o
+       LEFT JOIN users u ON u.id = o.user_id
+       LEFT JOIN (
+         SELECT user_id, COUNT(*) AS pending_count, COALESCE(SUM(amount), 0) AS pending_amount
+         FROM earning_entries
+         WHERE status = 'pending'
+         GROUP BY user_id
+       ) p ON p.user_id = o.user_id
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM user_reward_payout_overrides current_override
+         WHERE current_override.user_id = o.user_id
+           AND current_override.source_type = 'all'
+       )
+     ) overrides
+     ORDER BY updated_at DESC, id DESC
+     LIMIT ?`,
+    [limit],
+  )
+  return rows.map((row) => mapRewardOverrideRow(row))
+}
+
+async function getRewardPayoutOverridesCount(db) {
+  const row = await get(
+    db,
+    `SELECT
+       (
+         SELECT COUNT(*)
+         FROM user_reward_payout_overrides
+       ) +
+       (
+         SELECT COUNT(*)
+         FROM user_reward_mode_overrides legacy
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM user_reward_payout_overrides current_override
+           WHERE current_override.user_id = legacy.user_id
+             AND current_override.source_type = 'all'
+         )
+       ) AS count`,
+  )
+  return Number(row?.count || 0)
 }
 
 export function createOwnerGrowthRouter(db) {
@@ -241,34 +405,135 @@ export function createOwnerGrowthRouter(db) {
     })
   })
 
-  router.get('/reward-payout-config', async (_req, res) => {
-    const [configRow, overridesRow] = await Promise.all([
-      get(db, `SELECT value FROM settings WHERE key = 'reward_payout_config' LIMIT 1`),
-      get(db, `SELECT COUNT(*) AS count FROM user_reward_mode_overrides`),
+  router.get('/reward-payout-rules', async (req, res) => {
+    const limit = Math.min(300, Math.max(20, Number(req.query.limit) || 200))
+    const [config, overrides, overridesCount] = await Promise.all([
+      getRewardPayoutConfig(db),
+      getRewardPayoutOverrides(db, limit),
+      getRewardPayoutOverridesCount(db),
     ])
-    let defaultMode = 'withdrawable'
-    try {
-      const parsed = JSON.parse(String(configRow?.value || '{}'))
-      defaultMode = normalizeRewardPayoutMode(parsed?.defaultMode)
-    } catch {
-      defaultMode = 'withdrawable'
-    }
     return res.json({
-      defaultMode,
-      overridesCount: Number(overridesRow?.count || 0),
+      defaultMode: normalizeRewardPayoutMode(config?.defaultMode),
+      sourceModes: normalizeRewardSourceModes(config?.sourceModes),
+      defaultLockHours: normalizeRewardLockHours(config?.defaultLockHours, 0),
+      sourceLockHours: normalizeRewardSourceLockHours(config?.sourceLockHours),
+      overridesCount,
+      overrides,
     })
   })
 
-  router.post('/reward-payout-config', async (req, res) => {
+  router.post('/reward-payout-rules/global', async (req, res) => {
     const defaultMode = normalizeRewardPayoutMode(req.body?.defaultMode)
+    const sourceModes = normalizeRewardSourceModes(req.body?.sourceModes)
+    const defaultLockHours = normalizeRewardLockHours(req.body?.defaultLockHours, 0)
+    const sourceLockHours = normalizeRewardSourceLockHours(req.body?.sourceLockHours)
+    const applyPending = Number(req.body?.applyPending) === 1 || req.body?.applyPending === true
     await run(
       db,
       `INSERT INTO settings (key, value) VALUES ('reward_payout_config', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
-      [JSON.stringify({ defaultMode })],
+      [JSON.stringify({ defaultMode, sourceModes, defaultLockHours, sourceLockHours })],
+    )
+    const applyPendingResult = applyPending
+      ? await reapplyRewardPoliciesToPendingEntries(db, { sourceType: 'all' })
+      : { processedEntries: 0, lockedEntries: 0, lockedAmount: 0, bonusLockedEntries: 0, bonusLockedAmount: 0, releasedEntries: 0, releasedAmount: 0 }
+    publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'reward_payout_config' })
+    return res.json({ ok: true, defaultMode, sourceModes, defaultLockHours, sourceLockHours, applyPendingResult })
+  })
+
+  router.post('/reward-payout-rules/overrides', async (req, res) => {
+    const userIds = parseRewardUserIds(req.body?.userIds, req.body?.userIdsText)
+    const sourceType = normalizeRewardSourceType(req.body?.sourceType, 'all')
+    const payoutMode = normalizeRewardPayoutMode(req.body?.payoutMode)
+    const lockHours = normalizeRewardLockHours(req.body?.lockHours, 0)
+    const note = String(req.body?.note || '').trim() || null
+    const applyPending = Number(req.body?.applyPending) === 1 || req.body?.applyPending === true
+    if (userIds.length === 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const placeholders = userIds.map(() => '?').join(', ')
+    const existingUsers = await all(
+      db,
+      `SELECT id FROM users WHERE id IN (${placeholders})`,
+      userIds,
+    )
+    const validUserIds = existingUsers.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0)
+    if (validUserIds.length === 0) return res.status(404).json({ error: 'NOT_FOUND' })
+
+    for (const userId of validUserIds) {
+      await run(
+        db,
+        `INSERT INTO user_reward_payout_overrides (user_id, source_type, payout_mode, lock_hours, note, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, source_type) DO UPDATE SET
+           payout_mode = excluded.payout_mode,
+           lock_hours = excluded.lock_hours,
+           note = excluded.note,
+           updated_by = excluded.updated_by,
+           updated_at = CURRENT_TIMESTAMP`,
+        [userId, sourceType, payoutMode, lockHours, note, req.user.id],
+      )
+      if (sourceType === 'all') {
+        await run(db, `DELETE FROM user_reward_mode_overrides WHERE user_id = ?`, [userId])
+      }
+    }
+
+    const applyPendingResult = applyPending
+      ? await reapplyRewardPoliciesToPendingEntries(db, { userIds: validUserIds, sourceType })
+      : { processedEntries: 0, lockedEntries: 0, lockedAmount: 0, bonusLockedEntries: 0, bonusLockedAmount: 0, releasedEntries: 0, releasedAmount: 0 }
+
+    publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'reward_payout_config' })
+    return res.json({
+      ok: true,
+      affectedUsers: validUserIds.length,
+      lockHours,
+      applyPendingResult,
+    })
+  })
+
+  router.post('/reward-payout-rules/overrides/delete', async (req, res) => {
+    const rawOverrideKey = String(req.body?.overrideKey || '').trim()
+    if (!rawOverrideKey.includes(':')) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const [kind, idPart] = rawOverrideKey.split(':')
+    const id = Number(idPart || 0)
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (kind === 'legacy') {
+      await run(db, `DELETE FROM user_reward_mode_overrides WHERE id = ?`, [id])
+    } else {
+      await run(db, `DELETE FROM user_reward_payout_overrides WHERE id = ?`, [id])
+    }
+    publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'reward_payout_config' })
+    return res.json({ ok: true })
+  })
+
+  router.get('/reward-payout-config', async (_req, res) => {
+    const [config, overridesCount] = await Promise.all([
+      getRewardPayoutConfig(db),
+      getRewardPayoutOverridesCount(db),
+    ])
+    return res.json({
+      defaultMode: normalizeRewardPayoutMode(config?.defaultMode),
+      defaultLockHours: normalizeRewardLockHours(config?.defaultLockHours, 0),
+      overridesCount,
+    })
+  })
+
+  router.post('/reward-payout-config', async (req, res) => {
+    const currentConfig = await getRewardPayoutConfig(db)
+    const defaultMode = normalizeRewardPayoutMode(req.body?.defaultMode)
+    const sourceModes = normalizeRewardSourceModes(currentConfig?.sourceModes)
+    const defaultLockHours =
+      req.body?.defaultLockHours == null
+        ? normalizeRewardLockHours(currentConfig?.defaultLockHours, 0)
+        : normalizeRewardLockHours(req.body?.defaultLockHours, 0)
+    const sourceLockHours = normalizeRewardSourceLockHours(currentConfig?.sourceLockHours)
+    await run(
+      db,
+      `INSERT INTO settings (key, value) VALUES ('reward_payout_config', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify({ defaultMode, sourceModes, defaultLockHours, sourceLockHours })],
     )
     publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'reward_payout_config' })
-    return res.json({ ok: true, defaultMode })
+    return res.json({ ok: true, defaultMode, defaultLockHours })
   })
 
   router.post('/vip-tiers', async (req, res) => {

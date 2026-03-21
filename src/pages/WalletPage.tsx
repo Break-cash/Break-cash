@@ -42,6 +42,10 @@ type EarningDisplayGroup = {
   total_amount: number
   transferred_count: number
   pending_count: number
+  timed_locked_count: number
+  timed_locked_amount: number
+  permanent_locked_count: number
+  next_unlock_at: string | null
   entries: EarningEntry[]
 }
 
@@ -58,6 +62,19 @@ function formatDate(s: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatRemainingDuration(targetAt: string | null | undefined): string {
+  if (!targetAt) return ''
+  const ms = Date.parse(targetAt) - Date.now()
+  if (!Number.isFinite(ms) || ms <= 0) return 'الآن'
+  const totalMinutes = Math.ceil(ms / 60000)
+  const days = Math.floor(totalMinutes / (60 * 24))
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `${days} يوم ${hours} ساعة`
+  if (hours > 0) return `${hours} ساعة ${minutes} دقيقة`
+  return `${minutes} دقيقة`
 }
 
 function parseMetadata(meta: string | null): string {
@@ -91,6 +108,10 @@ function buildEarningDisplayGroup(group: EarningGroup, t: (key: string) => strin
       total_amount: Number(group.total_amount || 0),
       transferred_count: Number(group.transferred_count || 0),
       pending_count: Number(group.pending_count || 0),
+      timed_locked_count: Number(group.timed_locked_count || 0),
+      timed_locked_amount: Number(group.timed_locked_amount || 0),
+      permanent_locked_count: Number(group.permanent_locked_count || 0),
+      next_unlock_at: group.next_unlock_at || null,
       entries: group.entries || [],
     }
   }
@@ -102,6 +123,10 @@ function buildEarningDisplayGroup(group: EarningGroup, t: (key: string) => strin
       total_amount: Number(group.total_amount || 0),
       transferred_count: Number(group.transferred_count || 0),
       pending_count: Number(group.pending_count || 0),
+      timed_locked_count: Number(group.timed_locked_count || 0),
+      timed_locked_amount: Number(group.timed_locked_amount || 0),
+      permanent_locked_count: Number(group.permanent_locked_count || 0),
+      next_unlock_at: group.next_unlock_at || null,
       entries: group.entries || [],
     }
   }
@@ -113,6 +138,10 @@ function buildEarningDisplayGroup(group: EarningGroup, t: (key: string) => strin
       total_amount: Number(group.total_amount || 0),
       transferred_count: Number(group.transferred_count || 0),
       pending_count: Number(group.pending_count || 0),
+      timed_locked_count: Number(group.timed_locked_count || 0),
+      timed_locked_amount: Number(group.timed_locked_amount || 0),
+      permanent_locked_count: Number(group.permanent_locked_count || 0),
+      next_unlock_at: group.next_unlock_at || null,
       entries: group.entries || [],
     }
   }
@@ -124,6 +153,10 @@ function buildEarningDisplayGroup(group: EarningGroup, t: (key: string) => strin
       total_amount: Number(group.total_amount || 0),
       transferred_count: Number(group.transferred_count || 0),
       pending_count: Number(group.pending_count || 0),
+      timed_locked_count: Number(group.timed_locked_count || 0),
+      timed_locked_amount: Number(group.timed_locked_amount || 0),
+      permanent_locked_count: Number(group.permanent_locked_count || 0),
+      next_unlock_at: group.next_unlock_at || null,
       entries: group.entries || [],
     }
   }
@@ -539,6 +572,16 @@ export function WalletPage() {
                   <div className="border-b border-[var(--border-soft)] bg-white/[0.02] px-4 py-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
+                        {group.timed_locked_count > 0 && group.next_unlock_at ? (
+                          <div className="mb-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                            {`يوجد ${group.timed_locked_count} ربح/أرباح مقيدة من هذا المصدر بقيمة ${formatAmount(group.timed_locked_amount)}. يمكن سحبها بعد ${formatRemainingDuration(group.next_unlock_at)} (${formatDate(group.next_unlock_at)}).`}
+                          </div>
+                        ) : null}
+                        {group.permanent_locked_count > 0 ? (
+                          <div className="mb-2 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                            {`يوجد ${group.permanent_locked_count} ربح/أرباح من هذا المصدر غير قابلة للسحب حاليًا حتى يغيّر المالك القاعدة.`}
+                          </div>
+                        ) : null}
                         <p className="font-semibold text-[var(--text-primary)]">{group.title}</p>
                         <p className="text-xs text-[var(--text-muted)]">{group.description}</p>
                       </div>
@@ -557,6 +600,14 @@ export function WalletPage() {
                             {entry.transferred_wallet_txn_id ? ` · #${entry.transferred_wallet_txn_id}` : ''}
                             {` · ${formatDate(entry.created_at)}`}
                           </p>
+                          {entry.status === 'pending' && entry.locked_until ? (
+                            <p className="mt-1 text-[11px] text-amber-300">
+                              {`متاح للسحب بعد ${formatRemainingDuration(entry.locked_until)} (${formatDate(entry.locked_until)}).`}
+                            </p>
+                          ) : null}
+                          {entry.status === 'pending' && entry.payout_mode === 'bonus_locked' ? (
+                            <p className="mt-1 text-[11px] text-rose-300">هذا الربح غير قابل للسحب حاليًا.</p>
+                          ) : null}
                         </div>
                         <span
                           className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${

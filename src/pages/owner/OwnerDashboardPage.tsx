@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import {
   apiFetch,
+  adjustUserProfit,
   createAdminStaff,
   createBonusRule,
   createContentCampaign,
@@ -23,7 +24,8 @@ import {
   getOwnerGrowthSummary,
   getOwnerMonthlyFinanceReport,
   getPartnerProfiles,
-  getRewardPayoutConfigOwner,
+  deleteRewardPayoutOverrideOwner,
+  getRewardPayoutRulesOwner,
   getRegistrationStatus,
   getReferralDetails,
   getReferralStats,
@@ -53,12 +55,13 @@ import {
   getOwnerKycSubmissions,
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
-  updateRewardPayoutConfigOwner,
+  updateRewardPayoutRulesOwner,
   updateUserTwoFactor,
   processAutoKycReviews,
   reviewOwnerKycSubmission,
   reviewRecoveryCodeRequest,
   addKycWatchlistEntry,
+  upsertRewardPayoutOverridesOwner,
   uploadAdMedia,
   uploadMiningMediaAdmin,
   type AdItem,
@@ -75,7 +78,10 @@ import {
   type MiningConfig,
   type OwnerMonthlyFinanceReport,
   type PartnerProfile,
-  type RewardPayoutConfig,
+  type RewardPayoutMode,
+  type RewardPayoutApplyResult,
+  type RewardPayoutRulesResponse,
+  type RewardPayoutSource,
   type RecoveryCodeReviewRequestItem,
   type RewardTierRule,
   type SecurityOverview,
@@ -115,9 +121,65 @@ type OwnerProfitSnapshot = {
   earning_entries: EarningEntry[]
 }
 
+const REWARD_PAYOUT_SOURCE_OPTIONS: Array<{
+  value: RewardPayoutSource
+  label: string
+  description: string
+}> = [
+  { value: 'all', label: 'كل المكتسبات', description: 'تطبيق القاعدة على جميع المصادر للمستخدم المحدد.' },
+  { value: 'mining', label: 'التعدين', description: 'يشمل الأرباح اليومية القادمة من التعدين.' },
+  { value: 'tasks', label: 'المهام والمكافآت', description: 'يشمل المهام والعروض والصفقات التجريبية.' },
+  { value: 'referrals', label: 'الإحالات', description: 'يشمل مكافآت الإحالة.' },
+  { value: 'deposits', label: 'مكافآت الإيداع', description: 'يشمل مكافآت أول إيداع وما شابهها.' },
+]
+
+const REWARD_PAYOUT_MODE_OPTIONS: Array<{ value: RewardPayoutMode; label: string }> = [
+  { value: 'withdrawable', label: 'قابلة للسحب' },
+  { value: 'bonus_locked', label: 'غير قابلة للسحب' },
+]
+
+function createDefaultRewardPayoutRules(): RewardPayoutRulesResponse {
+  return {
+    defaultMode: 'withdrawable',
+    sourceModes: {},
+    defaultLockHours: 0,
+    sourceLockHours: {},
+    overridesCount: 0,
+    overrides: [],
+  }
+}
+
+function formatRewardApplyResult(result?: RewardPayoutApplyResult | null) {
+  const releasedEntries = Number(result?.releasedEntries || 0)
+  const releasedAmount = Number(result?.releasedAmount || 0)
+  const lockedEntries = Number(result?.lockedEntries || 0)
+  const lockedAmount = Number(result?.lockedAmount || 0)
+  const bonusLockedEntries = Number(result?.bonusLockedEntries || 0)
+  if (releasedEntries > 0 && lockedEntries > 0) {
+    return `تم تحرير ${releasedEntries} أرباح معلقة بقيمة ${releasedAmount.toFixed(2)} USDT، وتم تمديد أو إنشاء قفل زمني لـ ${lockedEntries} سجل بقيمة ${lockedAmount.toFixed(2)} USDT.`
+  }
+  if (releasedEntries > 0) {
+    return `تم تحرير ${releasedEntries} أرباح معلقة بقيمة ${releasedAmount.toFixed(2)} USDT.`
+  }
+  if (lockedEntries > 0) {
+    return `تم تمديد أو إنشاء قفل زمني لـ ${lockedEntries} سجل بقيمة ${lockedAmount.toFixed(2)} USDT.`
+  }
+  if (bonusLockedEntries > 0) {
+    return `تم تحويل ${bonusLockedEntries} سجلًا معلقًا إلى وضع غير قابل للسحب.`
+  }
+  return ''
+}
+
 export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const { t } = useI18n()
   const [targetUserId, setTargetUserId] = useState('')
+  const [userProfitAdjustDraft, setUserProfitAdjustDraft] = useState({
+    amount: '',
+    target: 'main' as 'main' | 'pending',
+    sourceType: 'all' as RewardPayoutSource,
+    note: '',
+  })
+  const [userProfitAdjustSaving, setUserProfitAdjustSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [avatarTargetUserId, setAvatarTargetUserId] = useState('')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -224,8 +286,18 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     activeContent: 0,
   })
   const [vipTiers, setVipTiers] = useState<VipTier[]>([])
-  const [rewardPayoutConfig, setRewardPayoutConfig] = useState<RewardPayoutConfig>({ defaultMode: 'withdrawable', overridesCount: 0 })
+  const [rewardPayoutRules, setRewardPayoutRules] = useState<RewardPayoutRulesResponse>(createDefaultRewardPayoutRules())
   const [rewardPayoutSaving, setRewardPayoutSaving] = useState(false)
+  const [rewardPayoutApplyPendingGlobal, setRewardPayoutApplyPendingGlobal] = useState(false)
+  const [rewardPayoutOverrideDraft, setRewardPayoutOverrideDraft] = useState({
+    userIdsText: '',
+    sourceType: 'all' as RewardPayoutSource,
+    payoutMode: 'withdrawable' as RewardPayoutMode,
+    lockHours: '0',
+    note: '',
+    applyPending: false,
+  })
+  const [rewardPayoutDeleteKey, setRewardPayoutDeleteKey] = useState('')
   const [vipTierDraft, setVipTierDraft] = useState({
     level: 1,
     title: 'VIP 1',
@@ -377,9 +449,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     getOwnerGrowthSummary()
       .then((res) => setOwnerSummary(res))
       .catch(() => {})
-    getRewardPayoutConfigOwner()
-      .then((res) => setRewardPayoutConfig(res))
-      .catch(() => setRewardPayoutConfig({ defaultMode: 'withdrawable', overridesCount: 0 }))
+    getRewardPayoutRulesOwner()
+      .then((res) => setRewardPayoutRules(res))
+      .catch(() => setRewardPayoutRules(createDefaultRewardPayoutRules()))
     getVipTiers()
       .then((res) => setVipTiers(res.items || []))
       .catch(() => setVipTiers([]))
@@ -545,6 +617,39 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث صلاحيات المستخدم.' })
     } finally {
       setFlagsSaving(false)
+    }
+  }
+
+  async function handleAdjustUserProfit() {
+    const uid = Number(targetUserId)
+    const amount = Number(userProfitAdjustDraft.amount || 0)
+    if (!uid || !Number.isFinite(amount) || amount <= 0) {
+      setMessage({ type: 'error', text: 'أدخل رقم مستخدم صحيحًا ومبلغ خصم أكبر من صفر.' })
+      return
+    }
+    setUserProfitAdjustSaving(true)
+    setMessage(null)
+    try {
+      const result = await adjustUserProfit({
+        userId: uid,
+        currency: 'USDT',
+        amount,
+        target: userProfitAdjustDraft.target,
+        sourceType: userProfitAdjustDraft.sourceType,
+        note: userProfitAdjustDraft.note.trim(),
+      })
+      setUserProfitAdjustDraft((prev) => ({ ...prev, amount: '', note: '' }))
+      setMessage({
+        type: 'success',
+        text:
+          result.target === 'main'
+            ? `تم خصم ${amount.toFixed(2)} USDT من الأرباح العامة. الرصيد العام المتبقي: ${Number(result.remainingMainBalance || 0).toFixed(2)} USDT.`
+            : `تم خصم ${amount.toFixed(2)} USDT من الأرباح الخاصة ${userProfitAdjustDraft.sourceType === 'all' ? 'لكل المصادر' : `لمصدر ${userProfitAdjustDraft.sourceType}`}. المتبقي من الأرباح المعلقة: ${Number(result.remainingPendingAmount || 0).toFixed(2)} USDT عبر ${Number(result.affectedEntries || 0)} سجل.`,
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل خصم الأرباح للمستخدم.' })
+    } finally {
+      setUserProfitAdjustSaving(false)
     }
   }
 
@@ -1093,24 +1198,107 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     }
   }
 
+  async function refreshRewardPayoutRules() {
+    const refreshed = await getRewardPayoutRulesOwner()
+    setRewardPayoutRules(refreshed)
+    return refreshed
+  }
+
   async function handleSaveRewardPayoutConfig() {
     setRewardPayoutSaving(true)
     setMessage(null)
     try {
-      await updateRewardPayoutConfigOwner(rewardPayoutConfig.defaultMode)
-      const refreshed = await getRewardPayoutConfigOwner()
-      setRewardPayoutConfig(refreshed)
+      const result = await updateRewardPayoutRulesOwner({
+        defaultMode: rewardPayoutRules.defaultMode,
+        sourceModes: rewardPayoutRules.sourceModes,
+        defaultLockHours: Number(rewardPayoutRules.defaultLockHours || 0),
+        sourceLockHours: rewardPayoutRules.sourceLockHours,
+        applyPending: rewardPayoutApplyPendingGlobal,
+      })
+      const refreshed = await refreshRewardPayoutRules()
+      const applyMessage = formatRewardApplyResult(result.applyPendingResult)
+      setRewardPayoutApplyPendingGlobal(false)
       setMessage({
         type: 'success',
         text:
           refreshed.defaultMode === 'bonus_locked'
-            ? 'تم ضبط الأرباح الجديدة لتكون غير قابلة للسحب افتراضيًا.'
-            : 'تم ضبط الأرباح الجديدة لتكون قابلة للسحب افتراضيًا.',
+            ? `تم حفظ القاعدة العامة. الوضع الافتراضي الآن يجعل المكتسبات الجديدة غير قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`
+            : `تم حفظ القاعدة العامة. الوضع الافتراضي الآن يجعل المكتسبات الجديدة قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`,
       })
+      if (false) {
+      setMessage({
+        type: 'success',
+        text:
+          refreshed.defaultMode === 'bonus_locked'
+            ? 'تم حفظ القاعدة العامة، والوضع الافتراضي الآن يجعل المكتسبات الجديدة غير قابلة للسحب.'
+            : 'تم حفظ القاعدة العامة، والوضع الافتراضي الآن يجعل المكتسبات الجديدة قابلة للسحب.',
+      })
+      }
     } catch (e) {
-      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ وضع الأرباح.' })
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ قواعد السحب العامة.' })
     } finally {
       setRewardPayoutSaving(false)
+    }
+  }
+
+  async function handleSaveRewardPayoutOverride() {
+    if (!rewardPayoutOverrideDraft.userIdsText.trim()) {
+      setMessage({ type: 'error', text: 'أدخل رقم مستخدم واحد أو عدة أرقام مفصولة بفواصل أو أسطر.' })
+      return
+    }
+    setRewardPayoutSaving(true)
+    setMessage(null)
+    try {
+      const result = await upsertRewardPayoutOverridesOwner({
+        userIdsText: rewardPayoutOverrideDraft.userIdsText,
+        sourceType: rewardPayoutOverrideDraft.sourceType,
+        payoutMode: rewardPayoutOverrideDraft.payoutMode,
+        lockHours: Number(rewardPayoutOverrideDraft.lockHours || 0),
+        note: rewardPayoutOverrideDraft.note.trim(),
+        applyPending: rewardPayoutOverrideDraft.applyPending,
+      })
+      await refreshRewardPayoutRules()
+      setRewardPayoutOverrideDraft((prev) => ({
+        ...prev,
+        userIdsText: '',
+        lockHours: '0',
+        note: '',
+        applyPending: false,
+      }))
+      const applyMessage = formatRewardApplyResult(result.applyPendingResult)
+      setMessage({
+        type: 'success',
+        text: `تم حفظ الاستثناء لـ ${result.affectedUsers} مستخدم/مستخدمين بنجاح.${applyMessage ? ` ${applyMessage}` : ''}`,
+      })
+      if (false) {
+      const releasedEntries = Number(result.applyPendingResult?.releasedEntries || 0)
+      const releasedAmount = Number(result.applyPendingResult?.releasedAmount || 0)
+      setMessage({
+        type: 'success',
+        text:
+          releasedEntries > 0
+            ? `تم حفظ الاستثناء لـ ${result.affectedUsers} مستخدم/مستخدمين، وتم تحرير ${releasedEntries} أرباح معلقة بقيمة ${releasedAmount.toFixed(2)} USDT.`
+            : `تم حفظ الاستثناء لـ ${result.affectedUsers} مستخدم/مستخدمين بنجاح.`,
+      })
+      }
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ استثناءات السحب.' })
+    } finally {
+      setRewardPayoutSaving(false)
+    }
+  }
+
+  async function handleDeleteRewardPayoutOverride(overrideKey: string) {
+    setRewardPayoutDeleteKey(overrideKey)
+    setMessage(null)
+    try {
+      await deleteRewardPayoutOverrideOwner(overrideKey)
+      await refreshRewardPayoutRules()
+      setMessage({ type: 'success', text: 'تم حذف الاستثناء المحدد.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حذف الاستثناء.' })
+    } finally {
+      setRewardPayoutDeleteKey('')
     }
   }
 
@@ -1746,6 +1934,64 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 >
                   {flagsSaving ? 'جارٍ الحفظ...' : 'حفظ إعدادات المستخدم'}
                 </button>
+
+                <div className="owner-section-divider" />
+                <h3 className="owner-wallet-heading">خصم الأرباح العامة والخاصة</h3>
+                <p className="owner-hint">الخصم العام يسحب من الرصيد العام القابل للسحب. الخصم الخاص يسحب من الأرباح المعلقة/المقيدة حسب المصدر قبل ترحيلها.</p>
+                <div className="owner-form-row owner-image-form">
+                  <select
+                    className="field-input owner-image-key"
+                    value={userProfitAdjustDraft.target}
+                    onChange={(e) =>
+                      setUserProfitAdjustDraft((prev) => ({
+                        ...prev,
+                        target: e.target.value === 'pending' ? 'pending' : 'main',
+                      }))
+                    }
+                  >
+                    <option value="main">خصم أرباح عامة</option>
+                    <option value="pending">خصم أرباح خاصة</option>
+                  </select>
+                  <input
+                    type="number"
+                    className="field-input"
+                    placeholder="المبلغ بالـ USDT"
+                    value={userProfitAdjustDraft.amount}
+                    onChange={(e) => setUserProfitAdjustDraft((prev) => ({ ...prev, amount: e.target.value }))}
+                  />
+                </div>
+                {userProfitAdjustDraft.target === 'pending' ? (
+                  <select
+                    className="field-input owner-image-key"
+                    value={userProfitAdjustDraft.sourceType}
+                    onChange={(e) =>
+                      setUserProfitAdjustDraft((prev) => ({
+                        ...prev,
+                        sourceType: e.target.value as RewardPayoutSource,
+                      }))
+                    }
+                  >
+                    {REWARD_PAYOUT_SOURCE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : null}
+                <input
+                  className="field-input owner-note-input"
+                  placeholder="ملاحظة داخلية لسبب الخصم"
+                  value={userProfitAdjustDraft.note}
+                  onChange={(e) => setUserProfitAdjustDraft((prev) => ({ ...prev, note: e.target.value }))}
+                />
+                <div className="owner-buttons">
+                  <button
+                    type="button"
+                    className="wallet-action-btn wallet-action-withdraw"
+                    onClick={handleAdjustUserProfit}
+                    disabled={userProfitAdjustSaving}
+                  >
+                    {userProfitAdjustSaving ? '...' : userProfitAdjustDraft.target === 'main' ? 'خصم الأرباح العامة' : 'خصم الأرباح الخاصة'}
+                  </button>
+                </div>
               </div>
             ) : (
               <p className="owner-empty">أدخل رقم مستخدم صحيح لعرض إعداداته المتقدمة.</p>
@@ -2713,40 +2959,230 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           </section>
 
           <section className="owner-balance-section">
-            <h2 className="owner-section-title">وضع أرباح المكافآت</h2>
-            <p className="owner-hint">تحكم افتراضي في أرباح الإحالات والمكافآت والمهام الجديدة: إما تُضاف كرصد قابل للسحب، أو تبقى أرباحًا مقيدة غير قابلة للسحب.</p>
+            <h2 className="owner-section-title">صلاحيات سحب المكتسبات</h2>
+            <p className="owner-hint">تحكم شامل في كل المكتسبات القادمة من التعدين والمهام والإحالات ومكافآت الإيداع: افتراضي عام، قواعد حسب المصدر، واستثناءات فردية أو جماعية للمستخدمين.</p>
             <div className="owner-actions-card">
+              <h3 className="owner-wallet-heading">القاعدة العامة</h3>
               <div className="owner-form-row">
                 <select
                   className="field-input"
-                  value={rewardPayoutConfig.defaultMode}
+                  value={rewardPayoutRules.defaultMode}
                   onChange={(e) =>
-                    setRewardPayoutConfig((prev) => ({
+                    setRewardPayoutRules((prev) => ({
                       ...prev,
                       defaultMode: e.target.value === 'bonus_locked' ? 'bonus_locked' : 'withdrawable',
                     }))
                   }
                 >
-                  <option value="withdrawable">قابلة للسحب</option>
-                  <option value="bonus_locked">غير قابلة للسحب</option>
+                  {REWARD_PAYOUT_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="field-input"
+                  placeholder="مدة التقييد العامة بالساعات"
+                  value={rewardPayoutRules.defaultLockHours}
+                  onChange={(e) =>
+                    setRewardPayoutRules((prev) => ({
+                      ...prev,
+                      defaultLockHours: Math.max(0, Number(e.target.value || 0)),
+                    }))
+                  }
+                />
                 <div className="owner-actions-card">
                   <div className="owner-hint">
-                    {rewardPayoutConfig.defaultMode === 'bonus_locked'
-                      ? 'الوضع الحالي: الأرباح الجديدة ستبقى مقيدة.'
-                      : 'الوضع الحالي: الأرباح الجديدة ستدخل في الرصيد القابل للسحب.'}
+                    {rewardPayoutRules.defaultMode === 'bonus_locked'
+                      ? 'القاعدة العامة الحالية: أي مكتسب جديد يبقى مقيدًا ما لم توجد قاعدة أكثر تخصيصًا.'
+                      : 'القاعدة العامة الحالية: أي مكتسب جديد يدخل في الرصيد القابل للسحب ما لم توجد قاعدة أكثر تخصيصًا.'}
                   </div>
-                  <div className="owner-hint">{`عدد الاستثناءات الفردية الحالية: ${Number(rewardPayoutConfig.overridesCount || 0)}`}</div>
+                  <div className="owner-hint">{`إجمالي الاستثناءات الحالية: ${Number(rewardPayoutRules.overridesCount || 0)}`}</div>
                 </div>
               </div>
-              {Number(rewardPayoutConfig.overridesCount || 0) > 0 ? (
-                <p className="owner-hint">المستخدمون الذين لديهم override فردي لن يتأثروا بهذا الإعداد العام.</p>
-              ) : null}
+              {REWARD_PAYOUT_SOURCE_OPTIONS.filter((source) => source.value !== 'all').map((source) => {
+                const sourceKey = source.value as Exclude<RewardPayoutSource, 'all'>
+                const currentMode = rewardPayoutRules.sourceModes[sourceKey] || rewardPayoutRules.defaultMode
+                return (
+                  <div key={source.value} className="owner-form-row">
+                    <div className="owner-actions-card">
+                      <strong>{source.label}</strong>
+                      <div className="owner-hint">{source.description}</div>
+                    </div>
+                    <select
+                      className="field-input"
+                      value={currentMode}
+                      onChange={(e) =>
+                        setRewardPayoutRules((prev) => ({
+                          ...prev,
+                          sourceModes: {
+                            ...prev.sourceModes,
+                            [sourceKey]: e.target.value === 'bonus_locked' ? 'bonus_locked' : 'withdrawable',
+                          },
+                        }))
+                      }
+	                    >
+	                      {REWARD_PAYOUT_MODE_OPTIONS.map((option) => (
+	                        <option key={option.value} value={option.value}>{option.label}</option>
+	                      ))}
+	                    </select>
+	                    <input
+	                      type="number"
+	                      min="0"
+	                      step="1"
+	                      className="field-input"
+	                      placeholder="مدة التقييد بالساعات"
+	                      value={rewardPayoutRules.sourceLockHours[sourceKey] ?? rewardPayoutRules.defaultLockHours}
+	                      onChange={(e) =>
+	                        setRewardPayoutRules((prev) => ({
+	                          ...prev,
+	                          sourceLockHours: {
+	                            ...prev.sourceLockHours,
+	                            [sourceKey]: Math.max(0, Number(e.target.value || 0)),
+	                          },
+	                        }))
+	                      }
+	                    />
+	                  </div>
+                )
+              })}
+              <label className="owner-checkbox">
+                <input
+                  type="checkbox"
+                  checked={rewardPayoutApplyPendingGlobal}
+                  onChange={(e) => setRewardPayoutApplyPendingGlobal(e.target.checked)}
+                />
+                <span>طبّق القواعد الحالية أيضًا على الأرباح المعلقة الحالية. إذا كانت هناك مدة تقييد فسيتم تمديد القفل من وقت فك القفل الحالي أو من الآن.</span>
+              </label>
               <div className="owner-buttons">
                 <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSaveRewardPayoutConfig} disabled={rewardPayoutSaving}>
-                  {rewardPayoutSaving ? '...' : 'حفظ وضع الأرباح'}
+                  {rewardPayoutSaving ? '...' : 'حفظ القواعد العامة'}
                 </button>
               </div>
+            </div>
+
+            <div className="owner-actions-card">
+              <h3 className="owner-wallet-heading">استثناء فردي أو جماعي</h3>
+              <p className="owner-hint">أدخل رقم مستخدم واحد أو عدة أرقام مفصولة بفواصل أو أسطر، ثم اختر المصدر ونوع السحب. هذه القاعدة تتغلب على الإعداد العام لذلك المستخدم.</p>
+              <textarea
+                className="field-input"
+                rows={3}
+                placeholder={'أرقام المستخدمين: 12, 18, 55'}
+                value={rewardPayoutOverrideDraft.userIdsText}
+                onChange={(e) => setRewardPayoutOverrideDraft((prev) => ({ ...prev, userIdsText: e.target.value }))}
+              />
+              <div className="owner-form-row">
+                <select
+                  className="field-input"
+                  value={rewardPayoutOverrideDraft.sourceType}
+                  onChange={(e) =>
+                    setRewardPayoutOverrideDraft((prev) => ({
+                      ...prev,
+                      sourceType: e.target.value as RewardPayoutSource,
+                    }))
+                  }
+                >
+                  {REWARD_PAYOUT_SOURCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <select
+                  className="field-input"
+                  value={rewardPayoutOverrideDraft.payoutMode}
+                  onChange={(e) =>
+                    setRewardPayoutOverrideDraft((prev) => ({
+                      ...prev,
+                      payoutMode: e.target.value === 'bonus_locked' ? 'bonus_locked' : 'withdrawable',
+                    }))
+                  }
+                >
+                  {REWARD_PAYOUT_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="field-input"
+                  placeholder="مدة التقييد بالساعات"
+                  value={rewardPayoutOverrideDraft.lockHours}
+                  onChange={(e) =>
+                    setRewardPayoutOverrideDraft((prev) => ({
+                      ...prev,
+                      lockHours: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <textarea
+                className="field-input"
+                rows={2}
+                placeholder="ملاحظة داخلية عن سبب الاستثناء"
+                value={rewardPayoutOverrideDraft.note}
+                onChange={(e) => setRewardPayoutOverrideDraft((prev) => ({ ...prev, note: e.target.value }))}
+              />
+              <label className="owner-checkbox">
+                <input
+                  type="checkbox"
+                  checked={rewardPayoutOverrideDraft.applyPending}
+                  onChange={(e) =>
+                    setRewardPayoutOverrideDraft((prev) => ({
+                      ...prev,
+                      applyPending: e.target.checked,
+                    }))
+                  }
+                />
+                <span>إذا أصبحت القاعدة قابلة للسحب، حرر أيضًا الأرباح المعلقة السابقة لنفس المصدر.</span>
+              </label>
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleSaveRewardPayoutOverride} disabled={rewardPayoutSaving}>
+                  {rewardPayoutSaving ? '...' : 'حفظ الاستثناء'}
+                </button>
+              </div>
+            </div>
+
+            <div className="owner-history-card">
+              <h3 className="owner-wallet-heading">الاستثناءات الحالية</h3>
+              {rewardPayoutRules.overrides.length === 0 ? (
+                <p className="owner-empty">لا توجد استثناءات فردية أو جماعية محفوظة حاليًا.</p>
+              ) : (
+                <ul className="owner-history-list">
+                  {rewardPayoutRules.overrides.map((item) => {
+                    const sourceLabel = REWARD_PAYOUT_SOURCE_OPTIONS.find((option) => option.value === item.sourceType)?.label || item.sourceType
+                    const payoutLabel = REWARD_PAYOUT_MODE_OPTIONS.find((option) => option.value === item.payoutMode)?.label || item.payoutMode
+                    const lockLabel =
+                      item.lockHours == null
+                        ? 'المُدة: حسب القاعدة العامة'
+                        : Number(item.lockHours || 0) > 0
+                          ? `المدة: ${Number(item.lockHours || 0)} ساعة`
+                          : 'المدة: بدون تقييد زمني'
+                    const userLabel = item.user.displayName || item.user.email || item.user.phone || `#${item.userId}`
+                    return (
+                      <li key={item.overrideKey} className="owner-history-item">
+                        <div className="owner-history-main">
+                          <strong>{`${userLabel} | ${sourceLabel}`}</strong>
+                          <small>{lockLabel}</small>
+                          <small>{`الوضع: ${payoutLabel} | النوع: ${item.legacy ? 'قديم' : 'مخصص'} | آخر تحديث: ${item.updatedAt || '-'}`}</small>
+                          <small>{`أرباح معلقة مرتبطة بهذه القاعدة: ${Number(item.pendingAmount || 0).toFixed(2)} USDT عبر ${Number(item.pendingCount || 0)} سجل`}</small>
+                          {item.note ? <small>{`ملاحظة: ${item.note}`}</small> : null}
+                        </div>
+                        <div className="owner-history-actions">
+                          <button
+                            type="button"
+                            className="wallet-action-btn owner-set-btn"
+                            onClick={() => handleDeleteRewardPayoutOverride(item.overrideKey)}
+                            disabled={rewardPayoutDeleteKey === item.overrideKey}
+                          >
+                            {rewardPayoutDeleteKey === item.overrideKey ? '...' : 'حذف'}
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </div>
           </section>
 

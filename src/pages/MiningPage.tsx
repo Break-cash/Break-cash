@@ -70,13 +70,18 @@ export function MiningPage() {
     setConfirmAction(action)
   }
 
-  function openIncreaseFlow() {
+  function handlePrimaryMiningAction() {
     const minimumAmount = Number(config?.minSubscription || 500)
-    if (!selectedAmount && Number(customAmount || 0) < minimumAmount) {
+    if (amountToUse < minimumAmount) {
       setSelectedAmount(minimumAmount)
       setCustomAmount('')
+      const text = t('mining_min_subscription_error')
+      setMessage({ type: 'error', text })
+      emitToast({ kind: 'error', errorCode: 'INVALID_AMOUNT', message: text })
+      subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
     }
-    subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    openConfirm(hasActiveSubscription ? 'increase' : 'subscribe')
   }
 
   async function performConfirmedAction() {
@@ -159,15 +164,7 @@ export function MiningPage() {
         <button
           type="button"
           className="mt-3 w-full rounded-xl border border-brand-blue/40 bg-brand-blue px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => {
-            if (amountToUse < Number(config?.minSubscription || 500)) {
-              const text = t('mining_min_subscription_error')
-              setMessage({ type: 'error', text })
-              emitToast({ kind: 'error', errorCode: 'INVALID_AMOUNT', message: text })
-              return
-            }
-            openConfirm(hasActiveSubscription ? 'increase' : 'subscribe')
-          }}
+          onClick={handlePrimaryMiningAction}
           disabled={submitting}
         >
           {hasActiveSubscription ? t('mining_increase_subscription') : t('mining_subscribe_button')}
@@ -208,14 +205,6 @@ export function MiningPage() {
               disabled={submitting || profile.status === 'inactive'}
             >
               {t('mining_emergency_withdraw')}
-            </button>
-            <button
-              type="button"
-              className="wallet-action-btn owner-set-btn"
-              onClick={openIncreaseFlow}
-              disabled={submitting || profile.status !== 'active'}
-            >
-              {t('mining_increase_subscription')}
             </button>
           </div>
         </section>

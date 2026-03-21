@@ -223,6 +223,12 @@ export async function createEarningEntry(db, payload) {
 export async function transferEarningToMain(db, earningEntryId, idempotencyKey = null) {
   const entry = await get(db, `SELECT * FROM earning_entries WHERE id = ? AND status = 'pending' LIMIT 1`, [earningEntryId])
   if (!entry) return null
+  const payoutMode = String(entry.payout_mode || 'withdrawable').trim().toLowerCase()
+  if (payoutMode === 'bonus_locked') return null
+  if (entry.locked_until) {
+    const lockedUntilMs = Date.parse(String(entry.locked_until))
+    if (Number.isFinite(lockedUntilMs) && lockedUntilMs > Date.now()) return null
+  }
 
   const txn = await recordTransaction(db, {
     userId: entry.user_id,
@@ -370,7 +376,7 @@ export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybe
   const rows = await all(
     db,
     `SELECT id, source_type, reference_type, reference_id, currency, amount, status,
-            transferred_at, transferred_wallet_txn_id, created_at
+            payout_mode, locked_until, transferred_at, transferred_wallet_txn_id, created_at
      FROM earning_entries
      WHERE ${whereClause}
      ORDER BY created_at DESC LIMIT ?`,
@@ -388,11 +394,39 @@ export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybe
   const bySource = {}
   for (const e of entries) {
     const key = String(e.source_type || 'system')
-    if (!bySource[key]) bySource[key] = { source_type: key, entries: [], total_amount: 0, transferred_count: 0, pending_count: 0 }
+    if (!bySource[key]) {
+      bySource[key] = {
+        source_type: key,
+        entries: [],
+        total_amount: 0,
+        transferred_count: 0,
+        pending_count: 0,
+        timed_locked_count: 0,
+        timed_locked_amount: 0,
+        permanent_locked_count: 0,
+        next_unlock_at: null,
+      }
+    }
     bySource[key].entries.push(e)
     bySource[key].total_amount = Number((Number(bySource[key].total_amount) + Number(e.amount || 0)).toFixed(8))
     if (e.status === 'transferred') bySource[key].transferred_count += 1
-    else bySource[key].pending_count += 1
+    else {
+      bySource[key].pending_count += 1
+      const payoutMode = String(e.payout_mode || 'withdrawable').trim().toLowerCase()
+      if (payoutMode === 'bonus_locked') {
+        bySource[key].permanent_locked_count += 1
+      }
+      const lockedUntilMs = e.locked_until ? Date.parse(String(e.locked_until)) : Number.NaN
+      if (Number.isFinite(lockedUntilMs) && lockedUntilMs > Date.now()) {
+        bySource[key].timed_locked_count += 1
+        bySource[key].timed_locked_amount = Number(
+          (Number(bySource[key].timed_locked_amount) + Number(e.amount || 0)).toFixed(8),
+        )
+        if (!bySource[key].next_unlock_at || lockedUntilMs < Date.parse(String(bySource[key].next_unlock_at))) {
+          bySource[key].next_unlock_at = e.locked_until
+        }
+      }
+    }
   }
   return { entries, grouped: Object.values(bySource) }
 }

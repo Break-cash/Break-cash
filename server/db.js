@@ -430,6 +430,22 @@ async function ensureSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_user_reward_mode_overrides_user
       ON user_reward_mode_overrides(user_id);
 
+    CREATE TABLE IF NOT EXISTS user_reward_payout_overrides (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source_type TEXT NOT NULL DEFAULT 'all',
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      lock_hours INTEGER,
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, source_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_user
+      ON user_reward_payout_overrides(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_source
+      ON user_reward_payout_overrides(source_type);
+
     CREATE TABLE IF NOT EXISTS kyc_submissions (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -731,6 +747,21 @@ async function ensureSchema(db) {
     )
   `)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_user_reward_mode_overrides_user ON user_reward_mode_overrides(user_id)`)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_reward_payout_overrides (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source_type TEXT NOT NULL DEFAULT 'all',
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      lock_hours INTEGER,
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, source_type)
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_user ON user_reward_payout_overrides(user_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_source ON user_reward_payout_overrides(source_type)`)
   await db.query(`ALTER TABLE mining_profiles ADD COLUMN IF NOT EXISTS video_access_unlocked INTEGER NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE mining_profiles ADD COLUMN IF NOT EXISTS video_access_unlocked_at TIMESTAMP`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS feature_type TEXT NOT NULL DEFAULT 'trial_trade'`)
@@ -941,15 +972,21 @@ async function ensureSchema(db) {
       currency TEXT NOT NULL DEFAULT 'USDT',
       amount DOUBLE PRECISION NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      locked_until TIMESTAMP,
       transferred_at TIMESTAMP,
       transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(source_type, reference_type, reference_id)
     )
   `)
+  await db.query(`ALTER TABLE user_reward_payout_overrides ADD COLUMN IF NOT EXISTS lock_hours INTEGER`)
+  await db.query(`ALTER TABLE earning_entries ADD COLUMN IF NOT EXISTS payout_mode TEXT NOT NULL DEFAULT 'withdrawable'`)
+  await db.query(`ALTER TABLE earning_entries ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_user ON earning_entries(user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_status ON earning_entries(status)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_reference ON earning_entries(reference_type, reference_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_locked_until ON earning_entries(locked_until)`)
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS mining_subscriptions (

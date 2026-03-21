@@ -7,6 +7,7 @@ import {
   getAppleTouchIconUrl,
   getCurrentUser,
   getFaviconUrl,
+  getMyPermissions,
   getRecoveryCodeStatus,
   getThemeColor,
   getToken,
@@ -171,6 +172,7 @@ function LoginRouteWrapper({ onAuthSuccess }: LoginRouteWrapperProps) {
 
 function App() {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [grantedPermissions, setGrantedPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(() => !!getToken())
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false)
@@ -182,9 +184,16 @@ function App() {
   useEffect(() => {
     const token = getToken()
     if (!token) return
-    getCurrentUser()
-      .then((res) => setUser(res.user))
-      .catch(() => setToken(null))
+    Promise.all([getCurrentUser(), getMyPermissions()])
+      .then(([userRes, permissionsRes]) => {
+        setUser(userRes.user)
+        setGrantedPermissions(Array.isArray(permissionsRes.permissions) ? permissionsRes.permissions : [])
+      })
+      .catch(() => {
+        setToken(null)
+        setUser(null)
+        setGrantedPermissions([])
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -262,19 +271,42 @@ function App() {
   }, [recoveryModalOpen, recoveryCountdown])
 
   const isAuthenticated = !!user
-  const canManageUsers = useMemo(
-    () => user?.role === 'owner',
-    [user],
+  const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
+  const hasGrantedPermission = useMemo(
+    () => (permission: string) => Boolean(isOwner || grantedPermissions.includes(permission)),
+    [grantedPermissions, isOwner],
   )
-  const canManageInvites = canManageUsers
-  const canManageBalances = canManageUsers
-  const canManagePermissions = user?.role === 'owner'
-  const canViewReports = canManageUsers
+  const canManageUsers = useMemo(
+    () => hasGrantedPermission('manage_users'),
+    [hasGrantedPermission],
+  )
+  const canManageInvites = useMemo(
+    () => hasGrantedPermission('manage_invites'),
+    [hasGrantedPermission],
+  )
+  const canManageBalances = useMemo(
+    () => hasGrantedPermission('manage_balances'),
+    [hasGrantedPermission],
+  )
+  const canManagePermissions = useMemo(
+    () => hasGrantedPermission('manage_permissions'),
+    [hasGrantedPermission],
+  )
+  const canViewReports = useMemo(
+    () => hasGrantedPermission('view_reports'),
+    [hasGrantedPermission],
+  )
 
   function handleAuthSuccess() {
-    getCurrentUser()
-      .then((res) => setUser(res.user))
-      .catch(() => setUser(null))
+    Promise.all([getCurrentUser(), getMyPermissions()])
+      .then(([userRes, permissionsRes]) => {
+        setUser(userRes.user)
+        setGrantedPermissions(Array.isArray(permissionsRes.permissions) ? permissionsRes.permissions : [])
+      })
+      .catch(() => {
+        setUser(null)
+        setGrantedPermissions([])
+      })
   }
 
   function handleLogout() {
@@ -288,6 +320,7 @@ function App() {
   function confirmLogout() {
     setToken(null)
     setUser(null)
+    setGrantedPermissions([])
     setLogoutConfirmOpen(false)
   }
 
@@ -403,25 +436,25 @@ function App() {
                     <Route
                       path="/admin/dashboard"
                       element={
-                        user?.role === 'owner' ? <AdminDashboardPage /> : <Navigate to="/portfolio" replace />
+                        canViewReports ? <AdminDashboardPage /> : <Navigate to="/portfolio" replace />
                       }
                     />
                     <Route
                       path="/admin/users"
                       element={
-                        user?.role === 'owner' ? <AdminUsersPage /> : <Navigate to="/portfolio" replace />
+                        canManageUsers ? <AdminUsersPage /> : <Navigate to="/portfolio" replace />
                       }
                     />
                     <Route
                       path="/admin/invites"
                       element={
-                        user?.role === 'owner' ? <AdminInvitesPage /> : <Navigate to="/portfolio" replace />
+                        canManageInvites ? <AdminInvitesPage /> : <Navigate to="/portfolio" replace />
                       }
                     />
                     <Route
                       path="/admin/balances"
                       element={
-                        user?.role === 'owner' ? (
+                        canManageBalances ? (
                           <AdminBalancesPage />
                         ) : (
                           <Navigate to="/portfolio" replace />
@@ -431,7 +464,7 @@ function App() {
                     <Route
                       path="/admin/permissions"
                       element={
-                        user?.role === 'owner' ? (
+                        canManagePermissions ? (
                           <AdminPermissionsPage />
                         ) : (
                           <Navigate to="/portfolio" replace />

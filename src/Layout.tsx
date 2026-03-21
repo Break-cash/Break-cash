@@ -83,6 +83,22 @@ export function Layout({
       ]
     : []
   const utilityLinks = [...ownerLinks, ...adminLinks].filter(Boolean) as { title: string; route: string }[]
+  const managementShortcuts = [
+    isOwner ? { title: t('nav_owner'), route: '/owner/operations' } : null,
+    canViewReports ? { title: t('nav_admin'), route: '/admin/dashboard' } : null,
+    canManageUsers ? { title: t('admin_users'), route: '/admin/users' } : null,
+    canManageInvites ? { title: t('admin_invites'), route: '/admin/invites' } : null,
+    canManageBalances ? { title: t('admin_balances'), route: '/admin/balances' } : null,
+    canManagePermissions ? { title: t('admin_permissions'), route: '/admin/permissions' } : null,
+  ].filter(Boolean) as { title: string; route: string }[]
+  const managementShortcut = managementShortcuts.length > 0
+    ? {
+        to: managementShortcuts[0].route,
+        label: isOwner ? t('nav_owner') : t('nav_admin'),
+        count: managementShortcuts.length,
+        kind: isOwner ? 'owner' as const : 'admin' as const,
+      }
+    : null
 
   useEffect(() => {
     apiFetch('/api/notifications/unreadCount')
@@ -464,7 +480,7 @@ export function Layout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1280px] px-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-10">
+      <main className="mx-auto w-full max-w-[1280px] px-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-[calc(9rem+env(safe-area-inset-bottom))]">
         <AnimatePresence initial={false}>
           {notificationsOpen && (
             <motion.div
@@ -577,9 +593,7 @@ export function Layout({
         </div>
       </main>
       <InstallPrompt />
-      <div className="lg:hidden">
-        <MobileBottomNav />
-      </div>
+      <MobileBottomNav managementShortcut={managementShortcut} />
     </div>
   )
 }

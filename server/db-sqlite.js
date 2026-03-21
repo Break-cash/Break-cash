@@ -538,6 +538,30 @@ CREATE TABLE IF NOT EXISTS partner_profiles (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS user_reward_mode_overrides (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+  note TEXT,
+  updated_by INTEGER REFERENCES users(id),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_reward_mode_overrides_user ON user_reward_mode_overrides(user_id);
+
+CREATE TABLE IF NOT EXISTS user_reward_payout_overrides (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  source_type TEXT NOT NULL DEFAULT 'all',
+  payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+  lock_hours INTEGER,
+  note TEXT,
+  updated_by INTEGER REFERENCES users(id),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, source_type)
+);
+CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_user ON user_reward_payout_overrides(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_source ON user_reward_payout_overrides(source_type);
+
 CREATE TABLE IF NOT EXISTS content_campaigns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_type TEXT NOT NULL,
@@ -698,6 +722,8 @@ CREATE TABLE IF NOT EXISTS earning_entries (
   currency TEXT NOT NULL DEFAULT 'USDT',
   amount REAL NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
+  payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+  locked_until TEXT,
   transferred_at TEXT,
   transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -797,6 +823,34 @@ async function ensureSchema(db) {
     await runAsync(db, `ALTER TABLE vip_tiers ADD COLUMN referral_percent REAL NOT NULL DEFAULT 3`)
   }
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_kyc_submissions_review_status ON kyc_submissions(review_status)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS user_reward_mode_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_reward_mode_overrides_user ON user_reward_mode_overrides(user_id)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS user_reward_payout_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      source_type TEXT NOT NULL DEFAULT 'all',
+      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+      lock_hours INTEGER,
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, source_type)
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_user ON user_reward_payout_overrides(user_id)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_source ON user_reward_payout_overrides(source_type)`)
   await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_users_total_deposit ON users(total_deposit)`)
@@ -858,6 +912,21 @@ async function ensureSchema(db) {
   await ensureLockCol('lock_status', `ALTER TABLE user_principal_locks ADD COLUMN lock_status TEXT NOT NULL DEFAULT 'locked'`)
   await ensureLockCol('unlocked_at', `ALTER TABLE user_principal_locks ADD COLUMN unlocked_at TEXT`)
   await ensureLockCol('updated_at', `ALTER TABLE user_principal_locks ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`)
+  const rewardPayoutOverrideCols = await allAsync(db, `PRAGMA table_info(user_reward_payout_overrides)`)
+  const ensureRewardPayoutOverrideCol = async (name, sql) => {
+    if (!rewardPayoutOverrideCols.some((row) => String(row.name) === name)) {
+      await runAsync(db, sql)
+    }
+  }
+  await ensureRewardPayoutOverrideCol('lock_hours', `ALTER TABLE user_reward_payout_overrides ADD COLUMN lock_hours INTEGER`)
+  const earningEntryCols = await allAsync(db, `PRAGMA table_info(earning_entries)`)
+  const ensureEarningEntryCol = async (name, sql) => {
+    if (!earningEntryCols.some((row) => String(row.name) === name)) {
+      await runAsync(db, sql)
+    }
+  }
+  await ensureEarningEntryCol('payout_mode', `ALTER TABLE earning_entries ADD COLUMN payout_mode TEXT NOT NULL DEFAULT 'withdrawable'`)
+  await ensureEarningEntryCol('locked_until', `ALTER TABLE earning_entries ADD COLUMN locked_until TEXT`)
   const overrideCols = await allAsync(db, `PRAGMA table_info(user_unlock_overrides)`)
   const ensureOverrideCol = async (name, sql) => {
     if (!overrideCols.some((row) => String(row.name) === name)) {
@@ -876,6 +945,7 @@ async function ensureSchema(db) {
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_id ON withdrawal_requests(user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status ON withdrawal_requests(request_status)`)
   await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_withdrawal_requests_idempotency ON withdrawal_requests(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_earning_entries_locked_until ON earning_entries(locked_until)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_principal_locks_user_currency ON user_principal_locks(user_id, currency, lock_status)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards(referred_user_id)`)
