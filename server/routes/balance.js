@@ -27,6 +27,7 @@ import { createLocalizedNotification } from '../services/notifications.js'
 import { getDefaultVipTierRows, getVipRuntimeRules } from '../services/vip-rules.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
+const PRINCIPAL_UNLOCK_RATIO = 0.5
 const DEFAULT_BALANCE_RULES = {
   minDeposit: 10,
   minWithdrawal: 10,
@@ -35,8 +36,8 @@ const DEFAULT_BALANCE_RULES = {
   manualReview: true,
   withdrawalFeePercent: 0,
   minimumProfitToUnlock: 0,
-  defaultUnlockRatio: 1,
-  unlockRatioByLevel: { 0: 1, 1: 0.9, 2: 0.75, 3: 0.6, 4: 0.45, 5: 0.3 },
+  defaultUnlockRatio: PRINCIPAL_UNLOCK_RATIO,
+  unlockRatioByLevel: { 0: PRINCIPAL_UNLOCK_RATIO, 1: PRINCIPAL_UNLOCK_RATIO, 2: PRINCIPAL_UNLOCK_RATIO, 3: PRINCIPAL_UNLOCK_RATIO, 4: PRINCIPAL_UNLOCK_RATIO, 5: PRINCIPAL_UNLOCK_RATIO },
 }
 
 async function withTransaction(db, fn) {
@@ -218,13 +219,13 @@ async function getEffectiveUnlockProfile(db, userId, currency, rules) {
   const user = await get(db, `SELECT id, vip_level FROM users WHERE id = ? LIMIT 1`, [userId])
   const vipLevel = Number(user?.vip_level || 0)
   const override = await getUserUnlockOverride(db, userId)
-  const ratioFromLevel = Number(rules.unlockRatioByLevel?.[String(vipLevel)] ?? rules.defaultUnlockRatio ?? 1)
+  const ratioFromLevel = PRINCIPAL_UNLOCK_RATIO
   const unlockRatio =
     override?.custom_unlock_ratio != null
       ? Number(override.custom_unlock_ratio)
       : Number.isFinite(ratioFromLevel)
         ? ratioFromLevel
-        : 1
+        : PRINCIPAL_UNLOCK_RATIO
   const minimumProfitToUnlock =
     override?.custom_min_profit != null
       ? Number(override.custom_min_profit)
@@ -234,7 +235,7 @@ async function getEffectiveUnlockProfile(db, userId, currency, rules) {
     currency,
     vipLevel,
     forceUnlockPrincipal: Number(override?.force_unlock_principal || 0) === 1,
-    unlockRatio: Number.isFinite(unlockRatio) && unlockRatio >= 0 ? unlockRatio : 1,
+    unlockRatio: Number.isFinite(unlockRatio) && unlockRatio >= 0 ? unlockRatio : PRINCIPAL_UNLOCK_RATIO,
     minimumProfitToUnlock: Number.isFinite(minimumProfitToUnlock) && minimumProfitToUnlock >= 0 ? minimumProfitToUnlock : 0,
     overrideNote: String(override?.note || ''),
   }
