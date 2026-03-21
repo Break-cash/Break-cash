@@ -24,7 +24,7 @@ import {
   verifyUnexpectedZeroBalances,
 } from '../services/wallet-reconciliation.js'
 import { createLocalizedNotification } from '../services/notifications.js'
-import { getDefaultVipTierRows, getVipRuntimeRules } from '../services/vip-rules.js'
+import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const PRINCIPAL_UNLOCK_RATIO = 0.5
@@ -353,6 +353,7 @@ async function reapplyPrincipalLocksForAllUsers(db, rules = null) {
 
 async function ensureVipTierDefaults(db) {
   for (const tier of getDefaultVipTierRows()) {
+    const storagePayload = toVipTierStoragePayload(tier)
     await run(
       db,
       `INSERT INTO vip_tiers (
@@ -374,7 +375,7 @@ async function ensureVipTierDefaults(db) {
         tier.minTeamVolume,
         tier.minReferrals,
         tier.referralPercent,
-        JSON.stringify(tier.perks),
+        JSON.stringify(storagePayload),
       ],
     )
   }
@@ -388,6 +389,29 @@ async function getVipTierRows(db) {
      WHERE is_active = 1
      ORDER BY level ASC`,
   )
+}
+
+async function getVipRulesFromDb(db, vipLevel) {
+  const safeLevel = Math.max(0, Math.min(5, Number(vipLevel || 0)))
+  const row = await get(
+    db,
+    `SELECT level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json
+     FROM vip_tiers
+     WHERE level = ? AND is_active = 1
+     LIMIT 1`,
+    [safeLevel],
+  )
+  if (!row) return normalizeVipTierConfig(safeLevel, {})
+  const parsed = parseJsonSafe(row.perks_json, {}) || {}
+  return normalizeVipTierConfig(safeLevel, {
+    ...parsed,
+    level: Number(row.level || safeLevel),
+    title: row.title,
+    minDeposit: Number(row.min_deposit || 0),
+    minTradeVolume: Number(row.min_trade_volume || 0),
+    referralMultiplier: Number(row.referral_multiplier || 0),
+    referralPercent: Number(row.referral_percent || 0),
+  })
 }
 
 async function getVipNetworkMetrics(db, userId) {
@@ -450,13 +474,8 @@ async function persistVipLevel(db, userId, totalDeposit) {
 }
 
 async function resolveReferralPercentByVip(db, vipLevel) {
-  const row = await get(
-    db,
-    `SELECT referral_percent FROM vip_tiers WHERE level = ? AND is_active = 1 LIMIT 1`,
-    [Number(vipLevel || 0)],
-  )
-  if (row?.referral_percent != null) return Number(row.referral_percent)
-  return Number(getVipRuntimeRules(vipLevel).referralPercent || 3)
+  const tierRules = await getVipRulesFromDb(db, vipLevel)
+  return Number(tierRules.referralPercent || getVipRuntimeRules(vipLevel).referralPercent || 3)
 }
 
 async function resolveReferralRewardRule(db, amount) {
@@ -758,7 +777,7 @@ async function applyVipAndReferralAfterDeposit(db, payload) {
   const chain = await getReferralChain(db, payload.userId, 3)
   const rewardResults = []
   for (const ancestor of chain) {
-    const tierRules = getVipRuntimeRules(ancestor.vipLevel)
+    const tierRules = await getVipRulesFromDb(db, ancestor.vipLevel)
     const rewardPercent =
       ancestor.depth === 1
         ? directRewardPercent
@@ -830,7 +849,7 @@ async function hasActiveMiningOrTrade(db, userId) {
 async function getEffectiveWithdrawalPolicy(db, userId) {
   const user = await get(db, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [userId])
   const vipLevel = Number(user?.vip_level || 0)
-  const vipRules = getVipRuntimeRules(vipLevel)
+  const vipRules = await getVipRulesFromDb(db, vipLevel)
   const activeExtraFee = (await hasActiveMiningOrTrade(db, userId)) ? Number(vipRules.activeExtraFeePercent || 0) : 0
   return {
     vipLevel,

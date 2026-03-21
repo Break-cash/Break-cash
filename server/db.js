@@ -830,7 +830,7 @@ async function ensureSchema(db) {
         tier.minTeamVolume,
         tier.minReferrals,
         tier.referralPercent,
-        JSON.stringify(tier.perks),
+        JSON.stringify(tier),
       ],
     )
   }

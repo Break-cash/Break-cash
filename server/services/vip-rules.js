@@ -43,7 +43,7 @@ const VIP_RULES = Object.freeze({
     autoReinvest: false,
     dailyBonus: false,
     perks: [
-      'عائد التعدين 1.2٪ يومياً بسرعة أساسية.',
+      'عائد التعدين 1.2٪ يوميًا بسرعة أساسية.',
       'نسبة الإحالة المباشرة 4٪.',
       'حد السحب اليومي 200$.',
       'مدة المعالجة 72 ساعة.',
@@ -71,7 +71,7 @@ const VIP_RULES = Object.freeze({
     autoReinvest: false,
     dailyBonus: false,
     perks: [
-      'عائد التعدين 1.4٪ يومياً وسرعة +15٪.',
+      'عائد التعدين 1.4٪ يوميًا وسرعة +15٪.',
       'نسبة الإحالة المباشرة 5٪.',
       'المطلوب 5 محالين وحجم فريق 2000$.',
       'حد السحب اليومي 400$.',
@@ -99,9 +99,9 @@ const VIP_RULES = Object.freeze({
     autoReinvest: true,
     dailyBonus: false,
     perks: [
-      'عائد التعدين 1.7٪ يومياً وسرعة +30٪.',
+      'عائد التعدين 1.7٪ يوميًا وسرعة +30٪.',
       'نسبة الإحالة المباشرة 6٪ وعمولة مستوى ثانٍ 2٪.',
-      'المطلوب 15 محالاً وحجم فريق 7000$.',
+      'المطلوب 15 محالًا وحجم فريق 7000$.',
       'حد السحب اليومي 700$.',
       'مدة المعالجة 36 - 48 ساعة.',
       'إعادة استثمار تلقائي وبداية تضاعف الأرباح.',
@@ -127,9 +127,9 @@ const VIP_RULES = Object.freeze({
     autoReinvest: false,
     dailyBonus: false,
     perks: [
-      'عائد التعدين 2.0٪ يومياً وسرعة +45٪.',
+      'عائد التعدين 2.0٪ يوميًا وسرعة +45٪.',
       'نسبة الإحالة المباشرة 7٪ وعمولة مستوى ثانٍ 3٪ ومستوى ثالث 1٪.',
-      'المطلوب 40 محالاً وحجم فريق 20000$.',
+      'المطلوب 40 محالًا وحجم فريق 20000$.',
       'حد السحب اليومي 1100$.',
       'مدة المعالجة 24 - 36 ساعة مع سحب سريع.',
       'مدير حساب وسيطرة أكبر على الأرباح.',
@@ -155,11 +155,11 @@ const VIP_RULES = Object.freeze({
     autoReinvest: false,
     dailyBonus: true,
     perks: [
-      'عائد التعدين 2.5٪ يومياً وسرعة +60٪.',
+      'عائد التعدين 2.5٪ يوميًا وسرعة +60٪.',
       'نسبة الإحالة المباشرة 8٪ وعمولة مستوى ثانٍ 4٪ ومستوى ثالث 2٪.',
       'المطلوب 100+ محال وحجم فريق 50000$.',
       'حد السحب اليومي 2000$.',
-      'مدة المعالجة 12 - 24 ساعة وسحب سريع جداً.',
+      'مدة المعالجة 12 - 24 ساعة وسحب سريع جدًا.',
       'بونص يومي ومضاعف أرباح ×1.5.',
     ],
   }),
@@ -170,14 +170,95 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, n))
+}
+
+function toBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value
+  if (value === 1 || value === '1' || value === 'true') return true
+  if (value === 0 || value === '0' || value === 'false') return false
+  return fallback
+}
+
+function parseRawConfig(value) {
+  if (value == null || value === '') return {}
+  if (Array.isArray(value)) return { perks: value }
+  if (typeof value === 'object') return value
+  try {
+    const parsed = JSON.parse(String(value))
+    return Array.isArray(parsed) ? { perks: parsed } : parsed || {}
+  } catch {
+    return {}
+  }
+}
+
 export function getVipRuntimeRules(level) {
   const safeLevel = Math.max(0, Math.min(5, Number(level || 0)))
   return VIP_RULES[safeLevel] || VIP_RULES[0]
 }
 
+export function normalizeVipTierConfig(level, raw) {
+  const base = getVipRuntimeRules(level)
+  const parsed = parseRawConfig(raw)
+  const perks = Array.isArray(parsed.perks)
+    ? parsed.perks.map((item) => String(item || '').trim()).filter(Boolean)
+    : Array.isArray(raw)
+      ? raw.map((item) => String(item || '').trim()).filter(Boolean)
+      : [...base.perks]
+
+  return {
+    level: base.level,
+    title: String(parsed.title || base.title).trim() || base.title,
+    minDeposit: toNumber(parsed.minDeposit ?? parsed.min_deposit, base.minDeposit),
+    minReferrals: toNumber(parsed.minReferrals ?? parsed.referralMultiplier ?? parsed.referral_multiplier, base.minReferrals),
+    minTeamVolume: toNumber(parsed.minTeamVolume ?? parsed.minTradeVolume ?? parsed.min_trade_volume, base.minTeamVolume),
+    referralPercent: clampNumber(parsed.referralPercent ?? parsed.referral_percent, 0, 100, base.referralPercent),
+    dailyMiningPercent: clampNumber(parsed.dailyMiningPercent, 0, 100, base.dailyMiningPercent),
+    miningSpeedPercent: clampNumber(parsed.miningSpeedPercent, 0, 1000, base.miningSpeedPercent),
+    dailyWithdrawalLimit: clampNumber(parsed.dailyWithdrawalLimit, 0, 1000000000, base.dailyWithdrawalLimit),
+    processingHoursMin: clampNumber(parsed.processingHoursMin, 0, 720, base.processingHoursMin),
+    processingHoursMax: clampNumber(parsed.processingHoursMax, 0, 720, base.processingHoursMax),
+    withdrawalFeePercent: clampNumber(parsed.withdrawalFeePercent, 0, 100, base.withdrawalFeePercent),
+    activeExtraFeePercent: clampNumber(parsed.activeExtraFeePercent, 0, 100, base.activeExtraFeePercent),
+    level2ReferralPercent: clampNumber(parsed.level2ReferralPercent, 0, 100, base.level2ReferralPercent),
+    level3ReferralPercent: clampNumber(parsed.level3ReferralPercent, 0, 100, base.level3ReferralPercent),
+    profitMultiplier: clampNumber(parsed.profitMultiplier, 0, 100, base.profitMultiplier),
+    autoReinvest: toBoolean(parsed.autoReinvest, base.autoReinvest),
+    dailyBonus: toBoolean(parsed.dailyBonus, base.dailyBonus),
+    perks: perks.length > 0 ? perks : [...base.perks],
+  }
+}
+
+export function toVipTierStoragePayload(input) {
+  const normalized = normalizeVipTierConfig(input?.level || 0, input)
+  return {
+    title: normalized.title,
+    minDeposit: normalized.minDeposit,
+    minReferrals: normalized.minReferrals,
+    minTeamVolume: normalized.minTeamVolume,
+    referralPercent: normalized.referralPercent,
+    dailyMiningPercent: normalized.dailyMiningPercent,
+    miningSpeedPercent: normalized.miningSpeedPercent,
+    dailyWithdrawalLimit: normalized.dailyWithdrawalLimit,
+    processingHoursMin: normalized.processingHoursMin,
+    processingHoursMax: normalized.processingHoursMax,
+    withdrawalFeePercent: normalized.withdrawalFeePercent,
+    activeExtraFeePercent: normalized.activeExtraFeePercent,
+    level2ReferralPercent: normalized.level2ReferralPercent,
+    level3ReferralPercent: normalized.level3ReferralPercent,
+    profitMultiplier: normalized.profitMultiplier,
+    autoReinvest: normalized.autoReinvest,
+    dailyBonus: normalized.dailyBonus,
+    perks: normalized.perks,
+  }
+}
+
 export function getDefaultVipTierRows() {
   return [1, 2, 3, 4, 5].map((level) => {
-    const tier = getVipRuntimeRules(level)
+    const tier = normalizeVipTierConfig(level, {})
     return {
       level: tier.level,
       title: tier.title,
@@ -185,6 +266,18 @@ export function getDefaultVipTierRows() {
       minTeamVolume: tier.minTeamVolume,
       minReferrals: tier.minReferrals,
       referralPercent: tier.referralPercent,
+      dailyMiningPercent: tier.dailyMiningPercent,
+      miningSpeedPercent: tier.miningSpeedPercent,
+      dailyWithdrawalLimit: tier.dailyWithdrawalLimit,
+      processingHoursMin: tier.processingHoursMin,
+      processingHoursMax: tier.processingHoursMax,
+      withdrawalFeePercent: tier.withdrawalFeePercent,
+      activeExtraFeePercent: tier.activeExtraFeePercent,
+      level2ReferralPercent: tier.level2ReferralPercent,
+      level3ReferralPercent: tier.level3ReferralPercent,
+      profitMultiplier: tier.profitMultiplier,
+      autoReinvest: tier.autoReinvest,
+      dailyBonus: tier.dailyBonus,
       perks: [...tier.perks],
     }
   })

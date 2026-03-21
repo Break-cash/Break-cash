@@ -13,7 +13,7 @@ import {
   executeMiningEmergencyWithdrawal,
 } from '../services/wallet-service.js'
 import { createLocalizedNotification } from '../services/notifications.js'
-import { getVipRuntimeRules } from '../services/vip-rules.js'
+import { getVipRuntimeRules, normalizeVipTierConfig } from '../services/vip-rules.js'
 
 const MINING_PERMISSION = 'تعدين'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -204,6 +204,34 @@ async function getUserTotalBalance(tx, userId) {
   return getMainBalance(tx, userId, 'USDT')
 }
 
+async function getVipRulesFromDb(db, vipLevel) {
+  const safeLevel = Math.max(0, Math.min(5, Number(vipLevel || 0)))
+  const row = await get(
+    db,
+    `SELECT level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json
+     FROM vip_tiers
+     WHERE level = ? AND is_active = 1
+     LIMIT 1`,
+    [safeLevel],
+  )
+  if (!row) return normalizeVipTierConfig(safeLevel, {})
+  let parsed = {}
+  try {
+    parsed = row.perks_json ? JSON.parse(String(row.perks_json)) : {}
+  } catch {
+    parsed = Array.isArray(row.perks_json) ? row.perks_json : {}
+  }
+  return normalizeVipTierConfig(safeLevel, {
+    ...parsed,
+    level: Number(row.level || safeLevel),
+    title: row.title,
+    minDeposit: Number(row.min_deposit || 0),
+    minTradeVolume: Number(row.min_trade_volume || 0),
+    referralMultiplier: Number(row.referral_multiplier || 0),
+    referralPercent: Number(row.referral_percent || 0),
+  })
+}
+
 export function createMiningRouter(db) {
   const router = Router()
   router.use(requireAuth(db))
@@ -302,7 +330,7 @@ export function createMiningRouter(db) {
         const nextPrincipalAmount = Number((existingPrincipal + amount).toFixed(8))
         const tierBaseAmount = isTopUp ? nextPrincipalAmount : await getUserTotalBalance(tx, req.user.id)
         const userVip = await get(tx, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [req.user.id])
-        const vipRules = getVipRuntimeRules(Number(userVip?.vip_level || 0))
+        const vipRules = await getVipRulesFromDb(tx, Number(userVip?.vip_level || 0))
         const dailyPercent = Number(vipRules.dailyMiningPercent || resolveTierPercent(tierBaseAmount, config.dailyTiers || [], 0))
         const monthlyPercent = Number((dailyPercent * 30).toFixed(4))
         const emergencyFeePercent = Number(config.emergencyFeePercent || 0)

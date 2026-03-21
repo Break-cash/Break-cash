@@ -3,6 +3,7 @@ import { all, get, run } from '../db.js'
 import { hashPassword } from '../auth.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import { normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -45,6 +46,34 @@ function buildValuesPlaceholders(rowCount, colCount) {
     rows.push(`(${new Array(colCount).fill('?').join(', ')})`)
   }
   return rows.join(', ')
+}
+
+function parseVipTierPayload(row) {
+  const normalized = normalizeVipTierConfig(Number(row.level || 0), {
+    ...(parseJsonOrNull(row.perks_json) || {}),
+    level: Number(row.level || 0),
+    title: row.title,
+    minDeposit: Number(row.min_deposit || 0),
+    minTradeVolume: Number(row.min_trade_volume || 0),
+    referralMultiplier: Number(row.referral_multiplier || 0),
+    referralPercent: Number(row.referral_percent || 0),
+  })
+  return {
+    ...row,
+    perks: normalized.perks,
+    daily_mining_percent: normalized.dailyMiningPercent,
+    mining_speed_percent: normalized.miningSpeedPercent,
+    daily_withdrawal_limit: normalized.dailyWithdrawalLimit,
+    processing_hours_min: normalized.processingHoursMin,
+    processing_hours_max: normalized.processingHoursMax,
+    withdrawal_fee_percent: normalized.withdrawalFeePercent,
+    active_extra_fee_percent: normalized.activeExtraFeePercent,
+    level2_referral_percent: normalized.level2ReferralPercent,
+    level3_referral_percent: normalized.level3ReferralPercent,
+    profit_multiplier: normalized.profitMultiplier,
+    auto_reinvest: normalized.autoReinvest ? 1 : 0,
+    daily_bonus: normalized.dailyBonus ? 1 : 0,
+  }
 }
 
 function getMonthRange(rawValue) {
@@ -204,7 +233,7 @@ export function createOwnerGrowthRouter(db) {
       [limit],
     )
     return res.json({
-      items: items.map((row) => ({ ...row, perks: parseJsonOrNull(row.perks_json) || [] })),
+      items: items.map((row) => parseVipTierPayload(row)),
     })
   })
 
@@ -222,6 +251,27 @@ export function createOwnerGrowthRouter(db) {
     const perks = Array.isArray(req.body?.perks) ? req.body.perks : []
     const isActive = Number(req.body?.isActive) ? 1 : 0
     if (!title) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const vipConfig = toVipTierStoragePayload({
+      level,
+      title,
+      minDeposit,
+      minTradeVolume,
+      referralMultiplier,
+      referralPercent,
+      dailyMiningPercent: Number(req.body?.dailyMiningPercent || 0),
+      miningSpeedPercent: Number(req.body?.miningSpeedPercent || 0),
+      dailyWithdrawalLimit: Number(req.body?.dailyWithdrawalLimit || 0),
+      processingHoursMin: Number(req.body?.processingHoursMin || 0),
+      processingHoursMax: Number(req.body?.processingHoursMax || 0),
+      withdrawalFeePercent: Number(req.body?.withdrawalFeePercent || 0),
+      activeExtraFeePercent: Number(req.body?.activeExtraFeePercent || 0),
+      level2ReferralPercent: Number(req.body?.level2ReferralPercent || 0),
+      level3ReferralPercent: Number(req.body?.level3ReferralPercent || 0),
+      profitMultiplier: Number(req.body?.profitMultiplier || 0),
+      autoReinvest: Number(req.body?.autoReinvest) === 1 || req.body?.autoReinvest === true,
+      dailyBonus: Number(req.body?.dailyBonus) === 1 || req.body?.dailyBonus === true,
+      perks,
+    })
     await run(
       db,
       `INSERT INTO vip_tiers (level, title, min_deposit, min_trade_volume, referral_multiplier, referral_percent, perks_json, is_active)
@@ -234,7 +284,7 @@ export function createOwnerGrowthRouter(db) {
          referral_percent = excluded.referral_percent,
          perks_json = excluded.perks_json,
          is_active = excluded.is_active`,
-      [level, title, minDeposit, minTradeVolume, referralMultiplier, referralPercent, JSON.stringify(perks), isActive],
+      [level, title, minDeposit, minTradeVolume, referralMultiplier, referralPercent, JSON.stringify(vipConfig), isActive],
     )
     publishLiveUpdate({ type: 'home_content_updated', source: 'owner_growth', key: 'vip_tiers' })
     return res.json({ ok: true })

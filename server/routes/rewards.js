@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { all, get } from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
-import { resolveVipMetricsProgress } from '../services/vip-rules.js'
+import { normalizeVipTierConfig, resolveVipMetricsProgress } from '../services/vip-rules.js'
 
 function parsePerks(value) {
   if (!value) return []
@@ -10,6 +10,39 @@ function parsePerks(value) {
     return Array.isArray(parsed) ? parsed.map((item) => String(item || '').trim()).filter(Boolean) : []
   } catch {
     return []
+  }
+}
+
+function parseVipTierRow(row) {
+  const normalized = normalizeVipTierConfig(Number(row.level || 0), {
+    ...(parseJsonSafe(row.perks_json, {}) || {}),
+    level: Number(row.level || 0),
+    title: row.title,
+    minDeposit: Number(row.min_deposit || 0),
+    minTradeVolume: Number(row.min_trade_volume || 0),
+    referralMultiplier: Number(row.referral_multiplier || 0),
+    referralPercent: Number(row.referral_percent || 0),
+  })
+  return {
+    level: normalized.level,
+    title: normalized.title,
+    min_deposit: normalized.minDeposit,
+    min_team_volume: normalized.minTeamVolume,
+    min_referrals: normalized.minReferrals,
+    referral_percent: normalized.referralPercent,
+    daily_mining_percent: normalized.dailyMiningPercent,
+    mining_speed_percent: normalized.miningSpeedPercent,
+    daily_withdrawal_limit: normalized.dailyWithdrawalLimit,
+    processing_hours_min: normalized.processingHoursMin,
+    processing_hours_max: normalized.processingHoursMax,
+    withdrawal_fee_percent: normalized.withdrawalFeePercent,
+    active_extra_fee_percent: normalized.activeExtraFeePercent,
+    level2_referral_percent: normalized.level2ReferralPercent,
+    level3_referral_percent: normalized.level3ReferralPercent,
+    profit_multiplier: normalized.profitMultiplier,
+    auto_reinvest: normalized.autoReinvest ? 1 : 0,
+    daily_bonus: normalized.dailyBonus ? 1 : 0,
+    perks: normalized.perks,
   }
 }
 
@@ -93,15 +126,7 @@ export function createRewardsRouter(db) {
        WHERE is_active = 1
        ORDER BY level ASC`,
     )
-    const tiers = tiersRows.map((row) => ({
-      level: Number(row.level || 0),
-      title: String(row.title || `VIP ${row.level || 0}`),
-      min_deposit: toFiniteNumber(row.min_deposit, 0),
-      min_team_volume: toFiniteNumber(row.min_trade_volume, 0),
-      min_referrals: toFiniteNumber(row.referral_multiplier, 0),
-      referral_percent: toFiniteNumber(row.referral_percent, 3),
-      perks: parsePerks(row.perks_json),
-    }))
+    const tiers = tiersRows.map((row) => parseVipTierRow(row))
 
     const currentVipLevel = Number(user.vip_level || 0)
     const totalDeposit = toFiniteNumber(user.total_deposit, 0)

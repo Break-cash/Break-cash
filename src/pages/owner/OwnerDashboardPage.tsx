@@ -228,6 +228,18 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     minTradeVolume: '0',
     referralMultiplier: '1',
     referralPercent: '4',
+    dailyMiningPercent: '1.2',
+    miningSpeedPercent: '0',
+    dailyWithdrawalLimit: '200',
+    processingHoursMin: '72',
+    processingHoursMax: '72',
+    withdrawalFeePercent: '10',
+    activeExtraFeePercent: '5',
+    level2ReferralPercent: '0',
+    level3ReferralPercent: '0',
+    profitMultiplier: '1',
+    autoReinvest: false,
+    dailyBonus: false,
     perks: '',
     isActive: true,
   })
@@ -1048,6 +1060,18 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         minTradeVolume: Number(vipTierDraft.minTradeVolume || 0),
         referralMultiplier: Number(vipTierDraft.referralMultiplier || 1),
         referralPercent: Number(vipTierDraft.referralPercent || 0),
+        dailyMiningPercent: Number(vipTierDraft.dailyMiningPercent || 0),
+        miningSpeedPercent: Number(vipTierDraft.miningSpeedPercent || 0),
+        dailyWithdrawalLimit: Number(vipTierDraft.dailyWithdrawalLimit || 0),
+        processingHoursMin: Number(vipTierDraft.processingHoursMin || 0),
+        processingHoursMax: Number(vipTierDraft.processingHoursMax || 0),
+        withdrawalFeePercent: Number(vipTierDraft.withdrawalFeePercent || 0),
+        activeExtraFeePercent: Number(vipTierDraft.activeExtraFeePercent || 0),
+        level2ReferralPercent: Number(vipTierDraft.level2ReferralPercent || 0),
+        level3ReferralPercent: Number(vipTierDraft.level3ReferralPercent || 0),
+        profitMultiplier: Number(vipTierDraft.profitMultiplier || 0),
+        autoReinvest: vipTierDraft.autoReinvest,
+        dailyBonus: vipTierDraft.dailyBonus,
         perks: vipTierDraft.perks.split('\n').map((item) => item.trim()).filter(Boolean),
         isActive: vipTierDraft.isActive,
       })
@@ -2675,6 +2699,32 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 <input type="number" className="field-input" placeholder="مضاعف الإحالة" value={vipTierDraft.referralMultiplier} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, referralMultiplier: e.target.value }))} />
                 <input type="number" className="field-input" placeholder="نسبة الإحالة %" value={vipTierDraft.referralPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, referralPercent: e.target.value }))} />
               </div>
+              <div className="owner-form-row">
+                <input type="number" className="field-input" placeholder="عائد التعدين اليومي %" value={vipTierDraft.dailyMiningPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, dailyMiningPercent: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="سرعة التعدين %" value={vipTierDraft.miningSpeedPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, miningSpeedPercent: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="الحد اليومي للسحب" value={vipTierDraft.dailyWithdrawalLimit} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, dailyWithdrawalLimit: e.target.value }))} />
+              </div>
+              <div className="owner-form-row">
+                <input type="number" className="field-input" placeholder="أدنى مدة معالجة بالساعات" value={vipTierDraft.processingHoursMin} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, processingHoursMin: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="أعلى مدة معالجة بالساعات" value={vipTierDraft.processingHoursMax} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, processingHoursMax: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="رسوم السحب %" value={vipTierDraft.withdrawalFeePercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, withdrawalFeePercent: e.target.value }))} />
+              </div>
+              <div className="owner-form-row">
+                <input type="number" className="field-input" placeholder="رسوم إضافية عند نشاط التعدين/الصفقات %" value={vipTierDraft.activeExtraFeePercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, activeExtraFeePercent: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="عمولة المستوى الثاني %" value={vipTierDraft.level2ReferralPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, level2ReferralPercent: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="عمولة المستوى الثالث %" value={vipTierDraft.level3ReferralPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, level3ReferralPercent: e.target.value }))} />
+              </div>
+              <div className="owner-form-row">
+                <input type="number" className="field-input" placeholder="مضاعف الأرباح" value={vipTierDraft.profitMultiplier} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, profitMultiplier: e.target.value }))} />
+                <label className="owner-checkbox">
+                  <input type="checkbox" checked={vipTierDraft.autoReinvest} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, autoReinvest: e.target.checked }))} />
+                  <span>إعادة استثمار تلقائي</span>
+                </label>
+                <label className="owner-checkbox">
+                  <input type="checkbox" checked={vipTierDraft.dailyBonus} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, dailyBonus: e.target.checked }))} />
+                  <span>بونص يومي</span>
+                </label>
+              </div>
               <textarea className="field-input" rows={4} placeholder="مزايا المستوى، كل سطر ميزة مستقلة" value={vipTierDraft.perks} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, perks: e.target.value }))} />
               <label className="owner-checkbox">
                 <input type="checkbox" checked={vipTierDraft.isActive} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, isActive: e.target.checked }))} />
@@ -2695,7 +2745,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     <li key={item.id} className="owner-history-item">
                       <div className="owner-history-main">
                         <strong>{`VIP ${item.level} - ${item.title}`}</strong>
-                        <small>{`من ${Number(item.min_deposit || 0).toFixed(2)}$ | إحالة ${Number(item.referral_percent || 0).toFixed(2)}% | مضاعف ${Number(item.referral_multiplier || 1).toFixed(2)}`}</small>
+                        <small>{`من ${Number(item.min_deposit || 0).toFixed(2)}$ | إحالة ${Number(item.referral_percent || 0).toFixed(2)}% | تعدين ${Number(item.daily_mining_percent || 0).toFixed(2)}%`}</small>
+                        <small>{`حد السحب ${Number(item.daily_withdrawal_limit || 0).toFixed(2)} | رسوم ${Number(item.withdrawal_fee_percent || 0).toFixed(2)}% | L2 ${Number(item.level2_referral_percent || 0).toFixed(2)}% | L3 ${Number(item.level3_referral_percent || 0).toFixed(2)}%`}</small>
                         <small>{Array.isArray(item.perks) ? item.perks.join(' | ') : ''}</small>
                       </div>
                       <div className="owner-history-actions">
@@ -2710,6 +2761,18 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                               minTradeVolume: String(item.min_trade_volume || 0),
                               referralMultiplier: String(item.referral_multiplier || 1),
                               referralPercent: String(item.referral_percent || 0),
+                              dailyMiningPercent: String(item.daily_mining_percent || 0),
+                              miningSpeedPercent: String(item.mining_speed_percent || 0),
+                              dailyWithdrawalLimit: String(item.daily_withdrawal_limit || 0),
+                              processingHoursMin: String(item.processing_hours_min || 0),
+                              processingHoursMax: String(item.processing_hours_max || 0),
+                              withdrawalFeePercent: String(item.withdrawal_fee_percent || 0),
+                              activeExtraFeePercent: String(item.active_extra_fee_percent || 0),
+                              level2ReferralPercent: String(item.level2_referral_percent || 0),
+                              level3ReferralPercent: String(item.level3_referral_percent || 0),
+                              profitMultiplier: String(item.profit_multiplier || 1),
+                              autoReinvest: Number(item.auto_reinvest || 0) === 1,
+                              dailyBonus: Number(item.daily_bonus || 0) === 1,
                               perks: Array.isArray(item.perks) ? item.perks.join('\n') : '',
                               isActive: Number(item.is_active || 0) === 1,
                             })

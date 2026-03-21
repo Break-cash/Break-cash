@@ -1470,6 +1470,18 @@ export type VipTier = {
   min_trade_volume: number
   referral_multiplier: number
   referral_percent?: number
+  daily_mining_percent?: number
+  mining_speed_percent?: number
+  daily_withdrawal_limit?: number
+  processing_hours_min?: number
+  processing_hours_max?: number
+  withdrawal_fee_percent?: number
+  active_extra_fee_percent?: number
+  level2_referral_percent?: number
+  level3_referral_percent?: number
+  profit_multiplier?: number
+  auto_reinvest?: number
+  daily_bonus?: number
   perks?: string[]
   is_active: number
 }
@@ -1481,6 +1493,18 @@ export type UserVipTier = {
   min_team_volume?: number
   min_referrals?: number
   referral_percent: number
+  daily_mining_percent?: number
+  mining_speed_percent?: number
+  daily_withdrawal_limit?: number
+  processing_hours_min?: number
+  processing_hours_max?: number
+  withdrawal_fee_percent?: number
+  active_extra_fee_percent?: number
+  level2_referral_percent?: number
+  level3_referral_percent?: number
+  profit_multiplier?: number
+  auto_reinvest?: number
+  daily_bonus?: number
   perks: string[]
 }
 
@@ -1684,6 +1708,18 @@ export async function upsertVipTier(payload: {
   minTradeVolume: number
   referralMultiplier: number
   referralPercent?: number
+  dailyMiningPercent?: number
+  miningSpeedPercent?: number
+  dailyWithdrawalLimit?: number
+  processingHoursMin?: number
+  processingHoursMax?: number
+  withdrawalFeePercent?: number
+  activeExtraFeePercent?: number
+  level2ReferralPercent?: number
+  level3ReferralPercent?: number
+  profitMultiplier?: number
+  autoReinvest?: boolean
+  dailyBonus?: boolean
   perks: string[]
   isActive?: boolean
 }) {
