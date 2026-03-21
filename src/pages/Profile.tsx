@@ -171,7 +171,7 @@ export function Profile() {
     quickActions.push({
       key: 'support',
       label: t('home_action_support_message'),
-      to: 'mailto:support@breakcash.cash',
+      to: 'mailto:support@BreakCash.cash',
       icon: MessageCircle,
       external: true,
     })
