@@ -27,7 +27,7 @@ import { createLocalizedNotification } from '../services/notifications.js'
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
-const PRINCIPAL_UNLOCK_RATIO = 0.5
+const PRINCIPAL_UNLOCK_RATIO = 0
 const DEFAULT_BALANCE_RULES = {
   minDeposit: 10,
   minWithdrawal: 10,
@@ -219,7 +219,14 @@ async function getEffectiveUnlockProfile(db, userId, currency, rules) {
   const user = await get(db, `SELECT id, vip_level FROM users WHERE id = ? LIMIT 1`, [userId])
   const vipLevel = Number(user?.vip_level || 0)
   const override = await getUserUnlockOverride(db, userId)
-  const ratioFromLevel = PRINCIPAL_UNLOCK_RATIO
+  const levelRatioRaw =
+    rules?.unlockRatioByLevel && typeof rules.unlockRatioByLevel === 'object'
+      ? rules.unlockRatioByLevel[String(vipLevel)]
+      : null
+  const ratioFromLevel =
+    levelRatioRaw != null && Number.isFinite(Number(levelRatioRaw))
+      ? Number(levelRatioRaw)
+      : Number(rules?.defaultUnlockRatio ?? PRINCIPAL_UNLOCK_RATIO)
   const unlockRatio =
     override?.custom_unlock_ratio != null
       ? Number(override.custom_unlock_ratio)
