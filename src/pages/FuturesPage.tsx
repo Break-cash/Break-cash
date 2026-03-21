@@ -14,6 +14,13 @@ import { useI18n } from '../i18nCore'
 type Candle = { time: number; open: number; high: number; low: number; close: number }
 const intervals = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 
+function formatRemainingTime(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
 export function FuturesPage() {
   const { t } = useI18n()
   const { quotes, loading: quotesLoading, usingFallback } = useMarketBoard(3000)
@@ -31,6 +38,10 @@ export function FuturesPage() {
     () => codes.map((item) => item.usage).find((usage) => usage?.status === 'trade_active') || null,
     [codes],
   )
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  const activeTradeAutoSettleAtMs = activeTrade?.autoSettleAt ? Date.parse(activeTrade.autoSettleAt) : Number.NaN
+  const activeTradeReadyToSettle = !!activeTrade && (Number.isNaN(activeTradeAutoSettleAtMs) || activeTradeAutoSettleAtMs <= nowTs)
+  const activeTradeRemainingMs = activeTradeReadyToSettle || Number.isNaN(activeTradeAutoSettleAtMs) ? 0 : Math.max(0, activeTradeAutoSettleAtMs - nowTs)
 
   useEffect(() => {
     if (quotes.length > 0 && !quotes.find((x) => x.symbol === selected)) {
@@ -75,6 +86,11 @@ export function FuturesPage() {
     }
   }, [selected, selectedInterval])
 
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
   async function refreshCodes() {
     const refreshed = await getMyStrategyCodes()
     setCodes(refreshed.items || [])
@@ -111,7 +127,7 @@ export function FuturesPage() {
       if (res.featureType === 'trial_trade') {
         setMessage({
           type: 'success',
-          text: `تم فتح الصفقة التجريبية بنجاح. تم حجز ${Number(res.stakeAmount || 0).toFixed(2)} USDT بشكل واضح ومسجل.`,
+          text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT، وسيعود الأصل مع الربح تلقائيًا ${res.autoSettleAt ? `حوالي ${new Date(res.autoSettleAt).toLocaleTimeString()}` : 'خلال دقائق قليلة'}.`,
         })
       } else {
         setMessage({
@@ -138,7 +154,7 @@ export function FuturesPage() {
         text: `تم إغلاق الصفقة وإرجاع ${Number(res.payoutAmount || 0).toFixed(2)} USDT إلى رصيدك.`,
       })
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إغلاق الصفقة.' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إغلاق الصفقة الاستراتيجية.' })
     } finally {
       setSubmitting(false)
     }
@@ -232,7 +248,7 @@ export function FuturesPage() {
       </section>
 
       <section className="rounded-2xl border border-app-border bg-app-card p-3">
-        <h2 className="text-sm font-semibold text-white">كود الاستراتيجية</h2>
+        <h2 className="text-sm font-semibold text-white">كود فتح الصفقات الاستراتيجية</h2>
         <p className="mt-1 text-xs text-app-muted">
           يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة قبل أي خصم أو تفعيل.
         </p>
@@ -263,16 +279,16 @@ export function FuturesPage() {
         <section className="rounded-2xl border border-brand-blue/25 bg-app-card p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-white">حالة الصفقة النشطة</h2>
-              <p className="text-xs text-app-muted">يتم تتبع الصفقة على نفس الأصل المحدد مع سعر حي وشارت شموع.</p>
+              <h2 className="text-sm font-semibold text-white">حالة الصفقة الاستراتيجية</h2>
+              <p className="text-xs text-app-muted">يتم تتبع الصفقة على نفس الأصل المحدد مع تأخير عشوائي متعمد قبل إعادة الأصل والربح لتخفيف ضغط الذروة.</p>
             </div>
             <button
               type="button"
               className="wallet-action-btn owner-set-btn"
               onClick={handleSettleTrade}
-              disabled={submitting}
+              disabled={submitting || !activeTradeReadyToSettle}
             >
-              {submitting ? '...' : 'إغلاق الصفقة'}
+              {submitting ? '...' : activeTradeReadyToSettle ? 'إغلاق الصفقة الآن' : 'بانتظار موعد الإغلاق'}
             </button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -292,6 +308,18 @@ export function FuturesPage() {
               <div className="text-[11px] text-app-muted">نسبة العائد المحددة</div>
               <div className="mt-1 text-sm font-semibold text-white">{Number(activeTrade.tradeReturnPercent || 0).toFixed(2)}%</div>
             </div>
+            <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
+              <div className="text-[11px] text-app-muted">موعد الإرجاع المتوقع</div>
+              <div className="mt-1 text-sm font-semibold text-white">
+                {activeTrade.autoSettleAt ? new Date(activeTrade.autoSettleAt).toLocaleTimeString() : 'قريبًا'}
+              </div>
+            </div>
+            <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
+              <div className="text-[11px] text-app-muted">الوقت المتبقي</div>
+              <div className="mt-1 text-sm font-semibold text-white">
+                {activeTradeReadyToSettle ? 'جاهزة للإرجاع' : formatRemainingTime(activeTradeRemainingMs)}
+              </div>
+            </div>
           </div>
         </section>
       ) : null}
@@ -305,7 +333,7 @@ export function FuturesPage() {
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
                 <div className="text-[11px] text-app-muted">نوع الميزة</div>
                 <div className="mt-1 text-sm font-semibold text-white">
-                  {preview.featureType === 'trial_trade' ? 'صفقة تجريبية' : 'مكافأة ترويجية'}
+                  {preview.featureType === 'trial_trade' ? 'فتح صفقات استراتيجية' : 'مكافأة ترويجية'}
                 </div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">

@@ -2316,6 +2316,8 @@ export type StrategyCodeUsage = {
   confirmedAt?: string | null
   settledAt?: string | null
   usedAt?: string | null
+  autoSettleAt?: string | null
+  settleDelayMs?: number | null
 }
 
 export type StrategyCodeAdminItem = StrategyCodeItem & {
@@ -2431,6 +2433,8 @@ export async function redeemStrategyCode(payload: { code: string; symbol?: strin
     stakeAmount?: number
     tradeReturnPercent?: number
     entryPrice?: number
+    autoSettleAt?: string | null
+    settleDelayMs?: number | null
     rewardAmount?: number
     balanceAfter: number
   }>
@@ -2448,6 +2452,7 @@ export async function settleStrategyTrade(usageId: number) {
     payoutAmount: number
     profitAmount: number
     balanceAfter: number
+    availableAt?: string | null
   }>
 }
 

@@ -68,6 +68,136 @@ function computePromoRewardAmount(balanceSnapshot, codeRow) {
   return Number(Math.max(0, (Number(balanceSnapshot || 0) * value) / 100).toFixed(8))
 }
 
+const STRATEGY_TRADE_MIN_SETTLE_DELAY_MS = 90 * 1000
+const STRATEGY_TRADE_MAX_SETTLE_DELAY_MS = 7 * 60 * 1000
+
+function getStrategyTradeDelayMs() {
+  const span = STRATEGY_TRADE_MAX_SETTLE_DELAY_MS - STRATEGY_TRADE_MIN_SETTLE_DELAY_MS
+  return STRATEGY_TRADE_MIN_SETTLE_DELAY_MS + Math.floor(Math.random() * (span + 1))
+}
+
+function enrichStrategyUsageRow(row) {
+  const meta = parseJsonSafe(row?.metadata_json, {})
+  const autoSettleAt = typeof meta?.autoSettleAt === 'string' ? meta.autoSettleAt : null
+  const settleDelayMs = Number(meta?.settleDelayMs || 0)
+  return {
+    id: Number(row.usage_id),
+    status: String(row.usage_status || 'consumed'),
+    selectedSymbol: String(row.selected_symbol || row.asset_symbol || 'BTCUSDT').toUpperCase(),
+    balanceSnapshot: Number(row.balance_snapshot || 0),
+    stakeAmount: Number(row.stake_amount || 0),
+    entryPrice: row.entry_price == null ? null : Number(row.entry_price),
+    exitPrice: row.exit_price == null ? null : Number(row.exit_price),
+    rewardValue: Number(row.usage_reward_value || 0),
+    tradeReturnPercent: Number(row.usage_trade_return_percent || 0),
+    confirmedAt: row.confirmed_at,
+    settledAt: row.settled_at,
+    usedAt: row.used_at,
+    autoSettleAt,
+    settleDelayMs: Number.isFinite(settleDelayMs) && settleDelayMs > 0 ? settleDelayMs : null,
+  }
+}
+
+async function settleStrategyTradeUsage(tx, usage, actorUserId) {
+  if (!usage) throw new Error('NOT_FOUND')
+  if (String(usage.status || '') !== 'trade_active') throw new Error('NOT_ACTIVE')
+  if (usage.wallet_credit_txn_id) throw new Error('ALREADY_SETTLED')
+
+  const meta = parseJsonSafe(usage.metadata_json, {})
+  const autoSettleAt = typeof meta?.autoSettleAt === 'string' ? Date.parse(meta.autoSettleAt) : Number.NaN
+  if (!Number.isNaN(autoSettleAt) && autoSettleAt > Date.now()) {
+    const error = new Error('SETTLEMENT_NOT_READY')
+    error.availableAt = new Date(autoSettleAt).toISOString()
+    throw error
+  }
+
+  const liveQuote = await resolveLiveQuote(String(usage.selected_symbol || 'BTCUSDT'))
+  const stakeAmount = Number(usage.stake_amount || 0)
+  const returnPercent = Number(usage.trade_return_percent || 0)
+  const profitAmount = Number(((stakeAmount * returnPercent) / 100).toFixed(8))
+  const payoutAmount = Number((stakeAmount + profitAmount).toFixed(8))
+  const credit = await adjustBalance(tx, {
+    userId: usage.user_id,
+    currency: 'USDT',
+    delta: payoutAmount,
+    referenceType: 'strategy_trade_settlement',
+    referenceId: Number(usage.code_id),
+    idempotencyKey: `strategy_trade_settlement_${usage.id}`,
+    createdBy: actorUserId,
+  })
+  const nextMeta = JSON.stringify({
+    ...meta,
+    autoSettled: true,
+    settledBy: actorUserId,
+    settledAt: new Date().toISOString(),
+  })
+  await run(
+    tx,
+    `UPDATE strategy_code_usages
+     SET status = 'trade_settled',
+         exit_price = ?,
+         reward_value = ?,
+         wallet_credit_txn_id = ?,
+         metadata_json = ?,
+         settled_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [Number(liveQuote.price || 0), profitAmount, credit.walletTxnId, nextMeta, usage.id],
+  )
+  await createLocalizedNotification(tx, usage.user_id, 'strategy_trade_settled', {
+    amount: payoutAmount,
+    currency: 'USDT',
+  })
+  return {
+    usageId: Number(usage.id || 0),
+    status: 'trade_settled',
+    exitPrice: Number(liveQuote.price || 0),
+    payoutAmount,
+    profitAmount,
+    balanceAfter: credit.balanceAfter,
+  }
+}
+
+async function autoSettleDueStrategyTrades(db, userId) {
+  const dueUsages = await all(
+    db,
+    `SELECT id
+     FROM strategy_code_usages
+     WHERE user_id = ?
+       AND status = 'trade_active'
+       AND metadata_json IS NOT NULL
+       AND (
+         metadata_json LIKE '%"autoSettleAt":"%'
+       )
+     ORDER BY id ASC
+     LIMIT 20`,
+    [userId],
+  )
+  for (const row of dueUsages) {
+    try {
+      await withTransaction(db, async (tx) => {
+        const usage = await get(
+          tx,
+          `SELECT id, user_id, code_id, status, selected_symbol, stake_amount,
+                  trade_return_percent, wallet_credit_txn_id, metadata_json
+           FROM strategy_code_usages
+           WHERE id = ? AND user_id = ?
+           LIMIT 1`,
+          [row.id, userId],
+        )
+        const meta = parseJsonSafe(usage?.metadata_json, {})
+        const autoSettleAt = typeof meta?.autoSettleAt === 'string' ? Date.parse(meta.autoSettleAt) : Number.NaN
+        if (!usage || Number.isNaN(autoSettleAt) || autoSettleAt > Date.now()) return
+        await settleStrategyTradeUsage(tx, usage, userId)
+      })
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'SETTLEMENT_NOT_READY') {
+        console.warn('[strategy-trade] auto settle skipped', { userId, usageId: Number(row.id || 0), error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+  }
+}
+
 function buildStrategyCodeRow(row) {
   return {
     id: Number(row.id),
@@ -341,13 +471,15 @@ export function createTasksRouter(db) {
   })
 
   router.get('/strategy-codes/my', async (req, res) => {
+    await autoSettleDueStrategyTrades(db, req.user.id)
     const codeRows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
               sc.asset_symbol, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_at, sc.updated_at,
               scu.id AS usage_id, scu.status AS usage_status, scu.selected_symbol, scu.balance_snapshot,
               scu.stake_amount, scu.entry_price, scu.exit_price, scu.reward_value AS usage_reward_value,
-              scu.trade_return_percent AS usage_trade_return_percent, scu.confirmed_at, scu.settled_at, scu.created_at AS used_at
+              scu.trade_return_percent AS usage_trade_return_percent, scu.confirmed_at, scu.settled_at, scu.created_at AS used_at,
+              scu.metadata_json
        FROM strategy_codes sc
        LEFT JOIN strategy_code_usages scu
          ON scu.code_id = sc.id
@@ -370,20 +502,7 @@ export function createTasksRouter(db) {
       alreadyUsed: row.usage_id != null,
       usage: row.usage_id == null
         ? null
-        : {
-            id: Number(row.usage_id),
-            status: String(row.usage_status || 'consumed'),
-            selectedSymbol: String(row.selected_symbol || row.asset_symbol || 'BTCUSDT').toUpperCase(),
-            balanceSnapshot: Number(row.balance_snapshot || 0),
-            stakeAmount: Number(row.stake_amount || 0),
-            entryPrice: row.entry_price == null ? null : Number(row.entry_price),
-            exitPrice: row.exit_price == null ? null : Number(row.exit_price),
-            rewardValue: Number(row.usage_reward_value || 0),
-            tradeReturnPercent: Number(row.usage_trade_return_percent || 0),
-            confirmedAt: row.confirmed_at,
-            settledAt: row.settled_at,
-            usedAt: row.used_at,
-          },
+        : enrichStrategyUsageRow(row),
     }))
     return res.json({ items })
   })
@@ -438,7 +557,7 @@ export function createTasksRouter(db) {
           stakeAmount,
           tradeReturnPercent: Number(row.trade_return_percent || 0),
           balanceSnapshot,
-          confirmationMessage: 'سيتم خصم نصف رصيدك الحالي لفتح صفقة تجريبية، وعند الإغلاق سيعاد المبلغ مع نسبة العائد المحددة.',
+          confirmationMessage: 'سيتم خصم نصف رصيدك الحالي لفتح صفقة استراتيجية، ثم يعود أصل المبلغ مع الربح تلقائيًا خلال مدة عشوائية بين 90 ثانية و7 دقائق.',
         },
       })
     }
@@ -500,6 +619,8 @@ export function createTasksRouter(db) {
         if (featureType === 'trial_trade') {
           const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
           if (stakeAmount <= 0) throw new Error('INSUFFICIENT_BALANCE')
+          const settleDelayMs = getStrategyTradeDelayMs()
+          const autoSettleAt = new Date(Date.now() + settleDelayMs).toISOString()
           const debit = await adjustBalance(tx, {
             userId: req.user.id,
             currency: 'USDT',
@@ -527,7 +648,7 @@ export function createTasksRouter(db) {
               Number(row.trade_return_percent || 0),
               Number(liveQuote.price || 0),
               debit.walletTxnId,
-              JSON.stringify({ code: row.code, title: row.title, confirmedByUser: req.user.id }),
+              JSON.stringify({ code: row.code, title: row.title, confirmedByUser: req.user.id, autoSettleAt, settleDelayMs }),
             ],
           )
           const usageId = Number(inserted.rows?.[0]?.id || inserted.lastID || 0)
@@ -546,6 +667,8 @@ export function createTasksRouter(db) {
             tradeReturnPercent: Number(row.trade_return_percent || 0),
             entryPrice: Number(liveQuote.price || 0),
             balanceAfter: debit.balanceAfter,
+            autoSettleAt,
+            settleDelayMs,
           }
         }
 
@@ -622,59 +745,26 @@ export function createTasksRouter(db) {
         const usage = await get(
           tx,
           `SELECT scu.id, scu.user_id, scu.code_id, scu.status, scu.selected_symbol, scu.stake_amount,
-                  scu.trade_return_percent, scu.wallet_credit_txn_id
+                  scu.trade_return_percent, scu.wallet_credit_txn_id, scu.metadata_json
            FROM strategy_code_usages scu
            WHERE scu.id = ? AND scu.user_id = ?
            LIMIT 1`,
           [usageId, req.user.id],
         )
-        if (!usage) throw new Error('NOT_FOUND')
-        if (String(usage.status || '') !== 'trade_active') throw new Error('NOT_ACTIVE')
-        if (usage.wallet_credit_txn_id) throw new Error('ALREADY_SETTLED')
-        const liveQuote = await resolveLiveQuote(String(usage.selected_symbol || 'BTCUSDT'))
-        const stakeAmount = Number(usage.stake_amount || 0)
-        const returnPercent = Number(usage.trade_return_percent || 0)
-        const profitAmount = Number(((stakeAmount * returnPercent) / 100).toFixed(8))
-        const payoutAmount = Number((stakeAmount + profitAmount).toFixed(8))
-        const credit = await adjustBalance(tx, {
-          userId: req.user.id,
-          currency: 'USDT',
-          delta: payoutAmount,
-          referenceType: 'strategy_trade_settlement',
-          referenceId: Number(usage.code_id),
-          idempotencyKey: `strategy_trade_settlement_${usageId}`,
-          createdBy: req.user.id,
-        })
-        await run(
-          tx,
-          `UPDATE strategy_code_usages
-           SET status = 'trade_settled',
-               exit_price = ?,
-               reward_value = ?,
-               wallet_credit_txn_id = ?,
-               settled_at = CURRENT_TIMESTAMP,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [Number(liveQuote.price || 0), profitAmount, credit.walletTxnId, usageId],
-        )
-        await createLocalizedNotification(tx, req.user.id, 'strategy_trade_settled', {
-          amount: payoutAmount,
-          currency: 'USDT',
-        })
-        return {
-          usageId,
-          status: 'trade_settled',
-          exitPrice: Number(liveQuote.price || 0),
-          payoutAmount,
-          profitAmount,
-          balanceAfter: credit.balanceAfter,
-        }
+        return settleStrategyTradeUsage(tx, usage, req.user.id)
       })
       return res.json({ ok: true, ...payload })
     } catch (error) {
-      const codeMap = new Set(['NOT_FOUND', 'NOT_ACTIVE', 'ALREADY_SETTLED', 'QUOTE_UNAVAILABLE'])
+      const codeMap = new Set(['NOT_FOUND', 'NOT_ACTIVE', 'ALREADY_SETTLED', 'QUOTE_UNAVAILABLE', 'SETTLEMENT_NOT_READY'])
       if (error instanceof Error && codeMap.has(error.message)) {
-        return res.status(400).json({ error: error.message })
+        return res.status(400).json({
+          error: error.message,
+          availableAt: error.availableAt || null,
+          message:
+            error.message === 'SETTLEMENT_NOT_READY'
+              ? `سيعود الأصل والربح تلقائيًا عند ${error.availableAt || 'اقتراب الموعد المحدد'}.`
+              : undefined,
+        })
       }
       throw error
     }
