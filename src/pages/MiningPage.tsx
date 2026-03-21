@@ -65,17 +65,23 @@ export function MiningPage() {
   }, [selectedAmount, customAmount])
 
   const hasActiveSubscription = Boolean(profile && profile.status === 'active')
+  const effectiveMinimumAmount = hasActiveSubscription ? 1 : Number(config?.minSubscription || 500)
+  const nextMiningTotal = Number((Number(profile?.principal_amount || 0) + Math.max(0, amountToUse)).toFixed(2))
 
   function openConfirm(action: ConfirmAction) {
     setConfirmAction(action)
   }
 
   function handlePrimaryMiningAction() {
-    const minimumAmount = Number(config?.minSubscription || 500)
-    if (amountToUse < minimumAmount) {
-      setSelectedAmount(minimumAmount)
-      setCustomAmount('')
-      const text = t('mining_min_subscription_error')
+    if (amountToUse < effectiveMinimumAmount) {
+      if (hasActiveSubscription) {
+        setSelectedAmount(null)
+        setCustomAmount('1')
+      } else {
+        setSelectedAmount(effectiveMinimumAmount)
+        setCustomAmount('')
+      }
+      const text = hasActiveSubscription ? 'أدخل مبلغ زيادة أكبر من صفر.' : t('mining_min_subscription_error')
       setMessage({ type: 'error', text })
       emitToast({ kind: 'error', errorCode: 'INVALID_AMOUNT', message: text })
       subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -131,8 +137,26 @@ export function MiningPage() {
           {hasActiveSubscription ? t('mining_increase_title') : t('mining_subscribe_title')}
         </h2>
         <p className="mt-1 text-xs text-app-muted">
-          {hasActiveSubscription ? t('mining_increase_hint') : t('mining_subscribe_hint')} {config?.minSubscription || 500}$
+          {hasActiveSubscription
+            ? `${t('mining_increase_hint')} 1$`
+            : `${t('mining_subscribe_hint')} ${config?.minSubscription || 500}$`}
         </p>
+        {hasActiveSubscription ? (
+          <div className="mt-3 space-y-2 rounded-xl border border-app-border bg-app-elevated p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-app-muted">مبلغ التعدين الحالي</span>
+              <span className="font-semibold text-white">{Number(profile?.principal_amount || 0).toFixed(2)} USDT</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-app-muted">الزيادة الجديدة</span>
+              <span className="font-semibold text-positive">{Math.max(0, amountToUse).toFixed(2)} USDT</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-app-muted">الإجمالي بعد الزيادة</span>
+              <span className="font-semibold text-brand-blue">{nextMiningTotal.toFixed(2)} USDT</span>
+            </div>
+          </div>
+        ) : null}
         <div className="mt-3 grid grid-cols-3 gap-2">
           {(config?.planOptions || [500, 1000, 3000]).map((value) => (
             <button
@@ -151,7 +175,7 @@ export function MiningPage() {
         <div className="mt-2">
           <input
             type="number"
-            min={config?.minSubscription || 500}
+            min={effectiveMinimumAmount}
             className="field-input"
             placeholder={t('mining_custom_amount')}
             value={customAmount}

@@ -311,7 +311,15 @@ export function createMiningRouter(db) {
     const currency = 'USDT'
     if (!amount || amount <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
     const config = await getMiningConfig(db)
-    if (amount < Number(config.minSubscription || 500)) return res.status(400).json({ error: 'MIN_SUBSCRIPTION' })
+    const existingProfile = await get(
+      db,
+      `SELECT status FROM mining_profiles WHERE user_id = ? LIMIT 1`,
+      [req.user.id],
+    )
+    const isTopUpRequest = existingProfile && String(existingProfile.status || '') === 'active'
+    if (!isTopUpRequest && amount < Number(config.minSubscription || 500)) {
+      return res.status(400).json({ error: 'MIN_SUBSCRIPTION' })
+    }
 
     try {
       const payload = await withTransaction(db, async (tx) => {
