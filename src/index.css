@@ -720,6 +720,112 @@ button {
   will-change: opacity, transform, filter;
 }
 
+.glass-panel,
+.glass-panel-soft,
+.page .rounded-2xl.border.border-app-border,
+.page .rounded-xl.border.border-app-border.bg-app-elevated,
+.table-card,
+.owner-form-row {
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease,
+    box-shadow 240ms ease,
+    filter 220ms ease;
+  will-change: transform, box-shadow, filter;
+}
+
+.glass-panel:hover,
+.glass-panel-soft:hover,
+.page .rounded-2xl.border.border-app-border:hover,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:hover,
+.table-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 18px 38px rgba(4, 10, 22, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  filter: saturate(1.03) brightness(1.02);
+}
+
+.glass-panel-soft:hover,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:hover {
+  box-shadow:
+    0 12px 28px rgba(4, 10, 22, 0.26),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+.liquid-filter-panel {
+  transform-origin: 50% 0%;
+  animation: liquidFilterReveal 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.liquid-modal-backdrop {
+  animation: liquidBackdropReveal 180ms ease-out;
+}
+
+.liquid-modal-card {
+  position: relative;
+  overflow: hidden;
+  animation: liquidModalReveal 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow:
+    0 24px 54px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.liquid-modal-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 32%),
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.14), transparent 56%);
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.liquid-modal-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes liquidBackdropReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes liquidModalReveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.972);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes liquidFilterReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scaleY(0.965);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+    filter: blur(0);
+  }
+}
+
 .icon-interactive,
 .elite-hover-lift,
 .liquid-glass-icon,
@@ -789,6 +895,15 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .liquid-page-transition,
+  .glass-panel,
+  .glass-panel-soft,
+  .page .rounded-2xl.border.border-app-border,
+  .page .rounded-xl.border.border-app-border.bg-app-elevated,
+  .table-card,
+  .owner-form-row,
+  .liquid-filter-panel,
+  .liquid-modal-backdrop,
+  .liquid-modal-card,
   .icon-interactive,
   .elite-hover-lift,
   .liquid-glass-icon,
@@ -799,6 +914,7 @@ button {
   .app-header-actions-shell a,
   .app-header-actions-shell button {
     transition: none !important;
+    animation: none !important;
   }
 }
 

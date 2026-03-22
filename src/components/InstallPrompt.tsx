@@ -96,8 +96,8 @@ export function InstallPrompt() {
       </div>
 
       {guideOpen ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" dir={direction}>
-          <div className="w-full max-w-md rounded-2xl border border-app-border bg-app-card p-4 shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
+        <div className="liquid-modal-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" dir={direction}>
+          <div className="liquid-modal-card w-full max-w-md rounded-2xl border border-app-border bg-app-card p-4 shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="text-base font-semibold text-white">{t('install_prompt_title')}</h3>

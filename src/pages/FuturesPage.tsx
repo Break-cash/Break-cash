@@ -318,8 +318,8 @@ export function FuturesPage() {
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-app-border bg-app-card p-4 shadow-[0_24px_54px_rgba(0,0,0,0.45)]">
+        <div className="liquid-modal-backdrop fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="liquid-modal-card w-full max-w-lg rounded-3xl border border-app-border bg-app-card p-4 shadow-[0_24px_54px_rgba(0,0,0,0.45)]">
             <h3 className="text-base font-semibold text-white">تأكيد تفعيل الكود</h3>
             <p className="mt-2 text-sm text-app-muted">
               {preview.featureType === 'trial_trade' ? tradeDisplayConfig.preview_notice : preview.preview.confirmationMessage}

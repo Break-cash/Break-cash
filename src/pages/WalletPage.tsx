@@ -372,7 +372,7 @@ export function WalletPage() {
               {filtersOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
             </button>
             {filtersOpen ? (
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="liquid-filter-panel mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <select
                   value={filters.sourceType}
                   onChange={(e) => setFilters((f) => ({ ...f, sourceType: e.target.value }))}
@@ -461,14 +461,14 @@ export function WalletPage() {
 
       {selectedTxn ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="liquid-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setSelectedTxn(null)}
           role="dialog"
           aria-modal="true"
           aria-label={t('wallet_txn_details')}
         >
           <div
-            className="glass-panel max-h-[90vh] w-full max-w-md overflow-auto rounded-2xl p-6 shadow-2xl"
+            className="liquid-modal-card glass-panel max-h-[90vh] w-full max-w-md overflow-auto rounded-2xl p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

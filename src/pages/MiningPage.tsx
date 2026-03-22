@@ -277,8 +277,8 @@ export function MiningPage() {
       ) : null}
 
       {confirmAction ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-app-border bg-app-card p-4">
+        <div className="liquid-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+          <div className="liquid-modal-card w-full max-w-sm rounded-2xl border border-app-border bg-app-card p-4">
             <h3 className="text-base font-semibold text-white">{t('mining_confirm_title')}</h3>
             <p className="mt-2 text-sm text-app-muted">
               {confirmAction === 'subscribe'
