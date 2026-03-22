@@ -855,7 +855,7 @@ async function getEffectiveWithdrawalPolicy(db, userId) {
   return {
     vipLevel,
     dailyLimit: UNRESTRICTED_DAILY_WITHDRAWAL_LIMIT,
-    feePercent: 0,
+    feePercent: 10,
     processingHoursMin: 0,
     processingHoursMax: 0,
   }
