@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   Bell,
+  Crown,
   Globe2,
   House,
   Search,
@@ -343,6 +344,19 @@ export function Layout({
 
             <div className="app-header-side app-header-side-actions">
               <div className="glass-panel-soft app-header-actions-shell flex items-center gap-1.5 rounded-2xl p-1.5">
+              {managementShortcut ? (
+                <Link
+                  to={managementShortcut.to}
+                  className="icon-interactive liquid-glass-icon relative flex h-10 min-w-[46px] items-center justify-center gap-1 rounded-full px-2 text-white/90 hover:border-brand-blue/55 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
+                  aria-label={managementShortcut.label}
+                  title={managementShortcut.label}
+                >
+                  {managementShortcut.kind === 'owner' ? <Crown size={16} /> : <Shield size={16} />}
+                  <span className="absolute -end-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-blue px-1 text-[10px] font-bold leading-4 text-white">
+                    {managementShortcut.count}
+                  </span>
+                </Link>
+              ) : null}
               {effectiveHeaderIcons.map((item) => {
                 if (!item.visible) return null
                 if (item.id === 'profile') return null
@@ -593,7 +607,7 @@ export function Layout({
         </div>
       </main>
       <InstallPrompt />
-      <MobileBottomNav managementShortcut={managementShortcut} />
+      <MobileBottomNav />
     </div>
   )
 }
