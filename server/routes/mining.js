@@ -52,6 +52,12 @@ function normalizeAmount(value, fallback = 0) {
   return Number(n.toFixed(8))
 }
 
+function computeMinimumTopUpAmount(currentPrincipal) {
+  const principal = Number(currentPrincipal || 0)
+  if (!Number.isFinite(principal) || principal <= 0) return 0.01
+  return Math.max(0.01, Number((principal * 0.01).toFixed(2)))
+}
+
 function normalizeTiers(raw) {
   if (!Array.isArray(raw)) return []
   return raw
@@ -345,6 +351,8 @@ export function createMiningRouter(db) {
         const nowMs = Date.now()
         const isTopUp = currentProfile && String(currentProfile.status || '') === 'active'
         const existingPrincipal = Number(currentProfile?.principal_amount || 0)
+        const minimumTopUpAmount = isTopUp ? computeMinimumTopUpAmount(existingPrincipal) : 0
+        if (isTopUp && amount + 1e-8 < minimumTopUpAmount) throw new Error('MIN_TOP_UP_PERCENT')
         const nextPrincipalAmount = Number((existingPrincipal + amount).toFixed(8))
         const tierBaseAmount = isTopUp ? nextPrincipalAmount : await getUserTotalBalance(tx, req.user.id)
         const userVip = await get(tx, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [req.user.id])
@@ -472,7 +480,7 @@ export function createMiningRouter(db) {
       })
       return res.json({ ok: true, ...payload })
     } catch (error) {
-      const codes = new Set(['INSUFFICIENT_BALANCE'])
+      const codes = new Set(['INSUFFICIENT_BALANCE', 'MIN_TOP_UP_PERCENT'])
       if (error instanceof Error && codes.has(error.message)) {
         return res.status(400).json({ error: error.message })
       }

@@ -65,9 +65,15 @@ export function MiningPage() {
   }, [selectedAmount, customAmount])
 
   const hasActiveSubscription = Boolean(profile && profile.status === 'active')
-  const effectiveMinimumAmount = hasActiveSubscription ? 1 : Number(config?.minSubscription || 500)
+  const minimumTopUpAmount = useMemo(() => {
+    const principal = Number(profile?.principal_amount || 0)
+    if (!hasActiveSubscription || principal <= 0) return 0
+    return Math.max(0.01, Number((principal * 0.01).toFixed(2)))
+  }, [hasActiveSubscription, profile?.principal_amount])
+  const effectiveMinimumAmount = hasActiveSubscription ? minimumTopUpAmount : Number(config?.minSubscription || 500)
   const nextMiningTotal = Number((Number(profile?.principal_amount || 0) + Math.max(0, amountToUse)).toFixed(2))
   const availableTopUpBalance = Number(profile?.personal_balance || 0)
+  const minimumTopUpLabel = `${minimumTopUpAmount.toFixed(2)} USDT (1%)`
 
   function openConfirm(action: ConfirmAction) {
     setConfirmAction(action)
@@ -77,12 +83,14 @@ export function MiningPage() {
     if (amountToUse < effectiveMinimumAmount) {
       if (hasActiveSubscription) {
         setSelectedAmount(null)
-        setCustomAmount('1')
+        setCustomAmount(String(minimumTopUpAmount))
       } else {
         setSelectedAmount(effectiveMinimumAmount)
         setCustomAmount('')
       }
-      const text = hasActiveSubscription ? 'أدخل مبلغ زيادة أكبر من صفر.' : t('mining_min_subscription_error')
+      const text = hasActiveSubscription
+        ? t('mining_min_topup_error').replace('{amount}', minimumTopUpAmount.toFixed(2))
+        : t('mining_min_subscription_error')
       setMessage({ type: 'error', text })
       emitToast({ kind: 'error', errorCode: 'INVALID_AMOUNT', message: text })
       subscribeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -129,6 +137,8 @@ export function MiningPage() {
       const text =
         raw === 'INSUFFICIENT_BALANCE'
           ? `الرصيد المتاح للإضافة ${availableTopUpBalance.toFixed(2)} USDT فقط، بينما طلبت ${amountToUse.toFixed(2)} USDT.`
+          : raw === 'MIN_TOP_UP_PERCENT'
+            ? t('mining_min_topup_error').replace('{amount}', minimumTopUpAmount.toFixed(2))
           : raw === 'MIN_SUBSCRIPTION'
             ? t('mining_min_subscription_error')
             : raw || t('toast_error_transaction_failed')
@@ -154,7 +164,7 @@ export function MiningPage() {
         </h2>
         <p className="mt-1 text-xs text-app-muted">
           {hasActiveSubscription
-            ? `${t('mining_increase_hint')} 1$`
+            ? `${t('mining_increase_hint')} ${minimumTopUpLabel}`
             : `${t('mining_subscribe_hint')} ${config?.minSubscription || 500}$`}
         </p>
         {hasActiveSubscription ? (
@@ -196,6 +206,7 @@ export function MiningPage() {
           <input
             type="number"
             min={effectiveMinimumAmount}
+            step="0.01"
             className="field-input"
             placeholder={t('mining_custom_amount')}
             value={customAmount}
