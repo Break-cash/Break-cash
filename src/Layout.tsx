@@ -596,53 +596,56 @@ export function Layout({
               ))}
             </div>
           ) : null}
+
+          <AnimatePresence initial={false}>
+            {notificationsOpen ? (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.985 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="liquid-modal-backdrop app-header-notifications-panel mt-2"
+              >
+                <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-3">
+                  {notifications.length === 0 ? (
+                    <div className="text-sm text-white/55">{t('no_notifications')}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {notifications.map((item) => (
+                        <div key={item.id} className="glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2">
+                          <div>
+                            <div className="text-sm font-medium">{item.title}</div>
+                            <div className="text-xs text-white/60">{item.body}</div>
+                          </div>
+                          <button
+                            className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
+                            type="button"
+                            onClick={async () => {
+                              await apiFetch('/api/notifications/markAsRead', {
+                                method: 'POST',
+                                body: JSON.stringify({ id: item.id }),
+                              })
+                              readNotificationKeysRef.current.add(getNotificationKey(item))
+                              setNotifications((rows) =>
+                                rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
+                              )
+                              setUnreadCount((value) => (value > 0 ? value - 1 : 0))
+                            }}
+                          >
+                            {t('mark_read')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-[1280px] px-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-[calc(9rem+env(safe-area-inset-bottom))]">
-        <AnimatePresence initial={false}>
-          {notificationsOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="mb-3 rounded-2xl border border-app-border bg-app-card p-3"
-            >
-              {notifications.length === 0 ? (
-                <div className="text-sm text-white/55">{t('no_notifications')}</div>
-              ) : (
-                <div className="space-y-2">
-                  {notifications.map((item) => (
-                    <div key={item.id} className="glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2">
-                      <div>
-                        <div className="text-sm font-medium">{item.title}</div>
-                        <div className="text-xs text-white/60">{item.body}</div>
-                      </div>
-                      <button
-                      className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
-                        type="button"
-                        onClick={async () => {
-                          await apiFetch('/api/notifications/markAsRead', {
-                            method: 'POST',
-                            body: JSON.stringify({ id: item.id }),
-                          })
-                          readNotificationKeysRef.current.add(getNotificationKey(item))
-                          setNotifications((rows) =>
-                            rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
-                          )
-                          setUnreadCount((value) => (value > 0 ? value - 1 : 0))
-                        }}
-                      >
-                        {t('mark_read')}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
         <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-4">
           <aside className="hidden lg:block">
             <div className="sticky top-[96px] space-y-3">

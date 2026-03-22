@@ -831,9 +831,9 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
       </button>
 
       {termsOpen && (
-        <div className="deposit-terms-overlay" onClick={() => setTermsOpen(false)}>
+        <div className="deposit-terms-overlay liquid-modal-backdrop" onClick={() => setTermsOpen(false)}>
           <div
-            className="deposit-terms-modal"
+            className="deposit-terms-modal liquid-modal-card"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -858,9 +858,9 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
       )}
 
       {proofExampleOpen ? (
-        <div className="deposit-terms-overlay" onClick={() => setProofExampleOpen(false)}>
+        <div className="deposit-terms-overlay liquid-modal-backdrop" onClick={() => setProofExampleOpen(false)}>
           <div
-            className="deposit-proof-modal"
+            className="deposit-proof-modal liquid-modal-card"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"

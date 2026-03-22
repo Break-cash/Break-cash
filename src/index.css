@@ -5504,6 +5504,17 @@ button:focus-visible,
     0 14px 28px rgba(0, 0, 0, 0.24);
 }
 
+.app-header-notifications-panel {
+  position: relative;
+  z-index: 75;
+  transform-origin: top center;
+}
+
+.app-header-notifications-panel > .glass-panel {
+  width: min(100%, 560px);
+  margin-inline-start: auto;
+}
+
 .app-header-brand-wrap {
   min-width: 0;
   display: flex;
@@ -5700,6 +5711,10 @@ button:focus-visible,
     width: fit-content;
     max-width: 100%;
     margin-inline-start: auto;
+  }
+
+  .app-header-notifications-panel > .glass-panel {
+    width: 100%;
   }
 }
 
