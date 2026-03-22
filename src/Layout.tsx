@@ -67,6 +67,7 @@ export function Layout({
   const [avatarFailureCount, setAvatarFailureCount] = useState(0)
   const profileMenuRef = useRef<HTMLDivElement | null>(null)
   const languageSyncRef = useRef('')
+  const readNotificationKeysRef = useRef<Set<string>>(new Set())
   const adminLinks = [
     canViewReports ? { title: t('nav_admin'), route: '/admin/dashboard' } : null,
     canManageUsers ? { title: t('admin_users'), route: '/admin/users' } : null,
@@ -102,6 +103,30 @@ export function Layout({
       }
     : null
 
+  function getNotificationKey(item: { title?: string; body?: string }) {
+    return `${String(item.title || '').trim()}|${String(item.body || '').trim()}`
+  }
+
+  function mergeNotifications(items: { id: number; title: string; body: string; is_read: number }[]) {
+    const byKey = new Map<string, { id: number; title: string; body: string; is_read: number }>()
+    for (const item of items) {
+      const key = getNotificationKey(item)
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, item)
+        continue
+      }
+      if (Number(existing.is_read || 0) === 1 && Number(item.is_read || 0) === 0) {
+        byKey.set(key, item)
+        continue
+      }
+      if (Number(existing.id || 0) < Number(item.id || 0)) {
+        byKey.set(key, item)
+      }
+    }
+    return Array.from(byKey.values()).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
   useEffect(() => {
     apiFetch('/api/notifications/unreadCount')
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
@@ -118,6 +143,8 @@ export function Layout({
       const title = String(event.title || '').trim()
       const body = String(event.body || '').trim()
       if (!title && !body) return
+      const notificationKey = getNotificationKey({ title, body })
+      if (readNotificationKeysRef.current.has(notificationKey)) return
       const nextNotification = {
         id: Number(event.ts || Date.now()),
         title,
@@ -125,8 +152,7 @@ export function Layout({
         is_read: 0,
       }
       setNotifications((prev) => {
-        const deduped = prev.filter((item) => !(item.title === nextNotification.title && item.body === nextNotification.body))
-        return [nextNotification, ...deduped].slice(0, 100)
+        return mergeNotifications([nextNotification, ...prev]).slice(0, 100)
       })
       setUnreadCount((prev) => prev + 1)
 
@@ -239,7 +265,13 @@ export function Layout({
     const res = (await apiFetch('/api/notifications/list')) as {
       notifications: { id: number; title: string; body: string; is_read: number }[]
     }
-    setNotifications(res.notifications)
+    const merged = mergeNotifications(res.notifications || [])
+    readNotificationKeysRef.current = new Set(
+      merged
+        .filter((item) => Number(item.is_read || 0) === 1)
+        .map((item) => getNotificationKey(item)),
+    )
+    setNotifications(merged)
   }
 
   const showBackButton = !['/portfolio', '/home', '/'].includes(location.pathname)
@@ -595,6 +627,7 @@ export function Layout({
                             method: 'POST',
                             body: JSON.stringify({ id: item.id }),
                           })
+                          readNotificationKeysRef.current.add(getNotificationKey(item))
                           setNotifications((rows) =>
                             rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
                           )
