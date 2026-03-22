@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -167,6 +167,108 @@ function LoginRouteWrapper({ onAuthSuccess }: LoginRouteWrapperProps) {
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+function AnimatedAuthenticatedRoutes({
+  user,
+  canManageUsers,
+  canManageInvites,
+  canManageBalances,
+  canManagePermissions,
+  canViewReports,
+  handleLogout,
+  refreshCurrentUser,
+}: {
+  user: AuthUser
+  canManageUsers: boolean
+  canManageInvites: boolean
+  canManageBalances: boolean
+  canManagePermissions: boolean
+  canViewReports: boolean
+  handleLogout: () => void
+  refreshCurrentUser: () => Promise<void>
+}) {
+  const location = useLocation()
+
+  return (
+    <Layout
+      user={user}
+      onLogout={handleLogout}
+      canManageUsers={canManageUsers}
+      canManageInvites={canManageInvites}
+      canManageBalances={canManageBalances}
+      canManagePermissions={canManagePermissions}
+      canViewReports={canViewReports}
+    >
+      <Suspense fallback={<div className="login-wrapper">Loading...</div>}>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={location.pathname}
+            className="liquid-page-transition"
+            initial={{ opacity: 0, y: 16, scale: 0.992, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -10, scale: 0.996, filter: 'blur(8px)' }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Routes location={location}>
+              <Route path="/portfolio" element={<Profile />} />
+              <Route path="/wallet" element={<WalletPage />} />
+              <Route path="/deposit" element={<DepositPage user={user} />} />
+              <Route path="/withdraw" element={<DepositPage user={user} pageMode="withdraw" />} />
+              <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/assets" element={<WalletPage />} />
+              <Route path="/market" element={<Market />} />
+              <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/futures" element={<FuturesPage />} />
+              <Route path="/mining" element={<MiningPage />} />
+              <Route path="/vip" element={<VipPage />} />
+              <Route path="/referral" element={<ReferralPage />} />
+              <Route path="/support" element={<SupportPage />} />
+              <Route
+                path="/profile"
+                element={(
+                  <ProfilePage
+                    onLogout={handleLogout}
+                    user={user}
+                    onProfileRefresh={refreshCurrentUser}
+                  />
+                )}
+              />
+              <Route path="/sync" element={<SyncTrade />} />
+              <Route path="/options" element={<Options />} />
+              <Route
+                path="/admin/dashboard"
+                element={canViewReports ? <AdminDashboardPage /> : <Navigate to="/portfolio" replace />}
+              />
+              <Route
+                path="/admin/users"
+                element={canManageUsers ? <AdminUsersPage /> : <Navigate to="/portfolio" replace />}
+              />
+              <Route
+                path="/admin/invites"
+                element={canManageInvites ? <AdminInvitesPage /> : <Navigate to="/portfolio" replace />}
+              />
+              <Route
+                path="/admin/balances"
+                element={canManageBalances ? <AdminBalancesPage /> : <Navigate to="/portfolio" replace />}
+              />
+              <Route
+                path="/admin/permissions"
+                element={canManagePermissions ? <AdminPermissionsPage /> : <Navigate to="/portfolio" replace />}
+              />
+              <Route path="/owner/*" element={<OwnerGuard user={user} />}>
+                <Route index element={<Navigate to="/owner/operations" replace />} />
+                <Route path="premium" element={<Navigate to="/owner/operations" replace />} />
+                <Route path="operations" element={<OwnerDashboardPage user={user} />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/portfolio" replace />} />
+            </Routes>
+          </motion.div>
+        </AnimatePresence>
+      </Suspense>
+    </Layout>
   )
 }
 
@@ -399,92 +501,16 @@ function App() {
           !isAuthenticated ? (
             <Navigate to="/" replace />
           ) : (
-            <>
-              <Layout
-                user={user as AuthUser}
-                onLogout={handleLogout}
-                canManageUsers={canManageUsers}
-                canManageInvites={canManageInvites}
-                canManageBalances={canManageBalances}
-                canManagePermissions={!!canManagePermissions}
-                canViewReports={canViewReports}
-              >
-                <Suspense fallback={<div className="login-wrapper">Loading...</div>}>
-                  <Routes>
-                    <Route path="/portfolio" element={<Profile />} />
-                    <Route path="/wallet" element={<WalletPage />} />
-                    <Route path="/deposit" element={<DepositPage user={user as AuthUser} />} />
-                    <Route path="/withdraw" element={<DepositPage user={user as AuthUser} pageMode="withdraw" />} />
-                    <Route path="/friends" element={<FriendsPage />} />
-                    <Route path="/home" element={<Home />} />
-                    <Route path="/assets" element={<WalletPage />} />
-                    <Route path="/market" element={<Market />} />
-                    <Route path="/watchlist" element={<WatchlistPage />} />
-                    <Route path="/futures" element={<FuturesPage />} />
-                    <Route path="/mining" element={<MiningPage />} />
-                    <Route path="/vip" element={<VipPage />} />
-                    <Route path="/referral" element={<ReferralPage />} />
-                    <Route path="/support" element={<SupportPage />} />
-                    <Route
-                      path="/profile"
-                      element={(
-                        <ProfilePage
-                          onLogout={handleLogout}
-                          user={user as AuthUser}
-                          onProfileRefresh={refreshCurrentUser}
-                        />
-                      )}
-                    />
-                    <Route path="/sync" element={<SyncTrade />} />
-                    <Route path="/options" element={<Options />} />
-                    <Route
-                      path="/admin/dashboard"
-                      element={
-                        canViewReports ? <AdminDashboardPage /> : <Navigate to="/portfolio" replace />
-                      }
-                    />
-                    <Route
-                      path="/admin/users"
-                      element={
-                        canManageUsers ? <AdminUsersPage /> : <Navigate to="/portfolio" replace />
-                      }
-                    />
-                    <Route
-                      path="/admin/invites"
-                      element={
-                        canManageInvites ? <AdminInvitesPage /> : <Navigate to="/portfolio" replace />
-                      }
-                    />
-                    <Route
-                      path="/admin/balances"
-                      element={
-                        canManageBalances ? (
-                          <AdminBalancesPage />
-                        ) : (
-                          <Navigate to="/portfolio" replace />
-                        )
-                      }
-                    />
-                    <Route
-                      path="/admin/permissions"
-                      element={
-                        canManagePermissions ? (
-                          <AdminPermissionsPage />
-                        ) : (
-                          <Navigate to="/portfolio" replace />
-                        )
-                      }
-                    />
-                    <Route path="/owner/*" element={<OwnerGuard user={user as AuthUser} />}>
-                      <Route index element={<Navigate to="/owner/operations" replace />} />
-                      <Route path="premium" element={<Navigate to="/owner/operations" replace />} />
-                      <Route path="operations" element={<OwnerDashboardPage user={user as AuthUser} />} />
-                    </Route>
-                    <Route path="*" element={<Navigate to="/portfolio" replace />} />
-                  </Routes>
-                </Suspense>
-              </Layout>
-            </>
+            <AnimatedAuthenticatedRoutes
+              user={user as AuthUser}
+              canManageUsers={canManageUsers}
+              canManageInvites={canManageInvites}
+              canManageBalances={canManageBalances}
+              canManagePermissions={!!canManagePermissions}
+              canViewReports={canViewReports}
+              handleLogout={handleLogout}
+              refreshCurrentUser={refreshCurrentUser}
+            />
           )
         }
       />
