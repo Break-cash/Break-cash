@@ -8,6 +8,13 @@ import { publishLiveUpdate } from '../services/live-updates.js'
 import { hasPermission } from '../services/permissions.js'
 
 const DEFAULT_BRAND_LOGO_URL = '/break-cash-logo-premium.png'
+const LOCKED_PLATFORM_SETTING_KEYS = new Set([
+  'wallet_link',
+  'logo_url',
+  'favicon_url',
+  'apple_touch_icon_url',
+  'pwa_config',
+])
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -42,6 +49,17 @@ export function createSettingsRouter(db) {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
       [String(key), String(value || '')],
     )
+  }
+
+  function isLockedPlatformSettingKey(key) {
+    return LOCKED_PLATFORM_SETTING_KEYS.has(String(key || '').trim().toLowerCase())
+  }
+
+  function blockLockedPlatformSetting(res, key) {
+    return res.status(403).json({
+      error: 'PLATFORM_SETTING_LOCKED',
+      key: String(key || '').trim().toLowerCase(),
+    })
   }
 
   async function syncBrandLogos(logoUrlRaw) {
@@ -251,6 +269,7 @@ export function createSettingsRouter(db) {
   }))
 
   router.post('/wallet-link', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    if (isLockedPlatformSettingKey('wallet_link')) return blockLockedPlatformSetting(res, 'wallet_link')
     const walletLink = String(req.body?.walletLink || '').trim()
     if (!walletLink) return res.status(400).json({ error: 'INVALID_INPUT' })
     await run(
@@ -293,6 +312,7 @@ export function createSettingsRouter(db) {
   }))
 
   router.post('/logo-url', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    if (isLockedPlatformSettingKey('logo_url')) return blockLockedPlatformSetting(res, 'logo_url')
     const logoUrl = String(req.body?.logoUrl ?? '').trim()
     await upsertSettingValue('logo_url', logoUrl || '')
     await syncBrandLogos(logoUrl || '')
@@ -306,6 +326,7 @@ export function createSettingsRouter(db) {
   }))
 
   router.post('/favicon-url', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    if (isLockedPlatformSettingKey('favicon_url')) return blockLockedPlatformSetting(res, 'favicon_url')
     const faviconUrl = String(req.body?.faviconUrl ?? '').trim()
     await run(
       db,
@@ -323,6 +344,7 @@ export function createSettingsRouter(db) {
   }))
 
   router.post('/apple-touch-icon-url', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    if (isLockedPlatformSettingKey('apple_touch_icon_url')) return blockLockedPlatformSetting(res, 'apple_touch_icon_url')
     const appleTouchIconUrl = String(req.body?.appleTouchIconUrl ?? '').trim()
     await run(
       db,
@@ -364,6 +386,7 @@ export function createSettingsRouter(db) {
   }))
 
   router.post('/pwa-config', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    if (isLockedPlatformSettingKey('pwa_config')) return blockLockedPlatformSetting(res, 'pwa_config')
     const config = normalizePwaConfig(req.body?.config)
     await run(
       db,
@@ -492,6 +515,7 @@ export function createSettingsRouter(db) {
 
     const key = normalizeImageKey(req.body?.key)
     if (!key) return res.status(400).json({ error: 'INVALID_INPUT', message: 'Invalid key' })
+    if (isLockedPlatformSettingKey(key)) return blockLockedPlatformSetting(res, key)
     if (!req.file) return res.status(400).json({ error: 'FILE_REQUIRED', message: 'No file provided' })
     const mime = String(req.file.mimetype || '').toLowerCase()
     if (!mime.startsWith('image/')) {
