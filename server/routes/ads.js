@@ -16,6 +16,11 @@ const PROMOTED_AD_MEDIA_URLS = new Set([
   '/ads/exclusive-offer-en.jpeg',
   '/ads/breakcash-best-video.mp4',
 ])
+const SALES_PRIORITY_MEDIA_URLS = [
+  '/ads/exclusive-offer-ar.jpeg',
+  '/ads/exclusive-offer-en.jpeg',
+  '/ads/breakcash-best-video.mp4',
+]
 
 const DEFAULT_ADS = {
   home: [
@@ -163,6 +168,43 @@ async function ensurePromotedAdsPersisted(db) {
         [item.type, mediaUrl, item.title || '', item.description || '', item.linkUrl || null, placement, nextSort],
       )
       nextSort += 1
+    }
+
+    const placementRows = await all(
+      db,
+      `SELECT id, media_url
+       FROM ads
+       WHERE placement = ?
+       ORDER BY sort_order ASC, id ASC`,
+      [placement],
+    )
+
+    const salesRows = []
+    const otherRows = []
+    for (const row of placementRows) {
+      if (SALES_PRIORITY_MEDIA_URLS.includes(String(row.media_url || '').trim())) {
+        salesRows.push(row)
+      } else {
+        otherRows.push(row)
+      }
+    }
+
+    salesRows.sort(
+      (a, b) =>
+        SALES_PRIORITY_MEDIA_URLS.indexOf(String(a.media_url || '').trim()) -
+        SALES_PRIORITY_MEDIA_URLS.indexOf(String(b.media_url || '').trim()),
+    )
+
+    const orderedRows = [...salesRows, ...otherRows]
+    for (let index = 0; index < orderedRows.length; index += 1) {
+      await run(
+        db,
+        `UPDATE ads
+         SET sort_order = ?,
+             updated_at = datetime('now')
+         WHERE id = ?`,
+        [index, orderedRows[index].id],
+      )
     }
   }
 }
