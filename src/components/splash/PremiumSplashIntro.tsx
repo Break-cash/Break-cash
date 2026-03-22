@@ -12,8 +12,6 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
   const [logoBroken, setLogoBroken] = useState(false)
   const splashVideoUrl = '/ads/break-logo-motion.mp4'
   const totalMs = prefersReducedMotion ? 3000 : 3600
-  const title = 'تجربة تداول احترافية'
-  const subtitle = 'واجهة دخول سينمائية أكثر توازنًا، بطابع بصري فاخر وألوان منسجمة مع هوية التطبيق.'
 
   useEffect(() => {
     let mounted = true
@@ -74,20 +72,6 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
       />
 
       <div className="premium-splash-center">
-        <motion.div
-          className="premium-splash-copy"
-          dir="rtl"
-          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: prefersReducedMotion ? 0.2 : 0.75, delay: prefersReducedMotion ? 0 : 0.42 }}
-        >
-          <span className="premium-splash-kicker" dir="ltr">
-            BREAK CASH
-          </span>
-          <h1 className="premium-splash-title">{title}</h1>
-          <p className="premium-splash-subtitle">{subtitle}</p>
-        </motion.div>
-
         <motion.div
           className="premium-splash-logo-shell"
           initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.96 }}
