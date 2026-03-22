@@ -2289,6 +2289,16 @@ button {
   background: #030406;
 }
 
+.premium-splash-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.05) contrast(1.04) brightness(0.56);
+  pointer-events: none;
+}
+
 .premium-splash-glow {
   position: absolute;
   inset: -15% -10%;
@@ -2318,6 +2328,51 @@ button {
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+.premium-splash-copy {
+  position: absolute;
+  top: clamp(8%, 10vh, 14%);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90vw, 720px);
+  text-align: center;
+  z-index: 2;
+}
+
+.premium-splash-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 14, 26, 0.45);
+  color: rgba(248, 250, 252, 0.86);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.premium-splash-title {
+  margin: 14px 0 0;
+  color: #f8fbff;
+  font-size: clamp(30px, 6vw, 58px);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+  text-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+}
+
+.premium-splash-subtitle {
+  margin: 10px auto 0;
+  max-width: 520px;
+  color: rgba(226, 232, 240, 0.8);
+  font-size: clamp(13px, 1.9vw, 16px);
+  line-height: 1.6;
+  text-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .premium-splash-arcs-wrap {
@@ -2354,11 +2409,14 @@ button {
   aspect-ratio: 1;
   border-radius: 28px;
   padding: 14px;
-  background: linear-gradient(160deg, rgba(30, 35, 48, 0.62), rgba(10, 12, 18, 0.92));
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: linear-gradient(160deg, rgba(17, 25, 40, 0.5), rgba(10, 12, 18, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 42px rgba(0, 0, 0, 0.54);
+    0 18px 48px rgba(0, 0, 0, 0.54),
+    0 0 38px rgba(37, 99, 235, 0.12);
+  backdrop-filter: blur(14px);
+  z-index: 2;
 }
 
 .premium-splash-logo-stage {
@@ -2367,7 +2425,9 @@ button {
   height: 100%;
   border-radius: 20px;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 26%, rgba(120, 135, 162, 0.17), transparent 60%), rgba(8, 11, 17, 0.92);
+  background:
+    linear-gradient(180deg, rgba(6, 10, 18, 0.38), rgba(6, 10, 18, 0.68)),
+    radial-gradient(circle at 50% 26%, rgba(96, 165, 250, 0.16), transparent 60%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2377,7 +2437,7 @@ button {
   width: 82%;
   height: 82%;
   object-fit: contain;
-  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.55));
 }
 
 .premium-splash-metal-sweep {
@@ -2408,6 +2468,10 @@ button {
 }
 
 @media (max-width: 900px) {
+  .premium-splash-copy {
+    top: max(7%, env(safe-area-inset-top));
+  }
+
   .app-root {
     grid-template-columns: 220px minmax(0, 1fr);
   }
@@ -2418,6 +2482,19 @@ button {
 }
 
 @media (max-width: 720px) {
+  .premium-splash-copy {
+    width: min(92vw, 420px);
+  }
+
+  .premium-splash-kicker {
+    font-size: 10px;
+    letter-spacing: 0.22em;
+  }
+
+  .premium-splash-subtitle {
+    max-width: 320px;
+  }
+
   .app-root {
     grid-template-columns: minmax(0, 1fr);
   }

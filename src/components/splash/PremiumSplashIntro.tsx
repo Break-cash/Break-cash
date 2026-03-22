@@ -10,6 +10,7 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
   const prefersReducedMotion = useReducedMotion()
   const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
   const [logoBroken, setLogoBroken] = useState(false)
+  const splashVideoUrl = '/ads/break-logo-motion.mp4'
   // Keep splash visible long enough on all devices,
   // including users with reduced motion enabled.
   const totalMs = prefersReducedMotion ? 3000 : 3600
@@ -47,10 +48,23 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
       exit={{ opacity: 0, transition: { duration: 0.45, ease: 'easeOut' } }}
       transition={{ duration: 0.45, ease: 'easeOut' }}
     >
+      {!prefersReducedMotion ? (
+        <motion.video
+          className="premium-splash-video"
+          src={splashVideoUrl}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          initial={{ opacity: 0, scale: 1.04 }}
+          animate={{ opacity: 0.8, scale: 1 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+        />
+      ) : null}
       <motion.div
         className="premium-splash-glow"
         initial={{ opacity: 0 }}
-        animate={{ opacity: 0.82 }}
+        animate={{ opacity: prefersReducedMotion ? 0.82 : 0.66 }}
         transition={{ duration: prefersReducedMotion ? 0.2 : 0.7, delay: prefersReducedMotion ? 0 : 0.2 }}
       />
       <motion.div
@@ -61,6 +75,17 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
       />
 
       <div className="premium-splash-center">
+        <motion.div
+          className="premium-splash-copy"
+          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: prefersReducedMotion ? 0.2 : 0.75, delay: prefersReducedMotion ? 0 : 0.42 }}
+        >
+          <span className="premium-splash-kicker">BREAK CASH</span>
+          <h1 className="premium-splash-title">Trade Beyond Limits</h1>
+          <p className="premium-splash-subtitle">Premium crypto experience with a cinematic entry.</p>
+        </motion.div>
+
         <div className="premium-splash-arcs-wrap" aria-hidden>
           <motion.span
             className="premium-splash-arc arc-outer"
