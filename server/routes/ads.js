@@ -8,6 +8,11 @@ import { publishLiveUpdate } from '../services/live-updates.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
+const PROMOTED_AD_MEDIA_URLS = new Set([
+  '/ads/event-banner.jpeg',
+  '/ads/event-a.mp4',
+  '/ads/breakcash-best.jpeg',
+])
 
 const DEFAULT_ADS = {
   home: [
@@ -95,6 +100,58 @@ function getDefaultAdsForPlacement(placement) {
   }))
 }
 
+async function ensurePromotedAdsPersisted(db) {
+  for (const placement of ['home', 'deposit', 'mining', 'profile']) {
+    const placementDefaults = Array.isArray(DEFAULT_ADS[placement]) ? DEFAULT_ADS[placement] : []
+    const promotedItems = placementDefaults.filter((item) => PROMOTED_AD_MEDIA_URLS.has(String(item.mediaUrl || '').trim()))
+    if (promotedItems.length === 0) continue
+
+    const maxSortRow = await get(
+      db,
+      `SELECT COALESCE(MAX(sort_order), -1) AS max_sort
+       FROM ads
+       WHERE placement = ?`,
+      [placement],
+    )
+    let nextSort = Number(maxSortRow?.max_sort ?? -1) + 1
+
+    for (const item of promotedItems) {
+      const mediaUrl = String(item.mediaUrl || '').trim()
+      const existing = await get(
+        db,
+        `SELECT id, is_active, sort_order
+         FROM ads
+         WHERE placement = ? AND media_url = ?
+         ORDER BY id ASC
+         LIMIT 1`,
+        [placement, mediaUrl],
+      )
+
+      if (existing?.id) {
+        if (!Number(existing.is_active)) {
+          await run(
+            db,
+            `UPDATE ads
+             SET is_active = 1,
+                 updated_at = datetime('now')
+             WHERE id = ?`,
+            [existing.id],
+          )
+        }
+        continue
+      }
+
+      await run(
+        db,
+        `INSERT INTO ads (type, media_url, title, description, link_url, placement, sort_order, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+        [item.type, mediaUrl, item.title || '', item.description || '', item.linkUrl || null, placement, nextSort],
+      )
+      nextSort += 1
+    }
+  }
+}
+
 export function createAdsRouter(db) {
   const router = Router()
   const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
@@ -124,6 +181,7 @@ export function createAdsRouter(db) {
   })
 
   router.get('/', asyncRoute(async (req, res) => {
+    await ensurePromotedAdsPersisted(db)
     const placement = String(req.query.placement || 'all').trim().toLowerCase()
     const p = PLACEMENTS.has(placement) ? placement : 'all'
     const rows = await all(
@@ -142,6 +200,7 @@ export function createAdsRouter(db) {
   }))
 
   router.get('/admin', requireAuth(db), requireRole('owner'), asyncRoute(async (_req, res) => {
+    await ensurePromotedAdsPersisted(db)
     const rows = await all(
       db,
       `SELECT id, type, media_url, title, description, link_url, placement, sort_order, is_active, created_at, updated_at
