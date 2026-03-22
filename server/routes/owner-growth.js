@@ -18,6 +18,7 @@ import {
   verifyEarningTransfers,
   verifyUnexpectedZeroBalances,
 } from '../services/wallet-reconciliation.js'
+import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -1222,6 +1223,7 @@ export function createOwnerGrowthRouter(db) {
     if (!['super_admin', 'admin', 'finance', 'support', 'moderator'].includes(adminRole)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(
       db,
       `INSERT INTO admin_staff_profiles (user_id, admin_role, is_active, can_view_sensitive, created_by)
@@ -1240,6 +1242,7 @@ export function createOwnerGrowthRouter(db) {
     const userId = Number(req.body?.userId || 0)
     const permissions = Array.isArray(req.body?.permissions) ? req.body.permissions.map((v) => String(v).trim()).filter(Boolean) : []
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(db, `DELETE FROM permissions WHERE user_id = ?`, [userId])
     if (permissions.length > 0) {
       const valuesSql = buildValuesPlaceholders(permissions.length, 3)

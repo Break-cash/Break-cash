@@ -14,6 +14,7 @@ import {
 import { sendPhoneCodeSms } from '../services/sms.js'
 import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../services/verification.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -179,6 +180,7 @@ export function createProfileRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     if (!req.file) return res.status(400).json({ error: 'FILE_REQUIRED' })
     const mime = String(req.file.mimetype || '').toLowerCase()
     if (!mime.startsWith('image/')) {
@@ -293,6 +295,7 @@ export function createProfileRouter(db) {
     const userId = Number(req.body?.userId)
     const enabled = Number(req.body?.enabled) ? 1 : 0
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
+    if (await blockProtectedOwnerAction(db, res, userId)) return
 
     await run(db, `UPDATE users SET blue_badge = ? WHERE id = ?`, [enabled, userId])
     const row = await fetchProfile(db, userId)
@@ -304,6 +307,7 @@ export function createProfileRouter(db) {
     const style = String(req.body?.style || 'none').trim().toLowerCase()
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
     if (!['none', 'blue', 'gold'].includes(style)) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (await blockProtectedOwnerAction(db, res, userId)) return
 
     if (style === 'blue') {
       await run(db, `UPDATE users SET blue_badge = 1, verification_status = 'verified' WHERE id = ?`, [userId])
@@ -324,6 +328,7 @@ export function createProfileRouter(db) {
     if (!Number.isInteger(vipLevel) || vipLevel < 0 || vipLevel > 5) {
       return res.status(400).json({ error: 'INVALID_VIP_LEVEL' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
 
     await run(db, `UPDATE users SET vip_level = ? WHERE id = ?`, [vipLevel, userId])
     const row = await fetchProfile(db, userId)
@@ -342,6 +347,7 @@ export function createProfileRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0) {
       return res.status(400).json({ error: 'INVALID_USER' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     const hasProfileColor = Object.prototype.hasOwnProperty.call(req.body || {}, 'profileColor')
     const hasProfileBadge = Object.prototype.hasOwnProperty.call(req.body || {}, 'profileBadge')
     if (!hasProfileColor && !hasProfileBadge) {

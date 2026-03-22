@@ -4,6 +4,7 @@ import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { hashPassword } from '../auth.js'
 import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
 import { getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
+import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 
 async function withTransaction(db, fn) {
   if (typeof db.connect === 'function') {
@@ -285,6 +286,7 @@ export function createUsersRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0) {
       return res.status(400).json({ error: 'INVALID_USER' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(
       db,
       `UPDATE users
@@ -313,6 +315,7 @@ export function createUsersRouter(db) {
     if (!['approve', 'reject'].includes(decision)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     const approved = decision === 'approve' ? 1 : 0
     await run(
       db,
@@ -334,6 +337,7 @@ export function createUsersRouter(db) {
   router.post('/ban', requirePermission(db, 'manage_users'), async (req, res) => {
     const userId = Number(req.body?.userId)
     const isBanned = Number(req.body?.isBanned) ? 1 : 0
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(db, `UPDATE users SET is_banned = ? WHERE id = ?`, [isBanned, userId])
     await logAdminAction(db, req.user.id, 'users', 'ban_toggle', userId, { isBanned })
     return res.json({ ok: true })
@@ -345,6 +349,7 @@ export function createUsersRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0) {
       return res.status(400).json({ error: 'INVALID_USER' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(db, `UPDATE users SET is_frozen = ? WHERE id = ?`, [isFrozen, userId])
     await logAdminAction(db, req.user.id, 'users', 'freeze_toggle', userId, { isFrozen })
     return res.json({ ok: true })
@@ -354,6 +359,7 @@ export function createUsersRouter(db) {
     const userId = Number(req.body?.userId)
     const days = Math.max(1, Math.min(365, Number(req.body?.days || 1)))
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     const bannedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
     await run(
       db,
@@ -373,6 +379,7 @@ export function createUsersRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0 || newPassword.length < 6) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     const passwordHash = await hashPassword(newPassword)
     await run(db, `UPDATE users SET password_hash = ? WHERE id = ?`, [passwordHash, userId])
     await run(
@@ -396,6 +403,7 @@ export function createUsersRouter(db) {
     if (!['add', 'deduct'].includes(type)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     const delta = type === 'add' ? amount : -amount
     try {
       await withTransaction(db, async (tx) => {
@@ -434,6 +442,7 @@ export function createUsersRouter(db) {
     if (!['main', 'pending'].includes(target)) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
 
     try {
       if (target === 'main') {
@@ -533,6 +542,7 @@ export function createUsersRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0 || !title || !body) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(
       db,
       `INSERT INTO notifications (user_id, title, body, is_read, created_at)
@@ -549,6 +559,7 @@ export function createUsersRouter(db) {
     if (!Number.isFinite(userId) || userId <= 0 || !note) {
       return res.status(400).json({ error: 'INVALID_INPUT' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(
       db,
       `INSERT INTO user_admin_notes (user_id, admin_id, note, created_at)
@@ -565,6 +576,7 @@ export function createUsersRouter(db) {
     if (!['user', 'moderator', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'INVALID_ROLE' })
     }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
     await run(db, `UPDATE users SET role = ? WHERE id = ?`, [role, userId])
     await logAdminAction(db, req.user.id, 'staff_permissions', 'promote_role', userId, { role })
     return res.json({ ok: true })
@@ -572,6 +584,7 @@ export function createUsersRouter(db) {
 
   router.delete('/:id', requirePermission(db, 'manage_users'), async (req, res) => {
     const targetUserId = Number(req.params.id)
+    if (await blockProtectedOwnerAction(db, res, targetUserId)) return
     await run(db, `DELETE FROM users WHERE id = ?`, [targetUserId])
     await logAdminAction(db, req.user.id, 'users', 'delete_user', targetUserId, {})
     return res.json({ ok: true })
