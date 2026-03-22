@@ -11,9 +11,9 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
   const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
   const [logoBroken, setLogoBroken] = useState(false)
   const splashVideoUrl = '/ads/break-logo-motion.mp4'
-  // Keep splash visible long enough on all devices,
-  // including users with reduced motion enabled.
   const totalMs = prefersReducedMotion ? 3000 : 3600
+  const title = 'تجربة تداول احترافية'
+  const subtitle = 'واجهة دخول سينمائية أكثر توازنًا، بطابع بصري فاخر وألوان منسجمة مع هوية التطبيق.'
 
   useEffect(() => {
     let mounted = true
@@ -63,7 +63,7 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
       <motion.div
         className="premium-splash-glow"
         initial={{ opacity: 0 }}
-        animate={{ opacity: prefersReducedMotion ? 0.82 : 0.74 }}
+        animate={{ opacity: prefersReducedMotion ? 0.84 : 0.78 }}
         transition={{ duration: prefersReducedMotion ? 0.2 : 0.7, delay: prefersReducedMotion ? 0 : 0.2 }}
       />
       <motion.div
@@ -76,13 +76,16 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
       <div className="premium-splash-center">
         <motion.div
           className="premium-splash-copy"
+          dir="rtl"
           initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: prefersReducedMotion ? 0.2 : 0.75, delay: prefersReducedMotion ? 0 : 0.42 }}
         >
-          <span className="premium-splash-kicker">بريك كاش</span>
-          <h1 className="premium-splash-title">تجربة تداول احترافية</h1>
-          <p className="premium-splash-subtitle">دخول بصري أنيق بطابع سينمائي وألوان منسجمة مع هوية التطبيق.</p>
+          <span className="premium-splash-kicker" dir="ltr">
+            BREAK CASH
+          </span>
+          <h1 className="premium-splash-title">{title}</h1>
+          <p className="premium-splash-subtitle">{subtitle}</p>
         </motion.div>
 
         <motion.div

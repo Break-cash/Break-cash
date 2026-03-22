@@ -32,7 +32,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [logoBroken, setLogoBroken] = useState(false)
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
-  const brandLabel = language === 'ar' ? 'بريك كاش' : 'BREAK CASH'
+  const brandLabel = 'BREAK CASH'
 
   useEffect(() => {
     let mounted = true
