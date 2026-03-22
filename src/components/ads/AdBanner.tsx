@@ -6,6 +6,7 @@ import { useI18n } from '../../i18nCore'
 
 const ROTATE_INTERVAL_MS = 4000
 const MANUAL_PAUSE_MS = 8000
+const SWIPE_THRESHOLD_PX = 42
 
 type AdBannerProps = {
   items: AdItem[]
@@ -21,6 +22,10 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
   const [isVisible, setIsVisible] = useState(true)
   const pauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)
+  const pointerStartXRef = useRef<number | null>(null)
+  const pointerDeltaXRef = useRef(0)
+  const pointerDraggingRef = useRef(false)
+  const suppressClickRef = useRef(false)
 
   const filtered = items.filter((x) => x && x.isActive)
   const canRotate = filtered.length > 1
@@ -81,6 +86,40 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
     if (isManual) pauseAutoTemporarily()
   }
 
+  function resetPointerGesture() {
+    pointerStartXRef.current = null
+    pointerDeltaXRef.current = 0
+    pointerDraggingRef.current = false
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!canRotate) return
+    suppressClickRef.current = false
+    pointerStartXRef.current = event.clientX
+    pointerDeltaXRef.current = 0
+    pointerDraggingRef.current = false
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (pointerStartXRef.current == null) return
+    pointerDeltaXRef.current = event.clientX - pointerStartXRef.current
+    if (Math.abs(pointerDeltaXRef.current) >= 8) {
+      pointerDraggingRef.current = true
+    }
+  }
+
+  function handlePointerEnd() {
+    const deltaX = pointerDeltaXRef.current
+    resetPointerGesture()
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return
+    suppressClickRef.current = true
+    if (deltaX < 0) {
+      goTo(activeIndex + 1, true)
+      return
+    }
+    goTo(activeIndex - 1, true)
+  }
+
   if (!current) {
     return (
       <section
@@ -107,7 +146,19 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(0,123,255,0.12),transparent_46%)]" />
       <div
         className={`relative overflow-hidden rounded-xl border border-[#2a3346] bg-black/30 ${clickable ? 'cursor-pointer' : ''}`}
+        style={{ touchAction: canRotate ? 'pan-y' : 'auto' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={resetPointerGesture}
+        onPointerLeave={() => {
+          if (pointerStartXRef.current != null) handlePointerEnd()
+        }}
         onClick={() => {
+          if (suppressClickRef.current || pointerDraggingRef.current) {
+            suppressClickRef.current = false
+            return
+          }
           if (current.linkUrl) navigate(current.linkUrl)
         }}
       >
@@ -146,18 +197,7 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
         </div>
 
         {canRotate && (
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              className="icon-interactive rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-white/85 hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation()
-                goTo(activeIndex - 1, true)
-              }}
-              aria-label={t('ads_prev')}
-            >
-              {t('ads_prev')}
-            </button>
+          <div className="mt-3 flex items-center justify-center gap-1.5">
             <div className="flex items-center gap-1.5">
               {filtered.map((item, idx) => (
                 <button
@@ -174,17 +214,6 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
                 />
               ))}
             </div>
-            <button
-              type="button"
-              className="icon-interactive rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-white/85 hover:bg-white/10"
-              onClick={(e) => {
-                e.stopPropagation()
-                goTo(activeIndex + 1, true)
-              }}
-              aria-label={t('ads_next')}
-            >
-              {t('ads_next')}
-            </button>
           </div>
         )}
       </div>
