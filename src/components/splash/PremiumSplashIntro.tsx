@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { getLogoUrl } from '../../api'
 
@@ -36,7 +36,6 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
     return () => window.clearTimeout(timer)
   }, [onComplete, totalMs])
 
-  const arcDuration = useMemo(() => (prefersReducedMotion ? 0 : 7.5), [prefersReducedMotion])
   const sweepDuration = prefersReducedMotion ? 0 : 0.95
   const pulseDuration = prefersReducedMotion ? 0 : 0.9
 
@@ -64,7 +63,7 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
       <motion.div
         className="premium-splash-glow"
         initial={{ opacity: 0 }}
-        animate={{ opacity: prefersReducedMotion ? 0.82 : 0.66 }}
+        animate={{ opacity: prefersReducedMotion ? 0.82 : 0.74 }}
         transition={{ duration: prefersReducedMotion ? 0.2 : 0.7, delay: prefersReducedMotion ? 0 : 0.2 }}
       />
       <motion.div
@@ -81,31 +80,10 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: prefersReducedMotion ? 0.2 : 0.75, delay: prefersReducedMotion ? 0 : 0.42 }}
         >
-          <span className="premium-splash-kicker">BREAK CASH</span>
-          <h1 className="premium-splash-title">Trade Beyond Limits</h1>
-          <p className="premium-splash-subtitle">Premium crypto experience with a cinematic entry.</p>
+          <span className="premium-splash-kicker">بريك كاش</span>
+          <h1 className="premium-splash-title">تجربة تداول احترافية</h1>
+          <p className="premium-splash-subtitle">دخول بصري أنيق بطابع سينمائي وألوان منسجمة مع هوية التطبيق.</p>
         </motion.div>
-
-        <div className="premium-splash-arcs-wrap" aria-hidden>
-          <motion.span
-            className="premium-splash-arc arc-outer"
-            animate={prefersReducedMotion ? {} : { rotate: 360 }}
-            transition={
-              prefersReducedMotion
-                ? undefined
-                : { duration: arcDuration, repeat: Infinity, repeatType: 'loop', ease: 'linear' }
-            }
-          />
-          <motion.span
-            className="premium-splash-arc arc-inner"
-            animate={prefersReducedMotion ? {} : { rotate: -360 }}
-            transition={
-              prefersReducedMotion
-                ? undefined
-                : { duration: arcDuration * 0.92, repeat: Infinity, repeatType: 'loop', ease: 'linear' }
-            }
-          />
-        </div>
 
         <motion.div
           className="premium-splash-logo-shell"
