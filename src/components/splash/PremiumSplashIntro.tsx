@@ -73,6 +73,16 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
 
       <div className="premium-splash-center">
         <motion.div
+          className="premium-splash-wordmark"
+          dir="ltr"
+          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: prefersReducedMotion ? 0.2 : 0.72, delay: prefersReducedMotion ? 0 : 0.4 }}
+        >
+          BREAK CASH
+        </motion.div>
+
+        <motion.div
           className="premium-splash-logo-shell"
           initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.96 }}
           animate={{ opacity: 1, scale: 1 }}

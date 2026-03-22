@@ -2330,7 +2330,33 @@ button {
   align-content: center;
   justify-items: center;
   justify-content: center;
+  gap: 18px;
   padding: 24px;
+}
+
+.premium-splash-wordmark {
+  position: relative;
+  z-index: 2;
+  color: rgba(244, 250, 255, 0.94);
+  font-size: clamp(0.9rem, 1.6vw, 1.18rem);
+  font-weight: 800;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  text-align: center;
+  text-shadow:
+    0 0 18px rgba(45, 212, 191, 0.18),
+    0 10px 28px rgba(0, 0, 0, 0.42);
+}
+
+.premium-splash-wordmark::after {
+  content: '';
+  display: block;
+  width: min(100%, 88px);
+  height: 1px;
+  margin: 10px auto 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0), rgba(45, 212, 191, 0.68), rgba(45, 212, 191, 0));
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.18);
 }
 
 .premium-splash-logo-shell {
@@ -2410,7 +2436,13 @@ button {
 
 @media (max-width: 720px) {
   .premium-splash-center {
+    gap: 14px;
     padding: max(16px, env(safe-area-inset-top)) 18px 18px;
+  }
+
+  .premium-splash-wordmark {
+    font-size: 0.82rem;
+    letter-spacing: 0.26em;
   }
 
   .premium-splash-logo-shell {
