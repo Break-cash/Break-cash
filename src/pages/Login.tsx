@@ -20,7 +20,6 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [logoVariant, setLogoVariant] = useState<'a' | 'b'>('a')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
-  // Keep sign-in as default primary action.
   const [isRegister, setIsRegister] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
@@ -43,9 +42,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
         if (value) setLogoUrl(value)
         setLogoVariant(variantRes.variant === 'b' ? 'b' : 'a')
       })
-      .catch(() => {
-        // Keep fallback logo path.
-      })
+      .catch(() => {})
     return () => {
       mounted = false
     }
@@ -70,18 +67,13 @@ export function Login({ onAuthSuccess }: LoginProps) {
         : await login(trimmed, password)
 
       setToken(res.token)
-      setSuccessMsg(
-        isRegister
-          ? t('login_register_success')
-          : t('login_signin_success'),
-      )
+      setSuccessMsg(isRegister ? t('login_register_success') : t('login_signin_success'))
       onAuthSuccess?.()
     } catch (err) {
       const isNetworkError =
-        err instanceof Error &&
-        (err.message === 'Failed to fetch' || err.name === 'TypeError')
+        err instanceof Error && (err.message === 'Failed to fetch' || err.name === 'TypeError')
       setError(
-        isNetworkError ? t('login_network_error') : (err instanceof Error ? err.message : t('login_unknown_error')),
+        isNetworkError ? t('login_network_error') : err instanceof Error ? err.message : t('login_unknown_error'),
       )
     } finally {
       setLoading(false)
@@ -103,10 +95,9 @@ export function Login({ onAuthSuccess }: LoginProps) {
       setRecoveryCode('')
     } catch (err) {
       const isNetworkError =
-        err instanceof Error &&
-        (err.message === 'Failed to fetch' || err.name === 'TypeError')
+        err instanceof Error && (err.message === 'Failed to fetch' || err.name === 'TypeError')
       setRecoveryError(
-        isNetworkError ? t('login_network_error') : (err instanceof Error ? err.message : t('login_unknown_error')),
+        isNetworkError ? t('login_network_error') : err instanceof Error ? err.message : t('login_unknown_error'),
       )
     } finally {
       setRecoveryLoading(false)
@@ -115,8 +106,28 @@ export function Login({ onAuthSuccess }: LoginProps) {
 
   return (
     <div className="login-wrapper">
-      <div className="login-card">
-        <div className="login-header">
+      <div className="login-shell">
+        <section className="login-hero-panel glass-panel">
+          <div className="login-hero-copy">
+            <div className="login-badge">{t('login_badge')}</div>
+            <h1 className="login-hero-title">BreakCash</h1>
+            <p className="login-hero-subtitle">{t('login_subtitle')}</p>
+            <div className="login-hero-metrics">
+              <div className="login-hero-metric glass-panel-soft">
+                <span className="login-hero-metric-label">{t('header_trading_platform')}</span>
+                <strong>Liquid Glass</strong>
+              </div>
+              <div className="login-hero-metric glass-panel-soft">
+                <span className="login-hero-metric-label">{t('login_signin')}</span>
+                <strong>Secure Access</strong>
+              </div>
+              <div className="login-hero-metric glass-panel-soft">
+                <span className="login-hero-metric-label">{t('login_register')}</span>
+                <strong>Instant Flow</strong>
+              </div>
+            </div>
+          </div>
+
           <div className={`login-premium-brand ${logoVariant === 'b' ? 'variant-b' : 'variant-a'}`} aria-hidden>
             <div className="login-premium-brand-shell">
               <span className="login-premium-arc arc-a" />
@@ -136,159 +147,165 @@ export function Login({ onAuthSuccess }: LoginProps) {
             <div className="login-premium-brand-text">BREAK CASH</div>
             <div className="login-premium-brand-sub">{t('header_trading_platform')}</div>
           </div>
-          <div className="login-lang-switch" role="group" aria-label={t('language')}>
-            {(['ar', 'en', 'tr'] as Language[]).map((lang) => (
-              <button
-                key={lang}
-                type="button"
-                className={`login-lang-btn ${language === lang ? 'active' : ''}`}
-                onClick={() => setLanguage(lang)}
-                aria-pressed={language === lang}
-              >
-                {lang.toUpperCase()}
-              </button>
-            ))}
-          </div>
-          <div className="login-badge">{t('login_badge')}</div>
-          <h1 className="login-title">{t('login_title')}</h1>
-          <p className="login-subtitle">{t('login_subtitle')}</p>
-        </div>
+        </section>
 
-        <form className="login-form" onSubmit={onSubmit}>
-          <label className="login-field">
-            <span className="field-label">{t('login_identifier')}</span>
-            <small className="field-hint">{t('login_identifier_hint')}</small>
-            <input
-              type="text"
-              className="field-input"
-              placeholder={t('login_identifier_ph')}
-              autoComplete="username"
-              inputMode="text"
-              autoCapitalize="none"
-              autoCorrect="off"
-              aria-label={t('login_identifier')}
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-            />
-          </label>
-
-          <label className="login-field">
-            <span className="field-label">{t('login_password')}</span>
-            <div className="field-input field-input-with-icon">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="field-input-inner"
-                placeholder={t('login_password_ph')}
-                autoComplete={isRegister ? 'new-password' : 'current-password'}
-                aria-label={t('login_password')}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                className="field-icon-btn"
-                aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
-                aria-pressed={showPassword}
-                title={showPassword ? t('login_hide_password') : t('login_show_password')}
-                onClick={() => setShowPassword((v) => !v)}
-              >
-                👁
-              </button>
+        <div className="login-card glass-panel">
+          <div className="login-header">
+            <div className="login-card-topline">
+              <div>
+                <p className="login-card-kicker">BREAK CASH</p>
+                <h2 className="login-title">{t('login_title')}</h2>
+              </div>
+              <div className="login-lang-switch" role="group" aria-label={t('language')}>
+                {(['ar', 'en', 'tr'] as Language[]).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    className={`login-lang-btn ${language === lang ? 'active' : ''}`}
+                    onClick={() => setLanguage(lang)}
+                    aria-pressed={language === lang}
+                  >
+                    {lang.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
-          </label>
+            <p className="login-subtitle">{t('login_subtitle')}</p>
+          </div>
 
-          {isRegister ? (
+          <form className="login-form" onSubmit={onSubmit}>
             <label className="login-field">
-              <span className="field-label">{t('login_invite')}</span>
+              <span className="field-label">{t('login_identifier')}</span>
+              <small className="field-hint">{t('login_identifier_hint')}</small>
               <input
                 type="text"
                 className="field-input"
-                placeholder={t('login_invite_ph')}
-                autoComplete="off"
-                aria-label={t('login_invite')}
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
+                placeholder={t('login_identifier_ph')}
+                autoComplete="username"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                aria-label={t('login_identifier')}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
               />
             </label>
-          ) : null}
 
-          {error ? (
-            <div className="login-error">
-              {error}
-            </div>
-          ) : null}
-          {successMsg ? <div className="login-success">{successMsg}</div> : null}
+            <label className="login-field">
+              <span className="field-label">{t('login_password')}</span>
+              <div className="field-input field-input-with-icon">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="field-input-inner"
+                  placeholder={t('login_password_ph')}
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                  aria-label={t('login_password')}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="field-icon-btn"
+                  aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
+                  aria-pressed={showPassword}
+                  title={showPassword ? t('login_hide_password') : t('login_show_password')}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  👁
+                </button>
+              </div>
+            </label>
 
-          <button type="submit" className="login-submit" disabled={loading}>
-            {loading
-              ? isRegister
-                ? t('login_register_loading')
-                : t('login_signin_loading')
-              : isRegister
-              ? t('login_register')
-              : t('login_signin')}
-          </button>
-          <p className="login-primary-hint">{t('login_primary_action_hint')}</p>
+            {isRegister ? (
+              <label className="login-field">
+                <span className="field-label">{t('login_invite')}</span>
+                <input
+                  type="text"
+                  className="field-input"
+                  placeholder={t('login_invite_ph')}
+                  autoComplete="off"
+                  aria-label={t('login_invite')}
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                />
+              </label>
+            ) : null}
 
-          <div className="login-footer-links">
-            {!isRegister ? (
+            {error ? <div className="login-error">{error}</div> : null}
+            {successMsg ? <div className="login-success">{successMsg}</div> : null}
+
+            <button type="submit" className="login-submit" disabled={loading}>
+              {loading
+                ? isRegister
+                  ? t('login_register_loading')
+                  : t('login_signin_loading')
+                : isRegister
+                  ? t('login_register')
+                  : t('login_signin')}
+            </button>
+            <p className="login-primary-hint">{t('login_primary_action_hint')}</p>
+
+            <div className="login-footer-links">
+              {!isRegister ? (
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setRecoveryError(null)
+                    setRecoverySuccess(null)
+                    setShowRecoveryRequest((v) => !v)
+                  }}
+                >
+                  {showRecoveryRequest ? t('login_recovery_request_close') : t('login_recovery_request_open')}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="link-btn"
                 onClick={() => {
+                  setError(null)
+                  setSuccessMsg(null)
                   setRecoveryError(null)
                   setRecoverySuccess(null)
-                  setShowRecoveryRequest((v) => !v)
+                  setShowRecoveryRequest(false)
+                  setIsRegister((v) => !v)
                 }}
               >
-                {showRecoveryRequest ? t('login_recovery_request_close') : t('login_recovery_request_open')}
+                {isRegister ? t('login_have_account') : t('login_create_account')}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                setError(null)
-                setSuccessMsg(null)
-                setRecoveryError(null)
-                setRecoverySuccess(null)
-                setShowRecoveryRequest(false)
-                setIsRegister((v) => !v)
-              }}
-            >
-              {isRegister ? t('login_have_account') : t('login_create_account')}
-            </button>
-          </div>
-          {!isRegister && showRecoveryRequest ? (
-            <div className="mt-3 rounded-xl border border-app-border bg-app-elevated p-3">
-              <label className="login-field">
-                <span className="field-label">{t('login_recovery_request_label')}</span>
-                <small className="field-hint">{t('login_recovery_request_hint')}</small>
-                <input
-                  type="text"
-                  className="field-input"
-                  placeholder={t('login_recovery_request_ph')}
-                  autoComplete="off"
-                  inputMode="text"
-                  autoCapitalize="characters"
-                  aria-label={t('login_recovery_request_label')}
-                  value={recoveryCode}
-                  onChange={(e) => setRecoveryCode(e.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                className="login-submit mt-2"
-                disabled={recoveryLoading}
-                onClick={onRecoveryRequestSubmit}
-              >
-                {recoveryLoading ? t('login_recovery_request_loading') : t('login_recovery_request_submit')}
-              </button>
-              {recoveryError ? <div className="login-error mt-2">{recoveryError}</div> : null}
-              {recoverySuccess ? <div className="login-success mt-2">{recoverySuccess}</div> : null}
             </div>
-          ) : null}
-        </form>
+
+            {!isRegister && showRecoveryRequest ? (
+              <div className="login-recovery-panel glass-panel-soft mt-3 rounded-xl p-3">
+                <label className="login-field">
+                  <span className="field-label">{t('login_recovery_request_label')}</span>
+                  <small className="field-hint">{t('login_recovery_request_hint')}</small>
+                  <input
+                    type="text"
+                    className="field-input"
+                    placeholder={t('login_recovery_request_ph')}
+                    autoComplete="off"
+                    inputMode="text"
+                    autoCapitalize="characters"
+                    aria-label={t('login_recovery_request_label')}
+                    value={recoveryCode}
+                    onChange={(e) => setRecoveryCode(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="login-submit mt-2"
+                  disabled={recoveryLoading}
+                  onClick={onRecoveryRequestSubmit}
+                >
+                  {recoveryLoading ? t('login_recovery_request_loading') : t('login_recovery_request_submit')}
+                </button>
+                {recoveryError ? <div className="login-error mt-2">{recoveryError}</div> : null}
+                {recoverySuccess ? <div className="login-success mt-2">{recoverySuccess}</div> : null}
+              </div>
+            ) : null}
+          </form>
+        </div>
       </div>
     </div>
   )
