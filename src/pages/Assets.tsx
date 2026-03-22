@@ -1,10 +1,12 @@
 import { appData } from '../data'
+import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
 export function Assets() {
   const { t } = useI18n()
   const { summary } = useWalletSummary()
+  const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
   const { balance_info } = appData
   const currency = balance_info.currency || 'USDT'
 
@@ -25,7 +27,10 @@ export function Assets() {
             <div>
               <div className="label text-[11px] uppercase tracking-[0.08em]">{t('home_today_earnings')}</div>
               <div className="value positive">
-                {Number(balance_info.today_earnings || 0).toFixed(2)} {currency}
+                {dailyEarningsSummary.totalAmount.toFixed(2)} {currency}
+              </div>
+              <div className="label text-[11px]">
+                {dailyEarningsSummary.withdrawableAmount.toFixed(2)} قابل للسحب • {dailyEarningsSummary.lockedAmount.toFixed(2)} غير قابل للسحب
               </div>
             </div>
             <div>

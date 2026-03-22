@@ -12,6 +12,7 @@ import {
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
+import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { WalletSummaryPanel } from '../components/wallet/WalletSummaryPanel'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
@@ -34,8 +35,8 @@ export function Profile() {
   const liveRefreshTimerRef = useRef<number | null>(null)
   const { summary: walletSummary, loading: walletSummaryLoading, refresh: refreshWalletSummary } =
     useWalletSummary({ subscribeLive: false })
-  const dailyEarnings = Number(appData.balance_info.today_earnings || 0)
-  const earningsCurrency = appData.balance_info.currency || 'USDT'
+  const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
+  const earningsCurrency = dailyEarningsSummary.currency || appData.balance_info.currency || 'USDT'
 
   const loadCoreDashboardData = useCallback(async () => {
     const results = await Promise.allSettled([
@@ -237,8 +238,11 @@ export function Profile() {
         <div className="glass-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
           <div>
             <p className="text-[11px] text-[var(--text-muted)]">{t('home_today_earnings')}</p>
-            <p className={`text-sm font-semibold ${dailyEarnings >= 0 ? 'text-positive' : 'text-negative'}`}>
-              {dailyEarnings.toFixed(2)} {earningsCurrency}
+            <p className={`text-sm font-semibold ${dailyEarningsSummary.totalAmount >= 0 ? 'text-positive' : 'text-negative'}`}>
+              {dailyEarningsSummary.totalAmount.toFixed(2)} {earningsCurrency}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              {dailyEarningsSummary.withdrawableAmount.toFixed(2)} قابل للسحب • {dailyEarningsSummary.lockedAmount.toFixed(2)} غير قابل للسحب
             </p>
           </div>
           {profile ? (

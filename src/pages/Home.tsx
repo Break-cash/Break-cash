@@ -3,6 +3,7 @@ import { getAds, subscribeToLiveUpdates, type AdItem } from '../api'
 import { appData } from '../data'
 import { AdBanner } from '../components/ads/AdBanner'
 import { useMarketBoard } from '../hooks/useMarketBoard'
+import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
@@ -11,6 +12,7 @@ export function Home() {
   const { balance_info } = appData
   const [ads, setAds] = useState<AdItem[]>([])
   const { summary: walletSummary } = useWalletSummary()
+  const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
   const { mostTraded, usingFallback, loading } = useMarketBoard(5000)
 
   useEffect(() => {
@@ -53,7 +55,10 @@ export function Home() {
                 <div className="space-y-1.5">
                   <div className="text-xs font-medium text-app-muted uppercase tracking-wide">{t('home_today_earnings')}</div>
                   <div className="text-2xl font-bold text-green-400">
-                    +{balance_info.today_earnings.toFixed(2)}
+                    +{dailyEarningsSummary.totalAmount.toFixed(2)}
+                  </div>
+                  <div className="text-[11px] text-app-muted">
+                    {dailyEarningsSummary.withdrawableAmount.toFixed(2)} {balance_info.currency} قابل للسحب • {dailyEarningsSummary.lockedAmount.toFixed(2)} {balance_info.currency} غير قابل للسحب
                   </div>
                 </div>
                 <div className="space-y-1.5">
