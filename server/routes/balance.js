@@ -29,6 +29,7 @@ import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVi
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const PRINCIPAL_UNLOCK_RATIO = 0
+const UNRESTRICTED_DAILY_WITHDRAWAL_LIMIT = 1000000000
 const DEFAULT_BALANCE_RULES = {
   minDeposit: 10,
   minWithdrawal: 10,
@@ -850,14 +851,13 @@ async function hasActiveMiningOrTrade(db, userId) {
 async function getEffectiveWithdrawalPolicy(db, userId) {
   const user = await get(db, `SELECT vip_level FROM users WHERE id = ? LIMIT 1`, [userId])
   const vipLevel = Number(user?.vip_level || 0)
-  const vipRules = await getVipRulesFromDb(db, vipLevel)
-  const activeExtraFee = (await hasActiveMiningOrTrade(db, userId)) ? Number(vipRules.activeExtraFeePercent || 0) : 0
+  await getVipRulesFromDb(db, vipLevel)
   return {
     vipLevel,
-    dailyLimit: Number(vipRules.dailyWithdrawalLimit || 0),
-    feePercent: Number(vipRules.withdrawalFeePercent || 0) + activeExtraFee,
-    processingHoursMin: Number(vipRules.processingHoursMin || 0),
-    processingHoursMax: Number(vipRules.processingHoursMax || 0),
+    dailyLimit: UNRESTRICTED_DAILY_WITHDRAWAL_LIMIT,
+    feePercent: 0,
+    processingHoursMin: 0,
+    processingHoursMax: 0,
   }
 }
 
