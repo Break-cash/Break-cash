@@ -9,6 +9,7 @@ import {
   type StrategyCodeItem,
   type StrategyTradeDisplayConfig,
 } from '../api'
+import { playFeedbackSound } from '../appFeedback'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
 import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useI18n } from '../i18nCore'
@@ -123,6 +124,7 @@ export function FuturesPage() {
       await refreshCodes()
       setPreview(null)
       setTaskCode('')
+      playFeedbackSound('strategyCode').catch(() => {})
       if (res.featureType === 'trial_trade') {
         setMessage({
           type: 'success',

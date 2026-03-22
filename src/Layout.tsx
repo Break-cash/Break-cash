@@ -16,7 +16,8 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { apiFetch, getHeaderIconConfig, updateMyProfile, type AuthUser, type HeaderIconConfigItem } from './api'
+import { apiFetch, getHeaderIconConfig, subscribeToLiveUpdates, updateMyProfile, type AuthUser, type HeaderIconConfigItem } from './api'
+import { playFeedbackSound, primeAppFeedback } from './appFeedback'
 import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
 import { UserIdentityBadges } from './components/user/UserIdentityBadges'
@@ -105,6 +106,38 @@ export function Layout({
     apiFetch('/api/notifications/unreadCount')
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
       .catch(() => setUnreadCount(0))
+  }, [])
+
+  useEffect(() => {
+    primeAppFeedback()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToLiveUpdates((event) => {
+      if (event.type !== 'notification_created' || event.source !== 'notifications') return
+      const title = String(event.title || '').trim()
+      const body = String(event.body || '').trim()
+      if (!title && !body) return
+      const nextNotification = {
+        id: Number(event.ts || Date.now()),
+        title,
+        body,
+        is_read: 0,
+      }
+      setNotifications((prev) => {
+        const deduped = prev.filter((item) => !(item.title === nextNotification.title && item.body === nextNotification.body))
+        return [nextNotification, ...deduped].slice(0, 100)
+      })
+      setUnreadCount((prev) => prev + 1)
+
+      const key = String(event.key || '').trim().toLowerCase()
+      if (key === 'deposit_approved') {
+        playFeedbackSound('depositApproved').catch(() => {})
+      } else if (key === 'withdrawal_approved') {
+        playFeedbackSound('withdrawalApproved').catch(() => {})
+      }
+    })
+    return unsubscribe
   }, [])
 
   useEffect(() => {

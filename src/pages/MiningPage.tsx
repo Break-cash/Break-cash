@@ -11,6 +11,7 @@ import {
   type AdItem,
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
+import { playFeedbackSound, vibrateFeedback } from '../appFeedback'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
 
@@ -119,6 +120,10 @@ export function MiningPage() {
             : t('mining_subscribe_success')
         setMessage({ type: 'success', text })
         emitToast({ kind: 'success', message: text, durationMs: 3600 })
+        if (confirmAction === 'subscribe' || res.action === 'subscribe') {
+          playFeedbackSound('miningSubscription').catch(() => {})
+          vibrateFeedback([24, 45, 24])
+        }
       } else if (confirmAction === 'claim') {
         await claimMiningDaily()
         const text = t('mining_claim_success')

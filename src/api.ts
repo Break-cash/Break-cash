@@ -74,6 +74,9 @@ export type LiveUpdateEvent = {
   userId?: number
   source?: string
   key?: string
+  title?: string
+  body?: string
+  vibrate?: boolean
   ts?: number
 }
 

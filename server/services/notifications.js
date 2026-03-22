@@ -1,4 +1,5 @@
 import { get, run } from '../db.js'
+import { publishLiveUpdate } from './live-updates.js'
 
 function normalizeLanguage(value) {
   const raw = String(value || '').trim().toLowerCase()
@@ -203,4 +204,14 @@ export async function createLocalizedNotification(db, userId, key, variables = {
   const title = String(localized.title || '').trim()
   const body = String(typeof localized.body === 'function' ? localized.body(variables) : localized.body || '').trim()
   await run(db, `INSERT INTO notifications (user_id, title, body) VALUES (?, ?, ?)`, [userId, title, body])
+  publishLiveUpdate({
+    type: 'notification_created',
+    scope: 'user',
+    userId,
+    source: 'notifications',
+    key,
+    title,
+    body,
+  })
+  return { title, body, key }
 }
