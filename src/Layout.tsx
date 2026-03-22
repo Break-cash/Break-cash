@@ -224,8 +224,16 @@ export function Layout({
     }
   }, [avatarBroken, user.avatar_url])
 
+  useEffect(() => {
+    setNotificationsOpen(false)
+  }, [location.pathname])
+
   async function toggleNotifications() {
     const next = !notificationsOpen
+    if (next) {
+      setSearchOpen(false)
+      setProfileMenuOpen(false)
+    }
     setNotificationsOpen(next)
     if (!next) return
     const res = (await apiFetch('/api/notifications/list')) as {
@@ -259,6 +267,12 @@ export function Layout({
     { to: '/profile', label: t('nav_profile'), icon: UserCircle2 },
   ]
 
+  function closeHeaderPopups(options?: { keepProfileMenu?: boolean }) {
+    setNotificationsOpen(false)
+    setSearchOpen(false)
+    if (!options?.keepProfileMenu) setProfileMenuOpen(false)
+  }
+
   return (
     <div dir={direction} className="min-h-[100dvh] overflow-x-clip bg-app-bg text-[var(--text-primary)]">
       <header className="sticky top-0 z-50 border-b border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(7,11,20,0.96),rgba(11,17,32,0.9))] pt-[max(6px,env(safe-area-inset-top))] shadow-[0_8px_26px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
@@ -270,7 +284,11 @@ export function Layout({
                   <button
                     className={`icon-interactive liquid-glass-icon flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-brand-blue/45 shadow-[0_0_0_1px_rgba(0,123,255,0.18)] focus:outline-none focus:ring-2 focus:ring-brand-blue/35 ${premiumProfileColorClass}`}
                     type="button"
-                    onClick={() => setProfileMenuOpen((v) => !v)}
+                    onClick={() => {
+                      setNotificationsOpen(false)
+                      setSearchOpen(false)
+                      setProfileMenuOpen((v) => !v)
+                    }}
                     aria-label={t('profile_menu_title')}
                   >
                     {user.avatar_url && !avatarBroken ? (
@@ -312,7 +330,7 @@ export function Layout({
                                 type="button"
                                 className="w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-app-elevated"
                                 onClick={() => {
-                                  setProfileMenuOpen(false)
+                                  closeHeaderPopups()
                                   navigate(item.route)
                                 }}
                               >
@@ -325,7 +343,7 @@ export function Layout({
                           type="button"
                           className="w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-app-elevated"
                           onClick={() => {
-                            setProfileMenuOpen(false)
+                            closeHeaderPopups()
                             navigate('/profile')
                           }}
                         >
@@ -335,7 +353,7 @@ export function Layout({
                           type="button"
                           className="mt-1 w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-[#2a3342]"
                           onClick={() => {
-                            setProfileMenuOpen(false)
+                            closeHeaderPopups()
                             onLogout()
                           }}
                         >
@@ -351,7 +369,10 @@ export function Layout({
                 <button
                   className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/50 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
                   type="button"
-                  onClick={() => navigate(-1)}
+                  onClick={() => {
+                    closeHeaderPopups()
+                    navigate(-1)
+                  }}
                   aria-label={t('back')}
                 >
                   {direction === 'rtl' ? <ArrowRight size={17} /> : <ArrowLeft size={17} />}
@@ -383,6 +404,7 @@ export function Layout({
                   className="icon-interactive liquid-glass-icon relative flex h-10 min-w-[46px] items-center justify-center gap-1 rounded-full px-2 text-white/90 hover:border-brand-blue/55 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
                   aria-label={managementShortcut.label}
                   title={managementShortcut.label}
+                  onClick={() => closeHeaderPopups()}
                 >
                   {managementShortcut.kind === 'owner' ? <Crown size={16} /> : <Shield size={16} />}
                   <span className="absolute -end-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-blue px-1 text-[10px] font-bold leading-4 text-white">
@@ -400,7 +422,11 @@ export function Layout({
                       key="search"
                       className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
                       type="button"
-                      onClick={() => setSearchOpen(true)}
+                      onClick={() => {
+                        setNotificationsOpen(false)
+                        setProfileMenuOpen(false)
+                        setSearchOpen(true)
+                      }}
                       aria-label={t('search_actions')}
                     >
                       <Search size={17} />
@@ -414,7 +440,11 @@ export function Layout({
                       <select
                         className="glass-input h-7 rounded-full px-2 text-xs text-[var(--text-primary)]"
                         value={language}
-                        onChange={(e) => setLanguage(e.target.value as Language)}
+                        onChange={(e) => {
+                          setNotificationsOpen(false)
+                          setSearchOpen(false)
+                          setLanguage(e.target.value as Language)
+                        }}
                         aria-label={t('language')}
                       >
                         <option value="ar">AR</option>
@@ -482,21 +512,30 @@ export function Layout({
                     <button
                       type="button"
                       className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-                      onClick={() => navigate('/market')}
+                      onClick={() => {
+                        closeHeaderPopups()
+                        navigate('/market')
+                      }}
                     >
                       {t('nav_markets')}
                     </button>
                     <button
                       type="button"
                       className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-                      onClick={() => navigate('/futures')}
+                      onClick={() => {
+                        closeHeaderPopups()
+                        navigate('/futures')
+                      }}
                     >
                       {t('nav_futures')}
                     </button>
                     <button
                       type="button"
                       className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-                      onClick={() => navigate('/friends')}
+                      onClick={() => {
+                        closeHeaderPopups()
+                        navigate('/friends')
+                      }}
                     >
                       {t('nav_friends')}
                     </button>
@@ -512,6 +551,7 @@ export function Layout({
                 <Link
                   key={item.route}
                   to={item.route}
+                  onClick={() => closeHeaderPopups()}
                   className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${
                     location.pathname === item.route
                       ? 'border border-brand-blue/60 bg-brand-blue/22 text-white shadow-[0_0_0_1px_rgba(0,123,255,0.22)]'
