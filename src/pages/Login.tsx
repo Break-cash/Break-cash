@@ -32,6 +32,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [logoBroken, setLogoBroken] = useState(false)
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
+  const brandLabel = language === 'ar' ? 'بريك كاش' : 'BREAK CASH'
 
   useEffect(() => {
     let mounted = true
@@ -111,7 +112,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
           <div className="login-card-topline">
             <div>
               <div className="login-badge">{t('login_badge')}</div>
-              <p className="login-card-kicker">BREAK CASH</p>
+              <p className="login-card-kicker">{brandLabel}</p>
               <h1 className="login-title">{t('login_title')}</h1>
             </div>
             <div className="login-lang-switch" role="group" aria-label={t('language')}>
@@ -145,7 +146,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
                 <span className="login-premium-sweep" />
               </div>
             </div>
-            <div className="login-premium-brand-text">BREAK CASH</div>
+            <div className="login-premium-brand-text">{brandLabel}</div>
             <div className="login-premium-brand-sub">{t('header_trading_platform')}</div>
           </div>
 
