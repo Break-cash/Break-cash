@@ -40,6 +40,7 @@ import {
   setAdminSensitiveAccess,
   getSecurityOverview,
   getSecuritySessions,
+  getStrategyTradeDisplayConfig,
   getStrategyCodesAdmin,
   getVipTiers,
   toggleAd,
@@ -57,6 +58,7 @@ import {
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
   updateRewardPayoutRulesOwner,
+  updateStrategyTradeDisplayConfig,
   updateUserTwoFactor,
   processAutoKycReviews,
   reviewOwnerKycSubmission,
@@ -88,6 +90,7 @@ import {
   type RewardTierRule,
   type SecurityOverview,
   type StrategyCodeAdminItem,
+  type StrategyTradeDisplayConfig,
   type StrategyCodeUsageAdminItem,
   type UserUnlockOverride,
   type UserSessionItem,
@@ -225,6 +228,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     isActive: true,
   })
   const [strategySaving, setStrategySaving] = useState(false)
+  const [strategyDisplaySaving, setStrategyDisplaySaving] = useState(false)
+  const [strategyTradeDisplayDraft, setStrategyTradeDisplayDraft] = useState<StrategyTradeDisplayConfig>({
+    preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
+    active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
+    settled_notice: 'تمت تسوية الصفقة الاستراتيجية وإرجاع الأصل مع الربح.',
+  })
   const [bonusRules, setBonusRules] = useState<BonusRule[]>([])
   const [dailyTradeCampaigns, setDailyTradeCampaigns] = useState<DailyTradeCampaign[]>([])
   const [dailyTradeDraft, setDailyTradeDraft] = useState({
@@ -437,6 +446,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         setStrategyCodes([])
         setStrategyUsages([])
       })
+    getStrategyTradeDisplayConfig()
+      .then((res) => setStrategyTradeDisplayDraft(res.config))
+      .catch(() => {})
     getMiningAdminConfig()
       .then((res) => setMiningConfigDraft(res.config))
       .catch(() => setMiningConfigDraft(null))
@@ -1285,6 +1297,20 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     }
   }
 
+  async function handleSaveStrategyTradeDisplay() {
+    setStrategyDisplaySaving(true)
+    setMessage(null)
+    try {
+      const res = await updateStrategyTradeDisplayConfig(strategyTradeDisplayDraft)
+      setStrategyTradeDisplayDraft(res.config)
+      setMessage({ type: 'success', text: 'تم تحديث الوصف الظاهر للمستخدم في الصفقات الاستراتيجية.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ وصف الصفقات الاستراتيجية.' })
+    } finally {
+      setStrategyDisplaySaving(false)
+    }
+  }
+
   async function handleSaveRewardPayoutOverride() {
     if (!rewardPayoutOverrideDraft.userIdsText.trim()) {
       setMessage({ type: 'error', text: 'أدخل رقم مستخدم واحد أو عدة أرقام مفصولة بفواصل أو أسطر.' })
@@ -2066,8 +2092,45 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           <section className="owner-balance-section">
             <h2 className="owner-section-title">إدارة أكواد الاستراتيجية</h2>
             <p className="owner-hint">
-              من هنا ينشئ المالك أكواد صفقة تجريبية أو مكافأة ترويجية، مع تحديد الحالة والانتهاء والتتبع الكامل.
+              من هنا ينشئ المالك أكواد فتح صفقات استراتيجية أو مكافآت ترويجية، مع تحديد الحالة والانتهاء والتتبع الكامل.
             </p>
+            <div className="owner-actions-card">
+              <h3 className="owner-wallet-heading">الوصف الظاهر للمستخدم</h3>
+              <div className="owner-form-row">
+                <input
+                  className="field-input"
+                  placeholder="وصف ما قبل التأكيد"
+                  value={strategyTradeDisplayDraft.preview_notice}
+                  onChange={(e) => setStrategyTradeDisplayDraft((prev) => ({ ...prev, preview_notice: e.target.value }))}
+                />
+              </div>
+              <div className="owner-form-row">
+                <input
+                  className="field-input"
+                  placeholder="وصف أثناء المعالجة"
+                  value={strategyTradeDisplayDraft.active_notice}
+                  onChange={(e) => setStrategyTradeDisplayDraft((prev) => ({ ...prev, active_notice: e.target.value }))}
+                />
+              </div>
+              <div className="owner-form-row">
+                <input
+                  className="field-input"
+                  placeholder="وصف بعد التسوية"
+                  value={strategyTradeDisplayDraft.settled_notice}
+                  onChange={(e) => setStrategyTradeDisplayDraft((prev) => ({ ...prev, settled_notice: e.target.value }))}
+                />
+              </div>
+              <div className="owner-buttons">
+                <button
+                  type="button"
+                  className="wallet-action-btn wallet-action-deposit"
+                  onClick={handleSaveStrategyTradeDisplay}
+                  disabled={strategyDisplaySaving}
+                >
+                  {strategyDisplaySaving ? '...' : 'حفظ الوصف الظاهر'}
+                </button>
+              </div>
+            </div>
             <div className="owner-actions-card">
               <div className="owner-form-row">
                 <input
@@ -2100,7 +2163,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     }))
                   }
                 >
-                  <option value="trial_trade">يفتح صفقة تجريبية</option>
+                  <option value="trial_trade">يفتح صفقات استراتيجية</option>
                   <option value="promo_bonus">يفعل مكافأة ترويجية</option>
                 </select>
                 <select
@@ -2172,7 +2235,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 {strategyCodes.map((item) => (
                   <li key={item.id} className="owner-history-item">
                     <span>{item.code}</span>
-                    <span>{item.featureType === 'trial_trade' ? 'صفقة' : 'مكافأة'}</span>
+                    <span>{item.featureType === 'trial_trade' ? 'صفقات استراتيجية' : 'مكافأة'}</span>
                     <span>{item.usageCount} استخدام</span>
                     <span>{item.createdByName || `#${item.createdBy || '-'}`}</span>
                     <button

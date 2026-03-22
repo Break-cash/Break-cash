@@ -5,6 +5,7 @@ import multer from 'multer'
 import { all, get, run } from '../db.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import { hasPermission } from '../services/permissions.js'
 
 const DEFAULT_BRAND_LOGO_URL = '/break-cash-logo-premium.png'
 
@@ -220,6 +221,30 @@ export function createSettingsRouter(db) {
     }
   }
 
+  const DEFAULT_STRATEGY_TRADE_DISPLAY = {
+    preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
+    active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
+    settled_notice: 'تمت تسوية الصفقة الاستراتيجية وإرجاع الأصل مع الربح.',
+  }
+
+  function normalizeStrategyTradeDisplay(raw) {
+    const obj = typeof raw === 'object' && raw ? raw : {}
+    return {
+      preview_notice: String(obj.preview_notice || '').trim().slice(0, 220) || DEFAULT_STRATEGY_TRADE_DISPLAY.preview_notice,
+      active_notice: String(obj.active_notice || '').trim().slice(0, 220) || DEFAULT_STRATEGY_TRADE_DISPLAY.active_notice,
+      settled_notice: String(obj.settled_notice || '').trim().slice(0, 220) || DEFAULT_STRATEGY_TRADE_DISPLAY.settled_notice,
+    }
+  }
+
+  async function requireStrategyDisplayEditor(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'AUTH_REQUIRED' })
+    const isOwner = req.user.role === 'owner' || Number(req.user.is_owner || 0) === 1
+    if (isOwner) return next()
+    const allowed = await hasPermission(db, req.user.id, 'settings.manage')
+    if (allowed) return next()
+    return res.status(403).json({ error: 'FORBIDDEN' })
+  }
+
   router.get('/wallet-link', asyncRoute(async (_req, res) => {
     const row = await get(db, `SELECT value FROM settings WHERE key='wallet_link' LIMIT 1`)
     return res.json({ walletLink: row?.value || '' })
@@ -236,6 +261,29 @@ export function createSettingsRouter(db) {
     )
     publishLiveUpdate({ type: 'announcement_updated', source: 'settings', key: 'wallet_link' })
     return res.json({ ok: true, walletLink })
+  }))
+
+  router.get('/strategy-trade-display', asyncRoute(async (_req, res) => {
+    const row = await get(db, `SELECT value FROM settings WHERE key='strategy_trade_display' LIMIT 1`)
+    let parsed = null
+    try {
+      parsed = JSON.parse(String(row?.value || 'null'))
+    } catch {
+      parsed = null
+    }
+    return res.json({ config: normalizeStrategyTradeDisplay(parsed) })
+  }))
+
+  router.post('/strategy-trade-display', requireAuth(db), requireStrategyDisplayEditor, asyncRoute(async (req, res) => {
+    const config = normalizeStrategyTradeDisplay(req.body || {})
+    await run(
+      db,
+      `INSERT INTO settings (key, value) VALUES ('strategy_trade_display', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      [JSON.stringify(config)],
+    )
+    publishLiveUpdate({ type: 'settings_updated', source: 'settings', key: 'strategy_trade_display' })
+    return res.json({ ok: true, config })
   }))
 
   router.get('/logo-url', asyncRoute(async (_req, res) => {

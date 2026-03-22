@@ -1247,6 +1247,23 @@ export async function updateRegistrationStatus(enabled: boolean) {
   }) as Promise<{ ok: boolean; enabled: boolean }>
 }
 
+export type StrategyTradeDisplayConfig = {
+  preview_notice: string
+  active_notice: string
+  settled_notice: string
+}
+
+export async function getStrategyTradeDisplayConfig() {
+  return apiFetch('/api/settings/strategy-trade-display') as Promise<{ config: StrategyTradeDisplayConfig }>
+}
+
+export async function updateStrategyTradeDisplayConfig(config: StrategyTradeDisplayConfig) {
+  return apiFetch('/api/settings/strategy-trade-display', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  }) as Promise<{ ok: boolean; config: StrategyTradeDisplayConfig }>
+}
+
 export async function updateUserBan(userId: number, isBanned: boolean) {
   return apiFetch('/api/users/ban', {
     method: 'POST',

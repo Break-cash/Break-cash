@@ -5,7 +5,9 @@ import {
   redeemStrategyCode,
   settleStrategyTrade,
   apiFetch,
+  getStrategyTradeDisplayConfig,
   type StrategyCodeItem,
+  type StrategyTradeDisplayConfig,
 } from '../api'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
 import { useMarketBoard } from '../hooks/useMarketBoard'
@@ -13,13 +15,6 @@ import { useI18n } from '../i18nCore'
 
 type Candle = { time: number; open: number; high: number; low: number; close: number }
 const intervals = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
-
-function formatRemainingTime(ms: number) {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${String(seconds).padStart(2, '0')}`
-}
 
 export function FuturesPage() {
   const { t } = useI18n()
@@ -32,16 +27,19 @@ export function FuturesPage() {
   const [preview, setPreview] = useState<null | Awaited<ReturnType<typeof previewStrategyCode>>>(null)
   const [codes, setCodes] = useState<StrategyCodeItem[]>([])
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
+    preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
+    active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
+    settled_notice: 'تمت تسوية الصفقة الاستراتيجية وإرجاع الأصل مع الربح.',
+  })
 
   const current = useMemo(() => quotes.find((item) => item.symbol === selected) || quotes[0], [quotes, selected])
   const activeTrade = useMemo(
     () => codes.map((item) => item.usage).find((usage) => usage?.status === 'trade_active') || null,
     [codes],
   )
-  const [nowTs, setNowTs] = useState(() => Date.now())
   const activeTradeAutoSettleAtMs = activeTrade?.autoSettleAt ? Date.parse(activeTrade.autoSettleAt) : Number.NaN
-  const activeTradeReadyToSettle = !!activeTrade && (Number.isNaN(activeTradeAutoSettleAtMs) || activeTradeAutoSettleAtMs <= nowTs)
-  const activeTradeRemainingMs = activeTradeReadyToSettle || Number.isNaN(activeTradeAutoSettleAtMs) ? 0 : Math.max(0, activeTradeAutoSettleAtMs - nowTs)
+  const activeTradeReadyToSettle = !!activeTrade && (Number.isNaN(activeTradeAutoSettleAtMs) || activeTradeAutoSettleAtMs <= Date.now())
 
   useEffect(() => {
     if (quotes.length > 0 && !quotes.find((x) => x.symbol === selected)) {
@@ -87,8 +85,9 @@ export function FuturesPage() {
   }, [selected, selectedInterval])
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowTs(Date.now()), 1000)
-    return () => window.clearInterval(id)
+    getStrategyTradeDisplayConfig()
+      .then((res) => setTradeDisplayConfig(res.config))
+      .catch(() => {})
   }, [])
 
   async function refreshCodes() {
@@ -127,7 +126,7 @@ export function FuturesPage() {
       if (res.featureType === 'trial_trade') {
         setMessage({
           type: 'success',
-          text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT، وسيعود الأصل مع الربح تلقائيًا ${res.autoSettleAt ? `حوالي ${new Date(res.autoSettleAt).toLocaleTimeString()}` : 'خلال دقائق قليلة'}.`,
+          text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT. ${tradeDisplayConfig.active_notice}`,
         })
       } else {
         setMessage({
@@ -151,7 +150,7 @@ export function FuturesPage() {
       await refreshCodes()
       setMessage({
         type: 'success',
-        text: `تم إغلاق الصفقة وإرجاع ${Number(res.payoutAmount || 0).toFixed(2)} USDT إلى رصيدك.`,
+        text: `${tradeDisplayConfig.settled_notice} تم إرجاع ${Number(res.payoutAmount || 0).toFixed(2)} USDT إلى رصيدك.`,
       })
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إغلاق الصفقة الاستراتيجية.' })
@@ -280,7 +279,7 @@ export function FuturesPage() {
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-white">حالة الصفقة الاستراتيجية</h2>
-              <p className="text-xs text-app-muted">يتم تتبع الصفقة على نفس الأصل المحدد مع تأخير عشوائي متعمد قبل إعادة الأصل والربح لتخفيف ضغط الذروة.</p>
+              <p className="text-xs text-app-muted">{tradeDisplayConfig.active_notice}</p>
             </div>
             <button
               type="button"
@@ -308,17 +307,9 @@ export function FuturesPage() {
               <div className="text-[11px] text-app-muted">نسبة العائد المحددة</div>
               <div className="mt-1 text-sm font-semibold text-white">{Number(activeTrade.tradeReturnPercent || 0).toFixed(2)}%</div>
             </div>
-            <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">موعد الإرجاع المتوقع</div>
-              <div className="mt-1 text-sm font-semibold text-white">
-                {activeTrade.autoSettleAt ? new Date(activeTrade.autoSettleAt).toLocaleTimeString() : 'قريبًا'}
-              </div>
-            </div>
-            <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">الوقت المتبقي</div>
-              <div className="mt-1 text-sm font-semibold text-white">
-                {activeTradeReadyToSettle ? 'جاهزة للإرجاع' : formatRemainingTime(activeTradeRemainingMs)}
-              </div>
+            <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2 sm:col-span-2">
+              <div className="text-[11px] text-app-muted">وصف المعالجة</div>
+              <div className="mt-1 text-sm font-semibold text-white">{tradeDisplayConfig.active_notice}</div>
             </div>
           </div>
         </section>
@@ -328,7 +319,9 @@ export function FuturesPage() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl border border-app-border bg-app-card p-4 shadow-[0_24px_54px_rgba(0,0,0,0.45)]">
             <h3 className="text-base font-semibold text-white">تأكيد تفعيل الكود</h3>
-            <p className="mt-2 text-sm text-app-muted">{preview.preview.confirmationMessage}</p>
+            <p className="mt-2 text-sm text-app-muted">
+              {preview.featureType === 'trial_trade' ? tradeDisplayConfig.preview_notice : preview.preview.confirmationMessage}
+            </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
                 <div className="text-[11px] text-app-muted">نوع الميزة</div>
