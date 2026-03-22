@@ -11,7 +11,7 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
   const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
   const [logoBroken, setLogoBroken] = useState(false)
   const splashVideoUrl = '/ads/break-logo-motion.mp4'
-  const totalMs = prefersReducedMotion ? 3000 : 3600
+  const totalMs = prefersReducedMotion ? 1800 : 2400
 
   useEffect(() => {
     let mounted = true
