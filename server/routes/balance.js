@@ -246,10 +246,28 @@ async function getUserUnlockOverride(db, userId) {
   return row
 }
 
+function getPrincipalWithdrawalRuleConfig(rules) {
+  const raw = rules?.principalWithdrawalRule && typeof rules.principalWithdrawalRule === 'object'
+    ? rules.principalWithdrawalRule
+    : DEFAULT_BALANCE_RULES.principalWithdrawalRule
+  const enabled = raw?.enabled !== false
+  const withdrawableRatio = enabled
+    ? Math.max(0, Math.min(1, Number(raw?.withdrawableRatio ?? DEFAULT_BALANCE_RULES.principalWithdrawalRule.withdrawableRatio)))
+    : 0
+  return {
+    enabled,
+    withdrawableRatio: Number(withdrawableRatio.toFixed(4)),
+    lockedRatio: Number(Math.max(0, 1 - withdrawableRatio).toFixed(4)),
+    clearProfitRestriction: enabled && raw?.clearProfitRestriction !== false,
+    applyToAllVipLevels: raw?.applyToAllVipLevels !== false,
+  }
+}
+
 async function getEffectiveUnlockProfile(db, userId, currency, rules) {
   const user = await get(db, `SELECT id, vip_level FROM users WHERE id = ? LIMIT 1`, [userId])
   const vipLevel = Number(user?.vip_level || 0)
   const override = await getUserUnlockOverride(db, userId)
+  const principalRule = getPrincipalWithdrawalRuleConfig(rules)
   const levelRatioRaw =
     rules?.unlockRatioByLevel && typeof rules.unlockRatioByLevel === 'object'
       ? rules.unlockRatioByLevel[String(vipLevel)]
@@ -275,17 +293,23 @@ async function getEffectiveUnlockProfile(db, userId, currency, rules) {
     forceUnlockPrincipal: Number(override?.force_unlock_principal || 0) === 1,
     unlockRatio: Number.isFinite(unlockRatio) && unlockRatio >= 0 ? unlockRatio : PRINCIPAL_UNLOCK_RATIO,
     minimumProfitToUnlock: Number.isFinite(minimumProfitToUnlock) && minimumProfitToUnlock >= 0 ? minimumProfitToUnlock : 0,
+    principalWithdrawableRatio: principalRule.withdrawableRatio,
+    principalLockedRatio: principalRule.lockedRatio,
+    clearProfitRestriction: principalRule.clearProfitRestriction,
     overrideNote: String(override?.note || ''),
   }
 }
 
 async function createPrincipalLock(db, payload) {
   if (payload.forceUnlockPrincipal) return
-  const requiredProfitByRatio = Number((Number(payload.principalAmount) * Number(payload.unlockRatio || 0)).toFixed(8))
-  const requiredProfitAmount = Number(
-    Math.max(requiredProfitByRatio, Number(payload.minimumProfitToUnlock || 0)).toFixed(8),
+  const lockedPrincipalAmount = Number(
+    (Number(payload.principalAmount || 0) * Number(payload.principalLockedRatio ?? 1)).toFixed(8),
   )
-  if (requiredProfitAmount <= 0 || Number(payload.principalAmount || 0) <= 0) return
+  if (lockedPrincipalAmount <= 0) return
+  const requiredProfitByRatio = payload.clearProfitRestriction
+    ? 0
+    : Number((lockedPrincipalAmount * Number(payload.unlockRatio || 0)).toFixed(8))
+  const requiredProfitAmount = Number(Math.max(requiredProfitByRatio, Number(payload.minimumProfitToUnlock || 0)).toFixed(8))
   await run(
     db,
     `INSERT INTO user_principal_locks (
@@ -296,7 +320,7 @@ async function createPrincipalLock(db, payload) {
     [
       payload.userId,
       payload.currency,
-      Number(payload.principalAmount),
+      lockedPrincipalAmount,
       requiredProfitAmount,
       Number(payload.unlockRatio || 0),
       String(payload.sourceType || 'deposit_request'),
@@ -319,7 +343,7 @@ async function reapplyPrincipalLocksForUser(db, userId, currency, rules = null) 
   const profile = await getEffectiveUnlockProfile(db, userId, normalizedCurrency, safeRules)
   const lockedRows = await all(
     db,
-    `SELECT id, principal_amount
+    `SELECT id, principal_amount, source_type, source_id
      FROM user_principal_locks
      WHERE user_id = ? AND currency = ? AND lock_status = 'locked'
      ORDER BY id ASC`,
@@ -340,32 +364,32 @@ async function reapplyPrincipalLocksForUser(db, userId, currency, rules = null) 
 
   let affected = 0
   for (const row of lockedRows) {
-    const requiredProfitAmount = calculateRequiredProfitAmount(
-      row.principal_amount,
-      profile.unlockRatio,
-      profile.minimumProfitToUnlock,
-    )
-    if (requiredProfitAmount <= 0) {
-      const unlockRes = await run(
+    let basePrincipalAmount = Number(row.principal_amount || 0)
+    if (String(row.source_type || '') === 'deposit_request' && Number(row.source_id || 0) > 0) {
+      const sourceDeposit = await get(
         db,
-        `UPDATE user_principal_locks
-         SET required_profit_amount = 0,
-             unlock_ratio = ?,
-             lock_status = 'unlocked',
-             unlocked_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [Number(profile.unlockRatio.toFixed(4)), Number(row.id)],
+        `SELECT amount
+         FROM deposit_requests
+         WHERE id = ?
+         LIMIT 1`,
+        [Number(row.source_id)],
       )
-      affected += Number(unlockRes?.changes || unlockRes?.rowCount || 0)
-      continue
+      if (sourceDeposit?.amount != null) {
+        basePrincipalAmount = Number(sourceDeposit.amount || 0)
+      }
     }
+    const lockedPrincipalAmount = Number((basePrincipalAmount * Number(profile.principalLockedRatio ?? 1)).toFixed(8))
+    const requiredProfitAmount = calculateRequiredProfitAmount(
+      lockedPrincipalAmount,
+      profile.unlockRatio,
+      profile.clearProfitRestriction ? 0 : profile.minimumProfitToUnlock,
+    )
     const updateRes = await run(
       db,
       `UPDATE user_principal_locks
-       SET required_profit_amount = ?, unlock_ratio = ?, updated_at = CURRENT_TIMESTAMP
+       SET principal_amount = ?, required_profit_amount = ?, unlock_ratio = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [requiredProfitAmount, Number(profile.unlockRatio.toFixed(4)), Number(row.id)],
+      [lockedPrincipalAmount, requiredProfitAmount, Number(profile.unlockRatio.toFixed(4)), Number(row.id)],
     )
     affected += Number(updateRes?.changes || updateRes?.rowCount || 0)
   }
@@ -939,9 +963,8 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const isPrincipalUnlocked =
     profile.forceUnlockPrincipal ||
     principalLocked <= 0 ||
-    unlockTargetProfit <= 0 ||
-    earnedProfit >= unlockTargetProfit
-  const unlockedBalance = Number((isPrincipalUnlocked ? balance : Math.max(0, earnedProfit)).toFixed(8))
+    (unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
+  const unlockedBalance = Number((isPrincipalUnlocked ? balance : Math.max(0, balance - principalLocked)).toFixed(8))
   const todayRequestedAmount = await getDailyWithdrawalRequestedAmount(db, userId, currency)
   const dailyRemaining =
     withdrawalPolicy.dailyLimit > 0
@@ -954,7 +977,7 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
       isPrincipalUnlocked
         ? 100
         : unlockTargetProfit <= 0
-          ? 0
+          ? 100
           : Math.min(100, (earnedProfit / unlockTargetProfit) * 100)
     ).toFixed(2),
   )
@@ -1453,6 +1476,8 @@ export function createBalanceRouter(db) {
             sourceId: requestId,
             unlockRatio: unlockProfile.unlockRatio,
             minimumProfitToUnlock: unlockProfile.minimumProfitToUnlock,
+            principalLockedRatio: unlockProfile.principalLockedRatio,
+            clearProfitRestriction: unlockProfile.clearProfitRestriction,
             forceUnlockPrincipal: unlockProfile.forceUnlockPrincipal,
           })
           const vipResult = await applyVipAndReferralAfterDeposit(tx, {
@@ -1787,6 +1812,8 @@ export function createBalanceRouter(db) {
           sourceId: requestId,
           unlockRatio: unlockProfile.unlockRatio,
           minimumProfitToUnlock: unlockProfile.minimumProfitToUnlock,
+          principalLockedRatio: unlockProfile.principalLockedRatio,
+          clearProfitRestriction: unlockProfile.clearProfitRestriction,
           forceUnlockPrincipal: unlockProfile.forceUnlockPrincipal,
         })
         const updateRes = await run(
