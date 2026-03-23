@@ -9,6 +9,7 @@ import {
   savePushSubscription,
   sendPushTest,
   settleStrategyTrade,
+  updateStrategyTradeDetails,
   apiFetch,
   getStrategyTradeDisplayConfig,
   type StrategyCodeItem,
@@ -37,6 +38,8 @@ export function FuturesPage() {
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
+  const [expertName, setExpertName] = useState('')
+  const [savingTradeDetails, setSavingTradeDetails] = useState(false)
   const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
     active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
@@ -50,6 +53,10 @@ export function FuturesPage() {
   )
   const activeTradeAutoSettleAtMs = activeTrade?.autoSettleAt ? Date.parse(activeTrade.autoSettleAt) : Number.NaN
   const activeTradeReadyToSettle = !!activeTrade && (Number.isNaN(activeTradeAutoSettleAtMs) || activeTradeAutoSettleAtMs <= Date.now())
+
+  useEffect(() => {
+    setExpertName(String(activeTrade?.expertName || ''))
+  }, [activeTrade?.id, activeTrade?.expertName])
 
   useEffect(() => {
     if (quotes.length > 0 && !quotes.find((x) => x.symbol === selected)) {
@@ -241,6 +248,31 @@ export function FuturesPage() {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إغلاق الصفقة الاستراتيجية.' })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleCopyStrategyCode() {
+    const codeToCopy = String(activeTrade?.strategyCode || '').trim()
+    if (!codeToCopy) return
+    try {
+      await navigator.clipboard.writeText(codeToCopy)
+      setMessage({ type: 'success', text: 'تم نسخ كود الاستراتيجية.' })
+    } catch {
+      setMessage({ type: 'error', text: 'تعذر نسخ كود الاستراتيجية.' })
+    }
+  }
+
+  async function handleSaveTradeDetails() {
+    if (!activeTrade) return
+    setSavingTradeDetails(true)
+    try {
+      await updateStrategyTradeDetails({ usageId: activeTrade.id, expertName })
+      await refreshCodes()
+      setMessage({ type: 'success', text: 'تم حفظ معلومات الصفقة بنجاح.' })
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر حفظ معلومات الصفقة.' })
+    } finally {
+      setSavingTradeDetails(false)
     }
   }
 
@@ -437,6 +469,50 @@ export function FuturesPage() {
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2 sm:col-span-2">
               <div className="text-[11px] text-app-muted">وصف المعالجة</div>
               <div className="mt-1 text-sm font-semibold text-white">{tradeDisplayConfig.active_notice}</div>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+              <div className="text-[11px] text-amber-100/80">كود الاستراتيجية</div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  className="field-input flex-1"
+                  value={String(activeTrade.strategyCode || '')}
+                  readOnly
+                  placeholder="سيظهر الكود هنا"
+                />
+                <button
+                  type="button"
+                  className="wallet-action-btn owner-set-btn whitespace-nowrap"
+                  onClick={() => {
+                    handleCopyStrategyCode().catch(() => {})
+                  }}
+                  disabled={!String(activeTrade.strategyCode || '').trim()}
+                >
+                  نسخ
+                </button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-brand-blue/20 bg-app-elevated p-3">
+              <div className="text-[11px] text-app-muted">اسم الخبير المعتمد للصفقة</div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  className="field-input flex-1"
+                  value={expertName}
+                  onChange={(e) => setExpertName(e.target.value)}
+                  placeholder="أدخل اسم الخبير المعتمد"
+                />
+                <button
+                  type="button"
+                  className="wallet-action-btn wallet-action-deposit whitespace-nowrap"
+                  onClick={() => {
+                    handleSaveTradeDetails().catch(() => {})
+                  }}
+                  disabled={savingTradeDetails}
+                >
+                  {savingTradeDetails ? '...' : 'حفظ'}
+                </button>
+              </div>
             </div>
           </div>
         </section>

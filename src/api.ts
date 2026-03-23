@@ -2221,6 +2221,8 @@ export type StrategyCodeUsage = {
   confirmedAt?: string | null
   settledAt?: string | null
   usedAt?: string | null
+  strategyCode?: string
+  expertName?: string
   autoSettleAt?: string | null
   settleDelayMs?: number | null
 }
@@ -2338,11 +2340,20 @@ export async function redeemStrategyCode(payload: { code: string; symbol?: strin
     stakeAmount?: number
     tradeReturnPercent?: number
     entryPrice?: number
+    strategyCode?: string
+    expertName?: string
     autoSettleAt?: string | null
     settleDelayMs?: number | null
     rewardAmount?: number
     balanceAfter: number
   }>
+}
+
+export async function updateStrategyTradeDetails(payload: { usageId: number; expertName: string }) {
+  return apiFetch(`/api/tasks/strategy-codes/${payload.usageId}/details`, {
+    method: 'POST',
+    body: JSON.stringify({ expertName: payload.expertName }),
+  }) as Promise<{ ok: boolean; usageId: number; strategyCode: string; expertName: string }>
 }
 
 export async function settleStrategyTrade(usageId: number) {

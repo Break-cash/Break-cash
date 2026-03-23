@@ -186,6 +186,17 @@ export function Layout({
     return Array.from(byKey.values()).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
   }
 
+  function isStrategyNotification(item: { title?: string; body?: string }) {
+    const haystack = `${String(item.title || '')} ${String(item.body || '')}`.toLowerCase()
+    return (
+      haystack.includes('strategy') ||
+      haystack.includes('الاستراتيجية') ||
+      haystack.includes('الاستراتيجيه') ||
+      haystack.includes('صفقة') ||
+      haystack.includes('كود')
+    )
+  }
+
   useEffect(() => {
     apiFetch('/api/notifications/unreadCount')
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
@@ -769,11 +780,34 @@ export function Layout({
                   ) : (
                     <div className="space-y-2">
                       {notifications.map((item) => (
-                        <div key={item.id} className="glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2">
-                          <div>
-                            <div className="text-sm font-medium">{item.title}</div>
+                        <div
+                          key={item.id}
+                          className={`glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2 ${
+                            isStrategyNotification(item) ? 'border border-amber-400/25 bg-amber-500/10' : ''
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-start"
+                            onClick={() => {
+                              if (!isStrategyNotification(item)) return
+                              closeHeaderPopups()
+                              navigate('/futures')
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium">{item.title}</div>
+                              {isStrategyNotification(item) ? (
+                                <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                                  مهم
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-white/60">{item.body}</div>
-                          </div>
+                            {isStrategyNotification(item) ? (
+                              <div className="mt-1 text-[11px] text-amber-200/85">اضغط لفتح لوحة الصفقات الاستراتيجية</div>
+                            ) : null}
+                          </button>
                           <button
                             className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
                             type="button"

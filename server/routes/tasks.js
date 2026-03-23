@@ -93,6 +93,8 @@ function enrichStrategyUsageRow(row) {
     confirmedAt: row.confirmed_at,
     settledAt: row.settled_at,
     usedAt: row.used_at,
+    strategyCode: typeof meta?.code === 'string' ? meta.code : '',
+    expertName: typeof meta?.expertName === 'string' ? meta.expertName : '',
     autoSettleAt,
     settleDelayMs: Number.isFinite(settleDelayMs) && settleDelayMs > 0 ? settleDelayMs : null,
   }
@@ -714,6 +716,8 @@ export function createTasksRouter(db) {
             stakeAmount,
             tradeReturnPercent: Number(row.trade_return_percent || 0),
             entryPrice: Number(liveQuote.price || 0),
+            strategyCode: String(row.code || ''),
+            expertName: '',
             balanceAfter: debit.balanceAfter,
             autoSettleAt,
             settleDelayMs,
@@ -816,6 +820,41 @@ export function createTasksRouter(db) {
       }
       throw error
     }
+  })
+
+  router.post('/strategy-codes/:usageId/details', async (req, res) => {
+    const usageId = Number(req.params.usageId || 0)
+    const expertName = normalizeText(req.body?.expertName, 120)
+    if (!usageId) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const usage = await get(
+      db,
+      `SELECT id, user_id, metadata_json
+       FROM strategy_code_usages
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`,
+      [usageId, req.user.id],
+    )
+    if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
+
+    const meta = parseJsonSafe(usage.metadata_json, {})
+    const nextMeta = JSON.stringify({
+      ...meta,
+      expertName,
+    })
+    await run(
+      db,
+      `UPDATE strategy_code_usages
+       SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [nextMeta, usageId, req.user.id],
+    )
+    return res.json({
+      ok: true,
+      usageId,
+      strategyCode: typeof meta?.code === 'string' ? meta.code : '',
+      expertName,
+    })
   })
 
   router.get('/admin/strategy-codes', requirePermission(db, TASK_PERMISSION), async (_req, res) => {
