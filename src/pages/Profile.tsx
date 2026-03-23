@@ -6,6 +6,11 @@ import {
   apiFetch,
   getMyProfile,
   getAds,
+  getPushPublicKey,
+  getPushSubscriptionStatus,
+  removePushSubscription,
+  savePushSubscription,
+  sendPushTest,
   subscribeToLiveUpdates,
   type AuthUser,
   type AdItem,
@@ -30,6 +35,10 @@ export function Profile() {
   const [profileAds, setProfileAds] = useState<AdItem[]>([])
   const [isPullRefreshing, setIsPullRefreshing] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
   const pullStartYRef = useRef(0)
   const pullActiveRef = useRef(false)
   const liveRefreshTimerRef = useRef<number | null>(null)
@@ -37,6 +46,15 @@ export function Profile() {
     useWalletSummary({ subscribeLive: false })
   const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
   const earningsCurrency = dailyEarningsSummary.currency || appData.balance_info.currency || 'USDT'
+
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = `${base64String}${padding}`.replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; i += 1) outputArray[i] = rawData.charCodeAt(i)
+    return outputArray
+  }
 
   const loadCoreDashboardData = useCallback(async () => {
     const results = await Promise.allSettled([
@@ -93,6 +111,20 @@ export function Profile() {
   }, [loadCoreDashboardData, loadAdsData, loadQuotes])
 
   useEffect(() => {
+    const supported =
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    setPushSupported(supported)
+    if (!supported) return
+    setPushPermission(Notification.permission)
+    getPushSubscriptionStatus()
+      .then((res) => setPushSubscribed(Boolean(res.subscribed)))
+      .catch(() => setPushSubscribed(false))
+  }, [])
+
+  useEffect(() => {
     const id = window.setInterval(() => {
       loadQuotes()
     }, 15000)
@@ -125,6 +157,56 @@ export function Profile() {
       unsub()
     }
   }, [loadCoreDashboardData, loadAdsData, refreshDashboard])
+
+  async function enablePushNotifications(forcePrompt = true) {
+    if (pushBusy || !pushSupported) return
+    setPushBusy(true)
+    try {
+      let permission: NotificationPermission = Notification.permission
+      if (permission !== 'granted' && forcePrompt) permission = await Notification.requestPermission()
+      setPushPermission(permission)
+      if (permission !== 'granted') return
+      const registration = await navigator.serviceWorker.ready
+      let subscription = await registration.pushManager.getSubscription()
+      if (!subscription) {
+        const { publicKey } = await getPushPublicKey()
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+      }
+      await savePushSubscription(subscription.toJSON())
+      setPushSubscribed(true)
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  async function disablePushNotifications() {
+    if (pushBusy || !pushSupported) return
+    setPushBusy(true)
+    try {
+      const registration = await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.getSubscription()
+      const endpoint = subscription?.endpoint || null
+      if (subscription) await subscription.unsubscribe().catch(() => {})
+      await removePushSubscription(endpoint).catch(() => {})
+      setPushSubscribed(false)
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  async function sendPushPreview() {
+    if (pushBusy) return
+    setPushBusy(true)
+    try {
+      await enablePushNotifications(false)
+      await sendPushTest()
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   const assetsToRender = useMemo(() => {
     return walletDashboardMock.my_assets.map((item) => {
@@ -263,6 +345,48 @@ export function Profile() {
           <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_announcement_board')}</p>
         </div>
         <AdBanner items={profileAds} placement="profile" className="my-0 opacity-95" />
+      </section>
+
+      <section className="glass-panel elite-enter rounded-3xl p-3">
+        <div className="mb-3 text-sm font-semibold text-[var(--text-primary)]">الإشعارات الخارجية</div>
+        <div className="space-y-3">
+          <div className="text-sm text-[var(--text-secondary)]">
+            {pushPermission === 'denied'
+              ? 'الإشعارات محظورة من المتصفح أو النظام.'
+              : pushSubscribed
+                ? 'الإشعارات الخارجية مفعّلة لهذا الجهاز.'
+                : 'فعّل الإشعارات ليصلك تنبيه حتى عند الخروج من التطبيق.'}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {pushSupported ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pushSubscribed) disablePushNotifications().catch(() => {})
+                    else enablePushNotifications(true).catch(() => {})
+                  }}
+                  className="wallet-action-btn owner-set-btn"
+                  disabled={pushBusy}
+                >
+                  {pushBusy ? '...' : pushSubscribed ? 'إيقاف الإشعارات' : 'تفعيل الإشعارات'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sendPushPreview().catch(() => {})
+                  }}
+                  className="wallet-action-btn wallet-action-deposit"
+                  disabled={pushBusy || (!pushSubscribed && pushPermission === 'denied')}
+                >
+                  {pushBusy ? '...' : 'إرسال إشعار تجريبي'}
+                </button>
+              </>
+            ) : (
+              <div className="text-xs text-[var(--text-muted)]">هذا المتصفح أو الجهاز لا يدعم Web Push.</div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="glass-panel elite-enter rounded-3xl p-3">
