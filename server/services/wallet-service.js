@@ -55,17 +55,17 @@ function normalizeRewardSourceLockHours(raw) {
 
 export async function getRewardPayoutConfig(db) {
   const row = await get(db, `SELECT value FROM settings WHERE key = 'reward_payout_config' LIMIT 1`)
-  if (!row?.value) return { defaultMode: 'withdrawable', sourceModes: { referrals: 'withdrawable' }, defaultLockHours: 0, sourceLockHours: {} }
+  if (!row?.value) return { defaultMode: 'withdrawable', sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable' }, defaultLockHours: 0, sourceLockHours: {} }
   try {
     const parsed = JSON.parse(String(row.value))
     return {
       defaultMode: normalizeRewardPayoutMode(parsed?.defaultMode),
-      sourceModes: { referrals: 'withdrawable', ...normalizeRewardSourceModes(parsed?.sourceModes) },
+      sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable', ...normalizeRewardSourceModes(parsed?.sourceModes) },
       defaultLockHours: normalizeRewardLockHours(parsed?.defaultLockHours, 0),
       sourceLockHours: normalizeRewardSourceLockHours(parsed?.sourceLockHours),
     }
   } catch {
-    return { defaultMode: 'withdrawable', sourceModes: { referrals: 'withdrawable' }, defaultLockHours: 0, sourceLockHours: {} }
+    return { defaultMode: 'withdrawable', sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable' }, defaultLockHours: 0, sourceLockHours: {} }
   }
 }
 

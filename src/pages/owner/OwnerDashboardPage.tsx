@@ -155,7 +155,7 @@ const REWARD_PAYOUT_MODE_OPTIONS: Array<{ value: RewardPayoutMode; label: string
 function createDefaultRewardPayoutRules(): RewardPayoutRulesResponse {
   return {
     defaultMode: 'withdrawable',
-    sourceModes: { referrals: 'withdrawable' },
+    sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable' },
     defaultLockHours: 0,
     sourceLockHours: {},
     overridesCount: 0,
@@ -1318,6 +1318,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         sourceModes: {
           ...rewardPayoutRules.sourceModes,
           referrals: 'withdrawable',
+          deposits: 'withdrawable',
         },
         defaultLockHours: Number(rewardPayoutRules.defaultLockHours || 0),
         sourceLockHours: rewardPayoutRules.sourceLockHours,
@@ -1329,13 +1330,14 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         sourceModes: {
           ...refreshed.sourceModes,
           referrals: 'withdrawable',
+          deposits: 'withdrawable',
         },
       })
       const applyMessage = formatRewardApplyResult(result.applyPendingResult)
       setRewardPayoutApplyPendingGlobal(false)
       setMessage({
         type: 'success',
-        text: `تم تطبيق الإعداد على المستخدمين الحاليين والجدد: 50% فقط من إجمالي الأصول قابلة للسحب، مع إبقاء أرباح الإحالات قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`,
+        text: `تم تطبيق الإعداد على المستخدمين الحاليين والجدد: 50% فقط من إجمالي الأصول قابلة للسحب، مع إبقاء أرباح الإحالات والإيداع قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`,
       })
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تطبيق إعداد 50% للأصول مع فتح سحب الإحالات.' })
@@ -3176,7 +3178,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <div className="owner-hint">{`إجمالي الاستثناءات الحالية: ${Number(rewardPayoutRules.overridesCount || 0)}`}</div>
                 </div>
               </div>
-              <div className="owner-hint">الوضع المالي الحالي: 50% فقط من إجمالي الأصول قابلة للسحب، بينما أرباح الإحالات تبقى قابلة للسحب بالكامل.</div>
+              <div className="owner-hint">الوضع المالي الحالي: 50% فقط من إجمالي الأصول قابلة للسحب، بينما أرباح الإحالات والإيداع تبقى قابلة للسحب بالكامل.</div>
               {REWARD_PAYOUT_SOURCE_OPTIONS.filter((source) => source.value !== 'all').map((source) => {
                 const sourceKey = source.value as Exclude<RewardPayoutSource, 'all'>
                 const currentMode = rewardPayoutRules.sourceModes[sourceKey] || rewardPayoutRules.defaultMode
@@ -3233,7 +3235,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
               </label>
               <div className="owner-buttons">
                 <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleApplyHalfAssetsReferralPreset} disabled={rewardPayoutSaving}>
-                  {rewardPayoutSaving ? '...' : 'تطبيق 50% للأصول + فتح الإحالات'}
+                  {rewardPayoutSaving ? '...' : 'تطبيق 50% للأصول + فتح الإحالات والإيداع'}
                 </button>
                 <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSaveRewardPayoutConfig} disabled={rewardPayoutSaving}>
                   {rewardPayoutSaving ? '...' : 'حفظ القواعد العامة'}
