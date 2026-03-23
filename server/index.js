@@ -21,7 +21,7 @@ import { createMarketRouter } from './routes/market.js'
 import { createStatsRouter } from './routes/stats.js'
 import { createFriendsRouter } from './routes/friends.js'
 import { createOwnerGrowthRouter } from './routes/owner-growth.js'
-import { createTasksRouter } from './routes/tasks.js'
+import { createTasksRouter, runDueStrategyTradeSettlementSweep } from './routes/tasks.js'
 import { createMiningRouter } from './routes/mining.js'
 import { createRewardsRouter } from './routes/rewards.js'
 import { createAdsRouter } from './routes/ads.js'
@@ -41,6 +41,7 @@ if (SENTRY_DSN) {
 }
 
 let dbRef = null
+let strategyTradeSweepRunning = false
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
@@ -145,6 +146,20 @@ async function bootstrap() {
   const db = await openDb()
   dbRef = db
   await ensureBaseSeed(db)
+
+  const strategyTradeSweepIntervalMs = Math.max(15000, Number(process.env.STRATEGY_TRADE_SWEEP_INTERVAL_MS || 30000))
+  setInterval(async () => {
+    if (!dbRef || strategyTradeSweepRunning) return
+    strategyTradeSweepRunning = true
+    try {
+      await runDueStrategyTradeSettlementSweep(dbRef, 100)
+    } catch (error) {
+      if (SENTRY_DSN) Sentry.captureException(error)
+      console.warn('[strategy-trade] sweep failed', error instanceof Error ? error.message : String(error))
+    } finally {
+      strategyTradeSweepRunning = false
+    }
+  }, strategyTradeSweepIntervalMs)
 
   app.use('/api/auth', createAuthRouter(db))
   app.use('/api/invites', createInvitesRouter(db))

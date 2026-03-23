@@ -198,6 +198,54 @@ async function autoSettleDueStrategyTrades(db, userId) {
   }
 }
 
+export async function runDueStrategyTradeSettlementSweep(db, limit = 50) {
+  const dueRows = await all(
+    db,
+    `SELECT id, user_id, metadata_json
+     FROM strategy_code_usages
+     WHERE status = 'trade_active'
+       AND metadata_json IS NOT NULL
+       AND metadata_json LIKE '%"autoSettleAt":"%'
+     ORDER BY id ASC
+     LIMIT ?`,
+    [Math.max(1, Math.min(500, Number(limit) || 50))],
+  )
+
+  let settledCount = 0
+  for (const row of dueRows) {
+    try {
+      const meta = parseJsonSafe(row?.metadata_json, {})
+      const autoSettleAt = typeof meta?.autoSettleAt === 'string' ? Date.parse(meta.autoSettleAt) : Number.NaN
+      if (Number.isNaN(autoSettleAt) || autoSettleAt > Date.now()) continue
+
+      await withTransaction(db, async (tx) => {
+        const usage = await get(
+          tx,
+          `SELECT id, user_id, code_id, status, selected_symbol, stake_amount,
+                  trade_return_percent, wallet_credit_txn_id, metadata_json
+           FROM strategy_code_usages
+           WHERE id = ? AND user_id = ?
+           LIMIT 1`,
+          [row.id, row.user_id],
+        )
+        if (!usage) return
+        await settleStrategyTradeUsage(tx, usage, Number(row.user_id || 0))
+        settledCount += 1
+      })
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'SETTLEMENT_NOT_READY') {
+        console.warn('[strategy-trade] background auto settle skipped', {
+          userId: Number(row.user_id || 0),
+          usageId: Number(row.id || 0),
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
+  return { checked: dueRows.length, settled: settledCount }
+}
+
 function buildStrategyCodeRow(row) {
   return {
     id: Number(row.id),

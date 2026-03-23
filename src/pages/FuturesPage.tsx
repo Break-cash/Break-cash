@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   getMyStrategyCodes,
+  getPushPublicKey,
+  getPushSubscriptionStatus,
   previewStrategyCode,
+  removePushSubscription,
   redeemStrategyCode,
+  savePushSubscription,
+  sendPushTest,
   settleStrategyTrade,
   apiFetch,
   getStrategyTradeDisplayConfig,
@@ -28,6 +33,10 @@ export function FuturesPage() {
   const [preview, setPreview] = useState<null | Awaited<ReturnType<typeof previewStrategyCode>>>(null)
   const [codes, setCodes] = useState<StrategyCodeItem[]>([])
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
   const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
     active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
@@ -90,6 +99,80 @@ export function FuturesPage() {
       .then((res) => setTradeDisplayConfig(res.config))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const supported =
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    setPushSupported(supported)
+    if (!supported) return
+    setPushPermission(Notification.permission)
+    getPushSubscriptionStatus()
+      .then((res) => setPushSubscribed(Boolean(res.subscribed)))
+      .catch(() => setPushSubscribed(false))
+  }, [])
+
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = `${base64String}${padding}`.replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; i += 1) outputArray[i] = rawData.charCodeAt(i)
+    return outputArray
+  }
+
+  async function enablePushNotifications(forcePrompt = true) {
+    if (pushBusy || !pushSupported) return
+    setPushBusy(true)
+    try {
+      let permission: NotificationPermission = Notification.permission
+      if (permission !== 'granted' && forcePrompt) permission = await Notification.requestPermission()
+      setPushPermission(permission)
+      if (permission !== 'granted') return
+      const registration = await navigator.serviceWorker.ready
+      let subscription = await registration.pushManager.getSubscription()
+      if (!subscription) {
+        const { publicKey } = await getPushPublicKey()
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+      }
+      await savePushSubscription(subscription.toJSON())
+      setPushSubscribed(true)
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  async function disablePushNotifications() {
+    if (pushBusy || !pushSupported) return
+    setPushBusy(true)
+    try {
+      const registration = await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.getSubscription()
+      const endpoint = subscription?.endpoint || null
+      if (subscription) await subscription.unsubscribe().catch(() => {})
+      await removePushSubscription(endpoint).catch(() => {})
+      setPushSubscribed(false)
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  async function sendPushPreview() {
+    if (pushBusy) return
+    setPushBusy(true)
+    try {
+      await enablePushNotifications(false)
+      await sendPushTest()
+      setPushSubscribed(true)
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   async function refreshCodes() {
     const refreshed = await getMyStrategyCodes()
@@ -249,6 +332,48 @@ export function FuturesPage() {
       </section>
 
       <section className="rounded-2xl border border-app-border bg-app-card p-3">
+        <div className="mb-3 rounded-2xl border border-brand-blue/15 bg-app-elevated p-3">
+          <div className="text-sm font-semibold text-white">الإشعارات الخارجية للصفقات</div>
+          <p className="mt-1 text-xs text-app-muted">
+            فعّلها من هنا ليصلك إشعار فعلي عند تفعيل كود الاستراتيجية أو عند إغلاق الصفقة تلقائيًا حتى لو كنت خارج التطبيق.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pushSupported ? (
+              <>
+                <button
+                  type="button"
+                  className="wallet-action-btn owner-set-btn"
+                  onClick={() => {
+                    if (pushSubscribed) disablePushNotifications().catch(() => {})
+                    else enablePushNotifications(true).catch(() => {})
+                  }}
+                  disabled={pushBusy}
+                >
+                  {pushBusy ? '...' : pushSubscribed ? 'إيقاف الإشعارات الخارجية' : 'تفعيل الإشعارات الخارجية'}
+                </button>
+                <button
+                  type="button"
+                  className="wallet-action-btn wallet-action-deposit"
+                  onClick={() => {
+                    sendPushPreview().catch(() => {})
+                  }}
+                  disabled={pushBusy || (!pushSubscribed && pushPermission === 'denied')}
+                >
+                  {pushBusy ? '...' : 'إرسال إشعار تجريبي'}
+                </button>
+              </>
+            ) : (
+              <div className="text-xs text-app-muted">هذا المتصفح أو الجهاز لا يدعم Web Push.</div>
+            )}
+          </div>
+          <div className="mt-2 text-xs text-app-muted">
+            {pushPermission === 'denied'
+              ? 'الإشعارات محظورة من المتصفح أو النظام.'
+              : pushSubscribed
+                ? 'الإشعارات الخارجية مفعّلة لهذا الجهاز.'
+                : 'الإشعارات الخارجية غير مفعّلة بعد على هذا الجهاز.'}
+          </div>
+        </div>
         <h2 className="text-sm font-semibold text-white">كود فتح الصفقات الاستراتيجية</h2>
         <p className="mt-1 text-xs text-app-muted">
           يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة قبل أي خصم أو تفعيل.
