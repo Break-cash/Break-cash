@@ -3176,6 +3176,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <div className="owner-hint">{`إجمالي الاستثناءات الحالية: ${Number(rewardPayoutRules.overridesCount || 0)}`}</div>
                 </div>
               </div>
+              <div className="owner-hint">الوضع المالي الحالي: 50% فقط من إجمالي الأصول قابلة للسحب، بينما أرباح الإحالات تبقى قابلة للسحب بالكامل.</div>
               {REWARD_PAYOUT_SOURCE_OPTIONS.filter((source) => source.value !== 'all').map((source) => {
                 const sourceKey = source.value as Exclude<RewardPayoutSource, 'all'>
                 const currentMode = rewardPayoutRules.sourceModes[sourceKey] || rewardPayoutRules.defaultMode
