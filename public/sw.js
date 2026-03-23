@@ -19,6 +19,9 @@ self.addEventListener('push', (event) => {
     icon: String(payload.icon || '/break-cash-logo-premium.png'),
     badge: String(payload.badge || '/break-cash-logo-premium.png'),
     tag: String(payload.tag || 'breakcash-notification'),
+    requireInteraction: payload.requireInteraction === true,
+    renotify: payload.renotify === true,
+    vibrate: Array.isArray(payload.vibrate) ? payload.vibrate : undefined,
     data: payload.data && typeof payload.data === 'object' ? payload.data : {},
   }
   event.waitUntil(self.registration.showNotification(title, options))

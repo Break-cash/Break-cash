@@ -6,6 +6,7 @@ const DEFAULT_PUSH_ICON = '/break-cash-logo-premium.png'
 const DEFAULT_PUSH_URL = '/portfolio'
 
 function normalizePushPayload(payload = {}) {
+  const important = payload.important === true
   return {
     title: String(payload.title || '').trim() || 'Break Cash',
     body: String(payload.body || '').trim(),
@@ -13,6 +14,14 @@ function normalizePushPayload(payload = {}) {
     badge: String(payload.badge || DEFAULT_PUSH_ICON).trim() || DEFAULT_PUSH_ICON,
     url: String(payload.url || DEFAULT_PUSH_URL).trim() || DEFAULT_PUSH_URL,
     tag: String(payload.tag || '').trim() || undefined,
+    important,
+    requireInteraction: payload.requireInteraction === true || important,
+    renotify: payload.renotify === true || important,
+    vibrate: Array.isArray(payload.vibrate)
+      ? payload.vibrate.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item >= 0).slice(0, 8)
+      : important
+        ? [180, 80, 180, 80, 260]
+        : [120, 60, 120],
     data: payload.data && typeof payload.data === 'object' ? payload.data : {},
   }
 }
@@ -182,7 +191,11 @@ export async function sendPushToUser(db, userId, payload) {
   for (const row of rows) {
     try {
       const subscription = JSON.parse(String(row.subscription_json || '{}'))
-      await webpush.sendNotification(subscription, JSON.stringify(safePayload))
+      await webpush.sendNotification(subscription, JSON.stringify(safePayload), {
+        TTL: safePayload.important ? 60 * 60 * 12 : 60 * 60,
+        urgency: safePayload.important ? 'high' : 'normal',
+        topic: String(safePayload.tag || 'breakcash-notification').slice(0, 32),
+      })
       await markPushDeliverySuccess(db, Number(row.id))
       sent += 1
     } catch (error) {

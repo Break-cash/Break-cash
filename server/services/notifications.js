@@ -214,13 +214,21 @@ export async function createLocalizedNotification(db, userId, key, variables = {
     title,
     body,
   })
+  const isStrategyImportant =
+    key === 'strategy_trade_activated' ||
+    key === 'strategy_trade_settled' ||
+    key === 'strategy_bonus_activated'
   try {
     await sendPushToUser(db, userId, {
       title,
       body,
       tag: key,
-      url: '/portfolio',
-      data: { key, title, body },
+      url: isStrategyImportant ? '/futures' : '/portfolio',
+      important: isStrategyImportant,
+      requireInteraction: isStrategyImportant,
+      renotify: isStrategyImportant,
+      vibrate: isStrategyImportant ? [180, 80, 180, 80, 260] : [120, 60, 120],
+      data: { key, title, body, important: isStrategyImportant, url: isStrategyImportant ? '/futures' : '/portfolio' },
     })
   } catch {
     // Keep in-app notifications working even if web push delivery fails.
