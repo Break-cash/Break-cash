@@ -923,7 +923,7 @@ export function createTasksRouter(db) {
         code, title, description, feature_type, reward_mode, reward_value,
         asset_symbol, expert_name, trade_return_percent, expires_at, is_active, created_by
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
       [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, expertName || null, tradeReturnPercent, expiresAt, isActive, req.user.id],
     )
