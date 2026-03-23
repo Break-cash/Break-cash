@@ -73,6 +73,7 @@ import {
   type AdminAccountHealthScan,
   type AdminStaffItem,
   type AuthUser,
+  type BalanceRules,
   type BonusRule,
   type ContentCampaign,
   type DailyTradeCampaign,
@@ -160,6 +161,30 @@ function createDefaultRewardPayoutRules(): RewardPayoutRulesResponse {
     sourceLockHours: {},
     overridesCount: 0,
     overrides: [],
+  }
+}
+
+function createDefaultPrincipalWithdrawalRule() {
+  return {
+    enabled: true,
+    withdrawableRatio: 0.5,
+    clearProfitRestriction: true,
+    applyToAllVipLevels: true,
+  }
+}
+
+function createDefaultBalanceRules(): BalanceRules {
+  return {
+    minDeposit: 10,
+    minWithdrawal: 10,
+    depositMethods: ['USDT TRC20', 'Bank Transfer'],
+    withdrawalMethods: ['USDT TRC20'],
+    manualReview: true,
+    withdrawalFeePercent: 10,
+    minimumProfitToUnlock: 0,
+    defaultUnlockRatio: 0.5,
+    unlockRatioByLevel: { 0: 0.5, 1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5, 5: 0.5 },
+    principalWithdrawalRule: createDefaultPrincipalWithdrawalRule(),
   }
 }
 
@@ -307,6 +332,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   })
   const [vipTiers, setVipTiers] = useState<VipTier[]>([])
   const [rewardPayoutRules, setRewardPayoutRules] = useState<RewardPayoutRulesResponse>(createDefaultRewardPayoutRules())
+  const [balanceRules, setBalanceRules] = useState<BalanceRules>(createDefaultBalanceRules())
+  const [balanceRulesSaving, setBalanceRulesSaving] = useState(false)
+  const [principalRuleResetOverrides, setPrincipalRuleResetOverrides] = useState(true)
   const [rewardPayoutSaving, setRewardPayoutSaving] = useState(false)
   const [rewardPayoutApplyPendingGlobal, setRewardPayoutApplyPendingGlobal] = useState(false)
   const [rewardPayoutOverrideDraft, setRewardPayoutOverrideDraft] = useState({
@@ -422,6 +450,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     getRegistrationStatus()
       .then((res) => setRegistrationEnabled(!!res.enabled))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    getBalanceRules()
+      .then((res) => setBalanceRules(res.rules || createDefaultBalanceRules()))
+      .catch(() => setBalanceRules(createDefaultBalanceRules()))
   }, [])
 
   useEffect(() => {
@@ -1262,6 +1296,43 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     return refreshed
   }
 
+  async function refreshBalanceRules() {
+    const refreshed = (await getBalanceRules()).rules
+    setBalanceRules(refreshed)
+    return refreshed
+  }
+
+  async function handleSavePrincipalWithdrawalRule() {
+    setBalanceRulesSaving(true)
+    setMessage(null)
+    try {
+      const currentRule = balanceRules.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
+      const nextRatio = Math.max(0, Math.min(1, Number(currentRule?.withdrawableRatio || 0)))
+      const nextRules: BalanceRules = {
+        ...balanceRules,
+        principalWithdrawalRule: {
+          enabled: currentRule?.enabled !== false,
+          withdrawableRatio: Number(nextRatio.toFixed(4)),
+          clearProfitRestriction: currentRule?.clearProfitRestriction !== false,
+          applyToAllVipLevels: currentRule?.applyToAllVipLevels !== false,
+        },
+      }
+      await updateBalanceRules(nextRules, {
+        resetPrincipalUnlockOverrides: principalRuleResetOverrides,
+      })
+      const refreshed = await refreshBalanceRules()
+      const effectiveRatio = Number((refreshed.principalWithdrawalRule?.withdrawableRatio ?? refreshed.defaultUnlockRatio ?? 0.5) * 100)
+      setMessage({
+        type: 'success',
+        text: `تم حفظ قاعدة سحب أصل الإيداع وتطبيقها على المستخدمين الحاليين والجدد. المسموح الآن هو ${effectiveRatio.toFixed(0)}% من أصل الإيداع، وتم فك قيود الربح المطلوبة عنها.${principalRuleResetOverrides ? ' كما تمت إزالة أي استثناءات قديمة كانت تغيّر هذه القاعدة.' : ''}`,
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ قاعدة سحب أصل الإيداع.' })
+    } finally {
+      setBalanceRulesSaving(false)
+    }
+  }
+
   async function handleSaveRewardPayoutConfig() {
     setRewardPayoutSaving(true)
     setMessage(null)
@@ -1304,15 +1375,21 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     setMessage(null)
     try {
       const currentBalanceRules = await getBalanceRules()
-      const nextUnlockRatioByLevel = { ...currentBalanceRules.rules.unlockRatioByLevel }
-      for (const vipLevel of [0, 1, 2, 3, 4, 5]) {
-        nextUnlockRatioByLevel[String(vipLevel)] = 0.5
-      }
-      await updateBalanceRules({
-        ...currentBalanceRules.rules,
-        defaultUnlockRatio: 0.5,
-        unlockRatioByLevel: nextUnlockRatioByLevel,
-      })
+      await updateBalanceRules(
+        {
+          ...currentBalanceRules.rules,
+          principalWithdrawalRule: {
+            enabled: true,
+            withdrawableRatio: 0.5,
+            clearProfitRestriction: true,
+            applyToAllVipLevels: true,
+          },
+        },
+        {
+          resetPrincipalUnlockOverrides: true,
+        },
+      )
+      await refreshBalanceRules()
       const result = await updateRewardPayoutRulesOwner({
         defaultMode: rewardPayoutRules.defaultMode,
         sourceModes: {
@@ -3136,6 +3213,118 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           </section>
 
           <section className="owner-balance-section">
+            <h2 className="owner-section-title">قاعدة سحب أصل الإيداع</h2>
+            <p className="owner-hint">هذه القاعدة أصبحت داخل لوحة المالك نفسها، وتتحكم مباشرة في مقدار أصل الإيداع الذي يمكن للمستخدم سحبه، مع إمكانية فك قيود الربح المطلوبة عنها وتوحيدها على كل المستخدمين الحاليين والجدد.</p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <label className="owner-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={balanceRules.principalWithdrawalRule?.enabled !== false}
+                    onChange={(e) =>
+                      setBalanceRules((prev) => {
+                        const principalRule = prev.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
+                        return {
+                          ...prev,
+                          principalWithdrawalRule: {
+                            enabled: e.target.checked,
+                            withdrawableRatio: principalRule.withdrawableRatio,
+                            clearProfitRestriction: principalRule.clearProfitRestriction,
+                            applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                          },
+                        }
+                      })
+                    }
+                  />
+                  <span>تفعيل قاعدة سحب أصل الإيداع من لوحة المالك</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  className="field-input"
+                  placeholder="النسبة القابلة للسحب من أصل الإيداع %"
+                  value={String(Math.round(Number(balanceRules.principalWithdrawalRule?.withdrawableRatio ?? 0.5) * 100))}
+                  onChange={(e) =>
+                    setBalanceRules((prev) => {
+                      const principalRule = prev.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
+                      return {
+                        ...prev,
+                        principalWithdrawalRule: {
+                          enabled: principalRule.enabled,
+                          withdrawableRatio: Math.max(0, Math.min(1, Number(e.target.value || 0) / 100)),
+                          clearProfitRestriction: principalRule.clearProfitRestriction,
+                          applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                        },
+                      }
+                    })
+                  }
+                />
+              </div>
+              <div className="owner-form-row">
+                <label className="owner-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false}
+                    onChange={(e) =>
+                      setBalanceRules((prev) => {
+                        const principalRule = prev.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
+                        return {
+                          ...prev,
+                          principalWithdrawalRule: {
+                            enabled: principalRule.enabled,
+                            withdrawableRatio: principalRule.withdrawableRatio,
+                            clearProfitRestriction: e.target.checked,
+                            applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                          },
+                        }
+                      })
+                    }
+                  />
+                  <span>فك جميع قيود الربح المطلوبة عن أصل الإيداع</span>
+                </label>
+                <label className="owner-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={balanceRules.principalWithdrawalRule?.applyToAllVipLevels !== false}
+                    onChange={(e) =>
+                      setBalanceRules((prev) => {
+                        const principalRule = prev.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
+                        return {
+                          ...prev,
+                          principalWithdrawalRule: {
+                            enabled: principalRule.enabled,
+                            withdrawableRatio: principalRule.withdrawableRatio,
+                            clearProfitRestriction: principalRule.clearProfitRestriction,
+                            applyToAllVipLevels: e.target.checked,
+                          },
+                        }
+                      })
+                    }
+                  />
+                  <span>توحيد هذه النسبة على جميع مستويات VIP</span>
+                </label>
+              </div>
+              <label className="owner-checkbox">
+                <input
+                  type="checkbox"
+                  checked={principalRuleResetOverrides}
+                  onChange={(e) => setPrincipalRuleResetOverrides(e.target.checked)}
+                />
+                <span>طبّق القاعدة الآن على جميع المستخدمين الحاليين، وأزل أي استثناءات قديمة كانت تغيّر نسبة فك أصل الإيداع أو تعيد تقييده.</span>
+              </label>
+              <div className="owner-hint">{`الوضع الحالي: ${Math.round(Number(balanceRules.principalWithdrawalRule?.withdrawableRatio ?? balanceRules.defaultUnlockRatio ?? 0.5) * 100)}% من أصل الإيداع قابل للسحب.${balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false ? ' لا يوجد شرط ربح إضافي لهذه القاعدة.' : ' ما زال شرط الربح مفعّلًا.'}`}</div>
+              <div className="owner-hint">هذا الإعداد يخص أصل الإيداع نفسه في السحب، وليس قواعد أرباح الإحالات أو مكافآت الإيداع أو بقية المكتسبات.</div>
+              <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSavePrincipalWithdrawalRule} disabled={balanceRulesSaving}>
+                  {balanceRulesSaving ? '...' : 'حفظ وتطبيق قاعدة أصل الإيداع'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
             <h2 className="owner-section-title">صلاحيات سحب المكتسبات</h2>
             <p className="owner-hint">تحكم شامل في كل المكتسبات القادمة من التعدين والمهام والإحالات ومكافآت الإيداع: افتراضي عام، قواعد حسب المصدر، واستثناءات فردية أو جماعية للمستخدمين.</p>
             <div className="owner-actions-card">
@@ -3178,7 +3367,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <div className="owner-hint">{`إجمالي الاستثناءات الحالية: ${Number(rewardPayoutRules.overridesCount || 0)}`}</div>
                 </div>
               </div>
-              <div className="owner-hint">الوضع المالي الحالي: 50% فقط من إجمالي الأصول قابلة للسحب، بينما أرباح الإحالات والإيداع تبقى قابلة للسحب بالكامل.</div>
+              <div className="owner-hint">{`الوضع المالي الحالي: ${Math.round(Number(balanceRules.principalWithdrawalRule?.withdrawableRatio ?? balanceRules.defaultUnlockRatio ?? 0.5) * 100)}% من أصل الإيداع قابل للسحب من خلال قاعدة السحب أعلاه، بينما أرباح الإحالات والإيداع تتبع إعدادات هذا القسم.`}</div>
               {REWARD_PAYOUT_SOURCE_OPTIONS.filter((source) => source.value !== 'all').map((source) => {
                 const sourceKey = source.value as Exclude<RewardPayoutSource, 'all'>
                 const currentMode = rewardPayoutRules.sourceModes[sourceKey] || rewardPayoutRules.defaultMode

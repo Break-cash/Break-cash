@@ -40,6 +40,12 @@ const DEFAULT_BALANCE_RULES = {
   minimumProfitToUnlock: 0,
   defaultUnlockRatio: PRINCIPAL_UNLOCK_RATIO,
   unlockRatioByLevel: { 0: PRINCIPAL_UNLOCK_RATIO, 1: PRINCIPAL_UNLOCK_RATIO, 2: PRINCIPAL_UNLOCK_RATIO, 3: PRINCIPAL_UNLOCK_RATIO, 4: PRINCIPAL_UNLOCK_RATIO, 5: PRINCIPAL_UNLOCK_RATIO },
+  principalWithdrawalRule: {
+    enabled: true,
+    withdrawableRatio: PRINCIPAL_UNLOCK_RATIO,
+    clearProfitRestriction: true,
+    applyToAllVipLevels: true,
+  },
 }
 
 async function withTransaction(db, fn) {
@@ -109,6 +115,17 @@ function normalizeRules(raw) {
   const defaultUnlockRatio = Number(base.defaultUnlockRatio)
   const normalizeRatio = (value, fallback) =>
     Number.isFinite(value) && value >= 0 && value <= 10 ? Number(value.toFixed(4)) : fallback
+  const principalRuleBase =
+    base.principalWithdrawalRule && typeof base.principalWithdrawalRule === 'object' ? base.principalWithdrawalRule : {}
+  const principalWithdrawalRule = {
+    enabled: principalRuleBase.enabled !== false,
+    withdrawableRatio: normalizeRatio(
+      Number(principalRuleBase.withdrawableRatio),
+      DEFAULT_BALANCE_RULES.principalWithdrawalRule.withdrawableRatio,
+    ),
+    clearProfitRestriction: principalRuleBase.clearProfitRestriction !== false,
+    applyToAllVipLevels: principalRuleBase.applyToAllVipLevels !== false,
+  }
   const map = base.unlockRatioByLevel && typeof base.unlockRatioByLevel === 'object' ? base.unlockRatioByLevel : {}
   const unlockRatioByLevel = { ...DEFAULT_BALANCE_RULES.unlockRatioByLevel }
   for (const [k, v] of Object.entries(map)) {
@@ -116,6 +133,20 @@ function normalizeRules(raw) {
     if (!/^\d+$/.test(key)) continue
     unlockRatioByLevel[key] = normalizeRatio(Number(v), unlockRatioByLevel[key] ?? DEFAULT_BALANCE_RULES.defaultUnlockRatio)
   }
+  const normalizedMinProfit =
+    Number.isFinite(minimumProfitToUnlock) && minimumProfitToUnlock >= 0
+      ? Number(minimumProfitToUnlock.toFixed(8))
+      : DEFAULT_BALANCE_RULES.minimumProfitToUnlock
+  const normalizedDefaultUnlockRatio = normalizeRatio(defaultUnlockRatio, DEFAULT_BALANCE_RULES.defaultUnlockRatio)
+  const effectiveDefaultUnlockRatio = principalWithdrawalRule.enabled
+    ? principalWithdrawalRule.withdrawableRatio
+    : normalizedDefaultUnlockRatio
+  const effectiveUnlockRatioByLevel = principalWithdrawalRule.enabled && principalWithdrawalRule.applyToAllVipLevels
+    ? Object.keys(DEFAULT_BALANCE_RULES.unlockRatioByLevel).reduce((acc, key) => {
+        acc[key] = principalWithdrawalRule.withdrawableRatio
+        return acc
+      }, {})
+    : unlockRatioByLevel
   return {
     minDeposit: Number.isFinite(minDeposit) && minDeposit >= 0 ? Number(minDeposit.toFixed(8)) : DEFAULT_BALANCE_RULES.minDeposit,
     minWithdrawal: Number.isFinite(minWithdrawal) && minWithdrawal >= 0 ? Number(minWithdrawal.toFixed(8)) : DEFAULT_BALANCE_RULES.minWithdrawal,
@@ -126,12 +157,10 @@ function normalizeRules(raw) {
       Number.isFinite(withdrawalFeePercent) && withdrawalFeePercent >= 0 && withdrawalFeePercent <= 100
         ? Number(withdrawalFeePercent.toFixed(4))
         : DEFAULT_BALANCE_RULES.withdrawalFeePercent,
-    minimumProfitToUnlock:
-      Number.isFinite(minimumProfitToUnlock) && minimumProfitToUnlock >= 0
-        ? Number(minimumProfitToUnlock.toFixed(8))
-        : DEFAULT_BALANCE_RULES.minimumProfitToUnlock,
-    defaultUnlockRatio: normalizeRatio(defaultUnlockRatio, DEFAULT_BALANCE_RULES.defaultUnlockRatio),
-    unlockRatioByLevel,
+    minimumProfitToUnlock: principalWithdrawalRule.enabled && principalWithdrawalRule.clearProfitRestriction ? 0 : normalizedMinProfit,
+    defaultUnlockRatio: effectiveDefaultUnlockRatio,
+    unlockRatioByLevel: effectiveUnlockRatioByLevel,
+    principalWithdrawalRule,
   }
 }
 
@@ -358,6 +387,21 @@ async function reapplyPrincipalLocksForAllUsers(db, rules = null) {
     affected += await reapplyPrincipalLocksForUser(db, Number(row.user_id || 0), String(row.currency || 'USDT'), safeRules)
   }
   return affected
+}
+
+async function resetPrincipalUnlockOverridesForAllUsers(db) {
+  const result = await run(
+    db,
+    `UPDATE user_unlock_overrides
+     SET force_unlock_principal = 0,
+         custom_unlock_ratio = NULL,
+         custom_min_profit = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE COALESCE(force_unlock_principal, 0) <> 0
+        OR custom_unlock_ratio IS NOT NULL
+        OR custom_min_profit IS NOT NULL`,
+  )
+  return Number(result?.changes || result?.rowCount || 0)
 }
 
 async function ensureVipTierDefaults(db) {
@@ -1218,7 +1262,12 @@ export function createBalanceRouter(db) {
 
   router.post('/rules', requireRole('owner'), async (req, res) => {
     const nextRules = normalizeRules(req.body?.rules)
+    const shouldResetPrincipalOverrides =
+      req.body?.resetPrincipalUnlockOverrides === true && nextRules.principalWithdrawalRule?.enabled === true
     await upsertRules(db, nextRules)
+    if (shouldResetPrincipalOverrides) {
+      await resetPrincipalUnlockOverridesForAllUsers(db)
+    }
     await reapplyPrincipalLocksForAllUsers(db, nextRules)
     publishLiveUpdate({ type: 'home_content_updated', source: 'balance_rules', key: 'balance_rules' })
     publishLiveUpdate({ type: 'balance_rules_updated', source: 'balance_rules', key: 'balance_rules' })

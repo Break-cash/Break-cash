@@ -912,6 +912,12 @@ export type BalanceRules = {
   minimumProfitToUnlock: number
   defaultUnlockRatio: number
   unlockRatioByLevel: Record<string, number>
+  principalWithdrawalRule?: {
+    enabled: boolean
+    withdrawableRatio: number
+    clearProfitRestriction: boolean
+    applyToAllVipLevels: boolean
+  }
 }
 
 export type DepositRequestItem = {
@@ -1002,10 +1008,18 @@ export async function getBalanceRules() {
   return apiFetch('/api/balance/rules') as Promise<{ rules: BalanceRules }>
 }
 
-export async function updateBalanceRules(rules: BalanceRules) {
+export async function updateBalanceRules(
+  rules: BalanceRules,
+  options?: {
+    resetPrincipalUnlockOverrides?: boolean
+  },
+) {
   return apiFetch('/api/balance/rules', {
     method: 'POST',
-    body: JSON.stringify({ rules }),
+    body: JSON.stringify({
+      rules,
+      resetPrincipalUnlockOverrides: options?.resetPrincipalUnlockOverrides === true,
+    }),
   }) as Promise<{ ok: boolean; rules: BalanceRules }>
 }
 
