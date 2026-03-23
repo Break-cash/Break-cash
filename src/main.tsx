@@ -37,16 +37,9 @@ if ('caches' in window) {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .getRegistrations()
-      .then((registrations) => {
-        registrations.forEach((registration) => {
-          registration.unregister().catch(() => {
-            // ignore unregister failures
-          })
-        })
-      })
+      .register('/sw.js')
       .catch(() => {
-        // ignore service worker cleanup failures
+        // ignore service worker registration failures
       })
   })
 }

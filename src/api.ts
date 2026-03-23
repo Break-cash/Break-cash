@@ -80,6 +80,10 @@ export type LiveUpdateEvent = {
   ts?: number
 }
 
+export type PushSubscriptionStatus = {
+  subscribed: boolean
+}
+
 export function subscribeToLiveUpdates(onEvent: (event: LiveUpdateEvent) => void) {
   const token = getToken()
   if (!token || typeof window === 'undefined') return () => {}
@@ -183,6 +187,35 @@ export async function resetForgotPassword(payload: {
 
 export async function getCurrentUser() {
   return apiFetch('/api/auth/me') as Promise<{ user: AuthUser }>
+}
+
+export async function getPushPublicKey() {
+  return apiFetch('/api/notifications/push/public-key') as Promise<{ publicKey: string }>
+}
+
+export async function getPushSubscriptionStatus() {
+  return apiFetch('/api/notifications/push/status') as Promise<PushSubscriptionStatus>
+}
+
+export async function savePushSubscription(subscription: PushSubscriptionJSON) {
+  return apiFetch('/api/notifications/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription }),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function removePushSubscription(endpoint?: string | null) {
+  return apiFetch('/api/notifications/push/unsubscribe', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint: endpoint || null }),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function sendPushTest() {
+  return apiFetch('/api/notifications/push/test', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }) as Promise<{ ok: boolean; result: { sent: number; failed: number } }>
 }
 
 export async function getMyPermissions() {

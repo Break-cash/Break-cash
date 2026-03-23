@@ -1,5 +1,6 @@
 import { get, run } from '../db.js'
 import { publishLiveUpdate } from './live-updates.js'
+import { sendPushToUser } from './push-notifications.js'
 
 function normalizeLanguage(value) {
   const raw = String(value || '').trim().toLowerCase()
@@ -213,5 +214,16 @@ export async function createLocalizedNotification(db, userId, key, variables = {
     title,
     body,
   })
+  try {
+    await sendPushToUser(db, userId, {
+      title,
+      body,
+      tag: key,
+      url: '/portfolio',
+      data: { key, title, body },
+    })
+  } catch {
+    // Keep in-app notifications working even if web push delivery fails.
+  }
   return { title, body, key }
 }

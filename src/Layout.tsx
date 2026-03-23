@@ -16,7 +16,19 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { apiFetch, getHeaderIconConfig, subscribeToLiveUpdates, updateMyProfile, type AuthUser, type HeaderIconConfigItem } from './api'
+import {
+  apiFetch,
+  getHeaderIconConfig,
+  getPushPublicKey,
+  getPushSubscriptionStatus,
+  removePushSubscription,
+  savePushSubscription,
+  sendPushTest,
+  subscribeToLiveUpdates,
+  updateMyProfile,
+  type AuthUser,
+  type HeaderIconConfigItem,
+} from './api'
 import { playFeedbackSound, primeAppFeedback } from './appFeedback'
 import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
@@ -62,6 +74,10 @@ export function Layout({
   const [notifications, setNotifications] = useState<
     { id: number; title: string; body: string; is_read: number }[]
   >([])
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
   const [avatarBroken, setAvatarBroken] = useState(false)
   const [avatarRetryNonce, setAvatarRetryNonce] = useState(0)
   const [avatarFailureCount, setAvatarFailureCount] = useState(0)
@@ -103,6 +119,46 @@ export function Layout({
       }
     : null
 
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = `${base64String}${padding}`.replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; i += 1) outputArray[i] = rawData.charCodeAt(i)
+    return outputArray
+  }
+
+  const pushTexts =
+    language === 'ar'
+      ? {
+          enable: 'تفعيل الإشعارات الخارجية',
+          disable: 'إيقاف الإشعارات الخارجية',
+          enabledHint: 'سيصلك إشعار حتى عند الخروج من التطبيق.',
+          deniedHint: 'المتصفح منع الإشعارات. فعّلها من إعدادات المتصفح أو النظام.',
+          idleHint: 'فعّلها ليصلك إشعار فعلي عند الموافقات والتحديثات المهمة.',
+          loading: 'جارٍ التفعيل...',
+          unsupported: 'Web Push غير مدعوم على هذا المتصفح أو الجهاز.',
+        }
+      : language === 'tr'
+        ? {
+            enable: 'Dis bildirimleri ac',
+            disable: 'Dis bildirimleri kapat',
+            enabledHint: 'Uygulama kapaliyken bile bildirim alirsiniz.',
+            deniedHint: 'Tarayici bildirimleri engelledi. Tarayici veya sistem ayarlarindan izin verin.',
+            idleHint: 'Onaylar ve onemli guncellemeler icin gercek bildirimleri acin.',
+            loading: 'Etkinlestiriliyor...',
+            unsupported: 'Web Push bu tarayici veya cihazda desteklenmiyor.',
+          }
+        : {
+            enable: 'Enable push notifications',
+            disable: 'Disable push notifications',
+            enabledHint: 'You will receive alerts even when the app is closed.',
+            deniedHint: 'Browser notifications are blocked. Enable them from browser or system settings.',
+            idleHint: 'Enable real alerts for approvals and important updates.',
+            loading: 'Enabling...',
+            unsupported: 'Web Push is not supported on this browser or device.',
+          }
+
   function getNotificationKey(item: { title?: string; body?: string }) {
     return `${String(item.title || '').trim()}|${String(item.body || '').trim()}`
   }
@@ -131,6 +187,20 @@ export function Layout({
     apiFetch('/api/notifications/unreadCount')
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
       .catch(() => setUnreadCount(0))
+  }, [])
+
+  useEffect(() => {
+    const supported =
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    setPushSupported(supported)
+    if (!supported) return
+    setPushPermission(Notification.permission)
+    getPushSubscriptionStatus()
+      .then((res) => setPushSubscribed(Boolean(res.subscribed)))
+      .catch(() => setPushSubscribed(false))
   }, [])
 
   useEffect(() => {
@@ -165,6 +235,63 @@ export function Layout({
     })
     return unsubscribe
   }, [])
+
+  async function enablePushNotifications(forcePrompt = true) {
+    if (pushBusy) return
+    const supported =
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    setPushSupported(supported)
+    if (!supported) return
+    setPushBusy(true)
+    try {
+      let permission: NotificationPermission = Notification.permission
+      if (permission !== 'granted' && forcePrompt) permission = await Notification.requestPermission()
+      setPushPermission(permission)
+      if (permission !== 'granted') return
+      const registration = await navigator.serviceWorker.ready
+      let subscription = await registration.pushManager.getSubscription()
+      if (!subscription) {
+        const { publicKey } = await getPushPublicKey()
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+      }
+      await savePushSubscription(subscription.toJSON())
+      setPushSubscribed(true)
+      await sendPushTest().catch(() => {})
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  async function disablePushNotifications() {
+    if (pushBusy) return
+    setPushBusy(true)
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.ready
+        const subscription = await registration.pushManager.getSubscription()
+        const endpoint = subscription?.endpoint || null
+        if (subscription) await subscription.unsubscribe().catch(() => {})
+        await removePushSubscription(endpoint).catch(() => {})
+      } else {
+        await removePushSubscription(null).catch(() => {})
+      }
+      setPushSubscribed(false)
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!pushSupported) return
+    if (pushPermission !== 'granted') return
+    enablePushNotifications(false).catch(() => {})
+  }, [pushSupported, pushPermission])
 
   useEffect(() => {
     getHeaderIconConfig()
@@ -607,6 +734,33 @@ export function Layout({
                 className="liquid-modal-backdrop app-header-notifications-panel mt-2"
               >
                 <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-3">
+                  <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-sm font-medium text-white">
+                      {pushSubscribed ? pushTexts.disable : pushTexts.enable}
+                    </div>
+                    <div className="mt-1 text-xs text-white/60">
+                      {pushPermission === 'denied'
+                        ? pushTexts.deniedHint
+                        : pushSubscribed
+                          ? pushTexts.enabledHint
+                          : pushTexts.idleHint}
+                    </div>
+                    {pushSupported ? (
+                      <button
+                        type="button"
+                        className="mt-3 icon-interactive rounded-full border border-app-border bg-app-elevated px-3 py-1.5 text-xs text-white/85 hover:border-brand-blue/40 hover:text-brand-blue"
+                        onClick={() => {
+                          if (pushSubscribed) disablePushNotifications().catch(() => {})
+                          else enablePushNotifications(true).catch(() => {})
+                        }}
+                        disabled={pushBusy}
+                      >
+                        {pushBusy ? pushTexts.loading : pushSubscribed ? pushTexts.disable : pushTexts.enable}
+                      </button>
+                    ) : (
+                      <div className="mt-3 text-xs text-white/45">{pushTexts.unsupported}</div>
+                    )}
+                  </div>
                   {notifications.length === 0 ? (
                     <div className="text-sm text-white/55">{t('no_notifications')}</div>
                   ) : (

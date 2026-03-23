@@ -355,6 +355,20 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS user_push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  endpoint TEXT NOT NULL UNIQUE,
+  subscription_json TEXT NOT NULL,
+  user_agent TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  last_success_at TEXT,
+  last_failure_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active);
 
 CREATE TABLE IF NOT EXISTS phone_verification_codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -939,6 +953,23 @@ async function ensureSchema(db) {
   await ensureOverrideCol('note', `ALTER TABLE user_unlock_overrides ADD COLUMN note TEXT`)
   await ensureOverrideCol('updated_by', `ALTER TABLE user_unlock_overrides ADD COLUMN updated_by INTEGER`)
   await ensureOverrideCol('updated_at', `ALTER TABLE user_unlock_overrides ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS user_push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      endpoint TEXT NOT NULL UNIQUE,
+      subscription_json TEXT NOT NULL,
+      user_agent TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      last_success_at TEXT,
+      last_failure_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_user_id ON deposit_requests(user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(request_status)`)
   await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_requests_idempotency ON deposit_requests(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`)

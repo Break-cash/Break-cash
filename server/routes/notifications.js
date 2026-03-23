@@ -2,6 +2,14 @@ import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireApproved, requireAuth, requirePermission, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import {
+  deactivateAllUserPushSubscriptions,
+  deactivateUserPushSubscription,
+  getUserPushSubscriptionStatus,
+  getWebPushPublicKey,
+  saveUserPushSubscription,
+  sendPushToUser,
+} from '../services/push-notifications.js'
 
 export function createNotificationsRouter(db) {
   const router = Router()
@@ -28,6 +36,44 @@ export function createNotificationsRouter(db) {
       [req.user.id],
     )
     return res.json({ unreadCount: Number(row?.count || 0) })
+  })
+
+  router.get('/push/public-key', async (_req, res) => {
+    const publicKey = await getWebPushPublicKey(db)
+    return res.json({ publicKey })
+  })
+
+  router.get('/push/status', async (req, res) => {
+    const status = await getUserPushSubscriptionStatus(db, req.user.id)
+    return res.json(status)
+  })
+
+  router.post('/push/subscribe', async (req, res) => {
+    const subscription = req.body?.subscription
+    if (!subscription) return res.status(400).json({ error: 'INVALID_PUSH_SUBSCRIPTION' })
+    await saveUserPushSubscription(db, req.user.id, subscription, req.get('user-agent') || '')
+    return res.json({ ok: true })
+  })
+
+  router.post('/push/unsubscribe', async (req, res) => {
+    const endpoint = String(req.body?.endpoint || '').trim()
+    if (endpoint) {
+      await deactivateUserPushSubscription(db, req.user.id, endpoint)
+    } else {
+      await deactivateAllUserPushSubscriptions(db, req.user.id)
+    }
+    return res.json({ ok: true })
+  })
+
+  router.post('/push/test', async (req, res) => {
+    const result = await sendPushToUser(db, req.user.id, {
+      title: 'Break Cash',
+      body: 'تم تفعيل الإشعارات الخارجية بنجاح.',
+      tag: 'push_test',
+      url: '/portfolio',
+      data: { key: 'push_test' },
+    })
+    return res.json({ ok: true, result })
   })
 
   router.post('/markAsRead', async (req, res) => {
@@ -57,6 +103,7 @@ export function createNotificationsRouter(db) {
       title,
       body,
     ])
+    await sendPushToUser(db, userId, { title, body, tag: 'admin_notification', url: '/portfolio', data: { title, body } }).catch(() => {})
     return res.status(201).json({ ok: true })
   })
 
@@ -83,6 +130,7 @@ export function createNotificationsRouter(db) {
         title,
         body,
       ])
+      await sendPushToUser(db, userId, { title, body, tag: 'owner_broadcast', url: '/portfolio', data: { title, body } }).catch(() => {})
       createdCount += 1
     }
 

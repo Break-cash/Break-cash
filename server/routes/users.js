@@ -5,6 +5,7 @@ import { hashPassword } from '../auth.js'
 import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
 import { getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
+import { sendPushToUser } from '../services/push-notifications.js'
 
 async function withTransaction(db, fn) {
   if (typeof db.connect === 'function') {
@@ -549,6 +550,7 @@ export function createUsersRouter(db) {
        VALUES (?, ?, ?, 0, datetime('now'))`,
       [userId, title, body],
     )
+    await sendPushToUser(db, userId, { title, body, tag: 'private_notification', url: '/portfolio', data: { title, body } }).catch(() => {})
     await logAdminAction(db, req.user.id, 'notifications', 'send_private_notification', userId, { title })
     return res.json({ ok: true })
   })

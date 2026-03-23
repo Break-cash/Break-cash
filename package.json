@@ -38,6 +38,7 @@
     "recharts": "^3.8.0",
     "sqlite3": "^5.1.7",
     "twilio": "^5.12.2",
+    "web-push": "^3.6.7",
     "ws": "^8.19.0"
   },
   "devDependencies": {
