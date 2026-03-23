@@ -771,6 +771,31 @@ CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_created ON wallet_transa
 CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference ON wallet_transactions(reference_type, reference_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_transactions_idempotency ON wallet_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS owner_financial_approval_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  target_user_id INTEGER NOT NULL REFERENCES users(id),
+  actor_user_id INTEGER NOT NULL REFERENCES users(id),
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  amount REAL NOT NULL,
+  reference_type TEXT,
+  reference_id INTEGER,
+  wallet_transaction_id INTEGER NOT NULL REFERENCES wallet_transactions(id),
+  reversal_wallet_transaction_id INTEGER REFERENCES wallet_transactions(id),
+  note TEXT,
+  owner_note TEXT,
+  metadata TEXT,
+  reviewed_by INTEGER REFERENCES users(id),
+  reviewed_at TEXT,
+  reversed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_financial_approval_wallet_txn ON owner_financial_approval_reports(wallet_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_status ON owner_financial_approval_reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_target ON owner_financial_approval_reports(target_user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS earning_entries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1021,6 +1046,33 @@ async function ensureSchema(db) {
     )`,
   )
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS owner_financial_approval_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      target_user_id INTEGER NOT NULL REFERENCES users(id),
+      actor_user_id INTEGER NOT NULL REFERENCES users(id),
+      currency TEXT NOT NULL DEFAULT 'USDT',
+      amount REAL NOT NULL,
+      reference_type TEXT,
+      reference_id INTEGER,
+      wallet_transaction_id INTEGER NOT NULL REFERENCES wallet_transactions(id),
+      reversal_wallet_transaction_id INTEGER REFERENCES wallet_transactions(id),
+      note TEXT,
+      owner_note TEXT,
+      metadata TEXT,
+      reviewed_by INTEGER REFERENCES users(id),
+      reviewed_at TEXT,
+      reversed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_financial_approval_wallet_txn ON owner_financial_approval_reports(wallet_transaction_id)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_status ON owner_financial_approval_reports(status, created_at DESC)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_target ON owner_financial_approval_reports(target_user_id, created_at DESC)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_user_id ON deposit_requests(user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(request_status)`)
   await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_requests_idempotency ON deposit_requests(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`)

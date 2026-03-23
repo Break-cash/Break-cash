@@ -19,6 +19,12 @@ import {
   verifyUnexpectedZeroBalances,
 } from '../services/wallet-reconciliation.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
+import {
+  getOwnerFinancialGuardConfig,
+  listOwnerFinancialApprovals,
+  reviewOwnerFinancialApproval,
+  saveOwnerFinancialGuardConfig,
+} from '../services/owner-financial-approvals.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -286,6 +292,54 @@ async function getRewardPayoutOverridesCount(db) {
 export function createOwnerGrowthRouter(db) {
   const router = Router()
   router.use(requireAuth(db), requireRole('owner'))
+
+  router.get('/financial-guard', async (_req, res) => {
+    const result = await listOwnerFinancialApprovals(db, 'all', 120)
+    return res.json(result)
+  })
+
+  router.post('/financial-guard/config', async (req, res) => {
+    const current = await getOwnerFinancialGuardConfig(db)
+    const config = await saveOwnerFinancialGuardConfig(db, {
+      ...current,
+      enabled: req.body?.enabled,
+      watchDepositApprovals: req.body?.watchDepositApprovals,
+      watchManualBalanceAdds: req.body?.watchManualBalanceAdds,
+      watchBonusAdds: req.body?.watchBonusAdds,
+    })
+    await logAudit(db, req.user.id, 'finance', 'update_owner_financial_guard', null, config)
+    return res.json({ ok: true, config })
+  })
+
+  router.post('/financial-guard/review', async (req, res) => {
+    const reportId = Number(req.body?.reportId || 0)
+    const decision = String(req.body?.decision || '').trim().toLowerCase()
+    const ownerNote = String(req.body?.ownerNote || '').trim().slice(0, 500) || null
+    if (!Number.isFinite(reportId) || reportId <= 0 || !['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+    try {
+      const result = await reviewOwnerFinancialApproval(db, {
+        reportId,
+        decision,
+        ownerNote,
+        reviewerUserId: req.user.id,
+      })
+      await logAudit(db, req.user.id, 'finance', `owner_financial_guard_${result.decision}`, null, {
+        reportId,
+        ownerNote,
+      })
+      return res.json({ ok: true, result })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'INSUFFICIENT_BALANCE') {
+        return res.status(400).json({ error: 'INSUFFICIENT_BALANCE_TO_REVERSE' })
+      }
+      if (error instanceof Error && error.message === 'NOT_FOUND') {
+        return res.status(404).json({ error: 'NOT_FOUND' })
+      }
+      throw error
+    }
+  })
 
   router.get('/daily-trades', async (req, res) => {
     const limit = Math.min(300, Math.max(20, Number(req.query.limit) || 120))

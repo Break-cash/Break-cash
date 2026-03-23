@@ -23,6 +23,7 @@ import {
   getIconAttractionKeys,
   getKycWatchlist,
   getOwnerGrowthSummary,
+  getOwnerFinancialGuard,
   getOwnerMonthlyFinanceReport,
   getPartnerProfiles,
   deleteRewardPayoutOverrideOwner,
@@ -59,6 +60,7 @@ import {
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
   updateBalanceRules,
+  updateOwnerFinancialGuardConfig,
   updateRewardPayoutRulesOwner,
   updateStrategyTradeDisplayConfig,
   updateUserTwoFactor,
@@ -84,6 +86,8 @@ import {
   type KycSubmissionRow,
   type MiningConfig,
   type OwnerMonthlyFinanceReport,
+  type OwnerFinancialApprovalItem,
+  type OwnerFinancialGuardConfig,
   type PartnerProfile,
   type RewardPayoutMode,
   type RewardPayoutApplyResult,
@@ -99,6 +103,7 @@ import {
   type UserSessionItem,
   type VipTier,
   type WithdrawalSummary,
+  reviewOwnerFinancialGuardReport,
   toggleBonusRule,
   toggleDailyTradeCampaign,
   updateIconAttractionKeys,
@@ -186,6 +191,21 @@ function createDefaultBalanceRules(): BalanceRules {
     unlockRatioByLevel: { 0: 0.5, 1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5, 5: 0.5 },
     principalWithdrawalRule: createDefaultPrincipalWithdrawalRule(),
   }
+}
+
+function createDefaultOwnerFinancialGuardConfig(): OwnerFinancialGuardConfig {
+  return {
+    enabled: true,
+    watchDepositApprovals: true,
+    watchManualBalanceAdds: true,
+    watchBonusAdds: true,
+  }
+}
+
+function getOwnerFinancialActionLabel(value: OwnerFinancialApprovalItem['actionType']) {
+  if (value === 'deposit_approval') return 'اعتماد إيداع'
+  if (value === 'bonus_add') return 'إضافة أرباح/مكافأة'
+  return 'إضافة رصيد يدوية'
 }
 
 function getPrincipalWithdrawPercent(rules: BalanceRules) {
@@ -335,6 +355,17 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     activePartners: 0,
     activeContent: 0,
   })
+  const [ownerFinancialGuardConfig, setOwnerFinancialGuardConfig] = useState<OwnerFinancialGuardConfig>(createDefaultOwnerFinancialGuardConfig())
+  const [ownerFinancialQueue, setOwnerFinancialQueue] = useState<OwnerFinancialApprovalItem[]>([])
+  const [ownerFinancialSummary, setOwnerFinancialSummary] = useState({
+    pendingCount: 0,
+    approvedCount: 0,
+    rejectedCount: 0,
+    pendingAmount: 0,
+  })
+  const [ownerFinancialGuardSaving, setOwnerFinancialGuardSaving] = useState(false)
+  const [ownerFinancialReviewLoadingId, setOwnerFinancialReviewLoadingId] = useState<number | null>(null)
+  const [ownerFinancialReviewNote, setOwnerFinancialReviewNote] = useState('')
   const [vipTiers, setVipTiers] = useState<VipTier[]>([])
   const [rewardPayoutRules, setRewardPayoutRules] = useState<RewardPayoutRulesResponse>(createDefaultRewardPayoutRules())
   const [balanceRules, setBalanceRules] = useState<BalanceRules>(createDefaultBalanceRules())
@@ -514,6 +545,21 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     getOwnerGrowthSummary()
       .then((res) => setOwnerSummary(res))
       .catch(() => {})
+    getOwnerFinancialGuard()
+      .then((res) => {
+        setOwnerFinancialGuardConfig(res.config || createDefaultOwnerFinancialGuardConfig())
+        setOwnerFinancialQueue(res.items || [])
+        setOwnerFinancialSummary(res.summary || {
+          pendingCount: 0,
+          approvedCount: 0,
+          rejectedCount: 0,
+          pendingAmount: 0,
+        })
+      })
+      .catch(() => {
+        setOwnerFinancialGuardConfig(createDefaultOwnerFinancialGuardConfig())
+        setOwnerFinancialQueue([])
+      })
     getRewardPayoutRulesOwner()
       .then((res) => setRewardPayoutRules(res))
       .catch(() => setRewardPayoutRules(createDefaultRewardPayoutRules()))
@@ -1239,8 +1285,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   }
 
   async function refreshAdvancedOwnerPanels() {
-    const [summaryRes, vipRes, partnerRes, referralStatsRes, referralSummaryRes, contentRes, securityRes, staffRes, watchlistRes] = await Promise.all([
+    const [summaryRes, financialGuardRes, vipRes, partnerRes, referralStatsRes, referralSummaryRes, contentRes, securityRes, staffRes, watchlistRes] = await Promise.all([
       getOwnerGrowthSummary(),
+      getOwnerFinancialGuard(),
       getVipTiers(),
       getPartnerProfiles(),
       getReferralStats(),
@@ -1251,6 +1298,14 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       getKycWatchlist(),
     ])
     setOwnerSummary(summaryRes)
+    setOwnerFinancialGuardConfig(financialGuardRes.config || createDefaultOwnerFinancialGuardConfig())
+    setOwnerFinancialQueue(financialGuardRes.items || [])
+    setOwnerFinancialSummary(financialGuardRes.summary || {
+      pendingCount: 0,
+      approvedCount: 0,
+      rejectedCount: 0,
+      pendingAmount: 0,
+    })
     setVipTiers(vipRes.items || [])
     setPartnerProfiles(partnerRes.items || [])
     setReferralStats(referralStatsRes)
@@ -1259,6 +1314,56 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     setSecurityOverview(securityRes)
     setStaffItems(staffRes.items || [])
     setWatchlist(watchlistRes.items || [])
+  }
+
+  async function refreshOwnerFinancialGuard() {
+    const res = await getOwnerFinancialGuard()
+    setOwnerFinancialGuardConfig(res.config || createDefaultOwnerFinancialGuardConfig())
+    setOwnerFinancialQueue(res.items || [])
+    setOwnerFinancialSummary(res.summary || {
+      pendingCount: 0,
+      approvedCount: 0,
+      rejectedCount: 0,
+      pendingAmount: 0,
+    })
+    return res
+  }
+
+  async function handleSaveOwnerFinancialGuardConfig() {
+    setOwnerFinancialGuardSaving(true)
+    setMessage(null)
+    try {
+      const res = await updateOwnerFinancialGuardConfig(ownerFinancialGuardConfig)
+      setOwnerFinancialGuardConfig(res.config || createDefaultOwnerFinancialGuardConfig())
+      await refreshOwnerFinancialGuard()
+      setMessage({ type: 'success', text: 'تم تحديث رقابة الاعتماد المالي الخاصة بالمالك.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث رقابة الاعتماد المالي.' })
+    } finally {
+      setOwnerFinancialGuardSaving(false)
+    }
+  }
+
+  async function handleReviewOwnerFinancialItem(reportId: number, decision: 'approve' | 'reject') {
+    setOwnerFinancialReviewLoadingId(reportId)
+    setMessage(null)
+    try {
+      await reviewOwnerFinancialGuardReport({
+        reportId,
+        decision,
+        ownerNote: ownerFinancialReviewNote.trim() || undefined,
+      })
+      await refreshOwnerFinancialGuard()
+      setOwnerFinancialReviewNote('')
+      setMessage({
+        type: 'success',
+        text: decision === 'approve' ? 'تم اعتماد العملية من المالك.' : 'تم رفض العملية وعكس أثرها المالي إن أمكن.',
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل مراجعة العملية المالية.' })
+    } finally {
+      setOwnerFinancialReviewLoadingId(null)
+    }
   }
 
   async function handleSaveVipTier() {
@@ -1986,6 +2091,135 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       {message && (
         <div className={`owner-message owner-message-${message.type}`}>{message.text}</div>
       )}
+
+      <section className="owner-balance-section">
+        <h2 className="owner-section-title">تقارير الاعتماد المالي للمالك</h2>
+        <p className="owner-hint">
+          هذه اللوحة لا توقف المشرفين عن اعتماد الإيداع أو إضافة الرصيد، لكنها تسجل كل عملية مالية حساسة بانتظار قرار المالك النهائي.
+        </p>
+        <div className="owner-history-card">
+          <div className="owner-form-row">
+            <label className="owner-inline-check">
+              <input
+                type="checkbox"
+                checked={ownerFinancialGuardConfig.enabled}
+                onChange={(e) => setOwnerFinancialGuardConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
+              />
+              <span>تفعيل رقابة المالك على العمليات المالية</span>
+            </label>
+            <label className="owner-inline-check">
+              <input
+                type="checkbox"
+                checked={ownerFinancialGuardConfig.watchDepositApprovals}
+                onChange={(e) => setOwnerFinancialGuardConfig((prev) => ({ ...prev, watchDepositApprovals: e.target.checked }))}
+              />
+              <span>اعتماد الإيداعات</span>
+            </label>
+            <label className="owner-inline-check">
+              <input
+                type="checkbox"
+                checked={ownerFinancialGuardConfig.watchManualBalanceAdds}
+                onChange={(e) => setOwnerFinancialGuardConfig((prev) => ({ ...prev, watchManualBalanceAdds: e.target.checked }))}
+              />
+              <span>الإضافة اليدوية للأرصدة</span>
+            </label>
+            <label className="owner-inline-check">
+              <input
+                type="checkbox"
+                checked={ownerFinancialGuardConfig.watchBonusAdds}
+                onChange={(e) => setOwnerFinancialGuardConfig((prev) => ({ ...prev, watchBonusAdds: e.target.checked }))}
+              />
+              <span>إضافات المكافآت والأرباح</span>
+            </label>
+          </div>
+          <div className="owner-form-row">
+            <div className="owner-stat-card owner-stat-card-warn">
+              <span className="owner-stat-label">معلّق للمالك</span>
+              <strong className="owner-stat-value">{ownerFinancialSummary.pendingCount}</strong>
+            </div>
+            <div className="owner-stat-card owner-stat-card-cool">
+              <span className="owner-stat-label">إجمالي المبلغ المعلّق</span>
+              <strong className="owner-stat-value">{ownerFinancialSummary.pendingAmount.toFixed(2)} USDT</strong>
+            </div>
+            <div className="owner-stat-card owner-stat-card-ok">
+              <span className="owner-stat-label">معتمد</span>
+              <strong className="owner-stat-value">{ownerFinancialSummary.approvedCount}</strong>
+            </div>
+            <div className="owner-stat-card owner-stat-card-danger">
+              <span className="owner-stat-label">مرفوض</span>
+              <strong className="owner-stat-value">{ownerFinancialSummary.rejectedCount}</strong>
+            </div>
+          </div>
+          <div className="owner-buttons">
+            <button
+              type="button"
+              className="wallet-action-btn owner-set-btn"
+              onClick={handleSaveOwnerFinancialGuardConfig}
+              disabled={ownerFinancialGuardSaving}
+            >
+              {ownerFinancialGuardSaving ? '...' : 'حفظ إعدادات الرقابة'}
+            </button>
+            <button
+              type="button"
+              className="wallet-action-btn wallet-action-deposit"
+              onClick={() => refreshOwnerFinancialGuard().catch(() => {})}
+              disabled={ownerFinancialGuardSaving}
+            >
+              تحديث التقرير
+            </button>
+          </div>
+          <input
+            className="field-input owner-note-input"
+            placeholder="ملاحظة المالك عند الاعتماد أو الرفض"
+            value={ownerFinancialReviewNote}
+            onChange={(e) => setOwnerFinancialReviewNote(e.target.value)}
+          />
+          {ownerFinancialQueue.length === 0 ? (
+            <p className="owner-empty">لا توجد عمليات مالية بانتظار قرار المالك الآن.</p>
+          ) : (
+            <ul className="owner-history-list">
+              {ownerFinancialQueue.map((item) => {
+                const targetLabel = item.targetUser.displayName || item.targetUser.email || item.targetUser.phone || `#${item.targetUserId}`
+                const actorLabel = item.actorUser.displayName || item.actorUser.email || item.actorUser.phone || `#${item.actorUserId}`
+                return (
+                  <li key={item.id} className="owner-history-item">
+                    <div className="owner-history-main">
+                      <strong>{`${getOwnerFinancialActionLabel(item.actionType)} | ${item.amount.toFixed(2)} ${item.currency}`}</strong>
+                      <small>{`الحساب: ${targetLabel} | المنفذ: ${actorLabel} (${item.actorUser.role || 'staff'})`}</small>
+                      <small>{`الحالة: ${item.status} | وقت التنفيذ: ${formatOwnerDateTime(item.createdAt)}`}</small>
+                      {item.note ? <small>{`ملاحظة العملية: ${item.note}`}</small> : null}
+                    </div>
+                    {item.status === 'pending' ? (
+                      <div className="owner-buttons">
+                        <button
+                          type="button"
+                          className="wallet-action-btn wallet-action-deposit"
+                          onClick={() => handleReviewOwnerFinancialItem(item.id, 'approve')}
+                          disabled={ownerFinancialReviewLoadingId === item.id}
+                        >
+                          {ownerFinancialReviewLoadingId === item.id ? '...' : 'اعتماد المالك'}
+                        </button>
+                        <button
+                          type="button"
+                          className="wallet-action-btn wallet-action-withdraw"
+                          onClick={() => handleReviewOwnerFinancialItem(item.id, 'reject')}
+                          disabled={ownerFinancialReviewLoadingId === item.id}
+                        >
+                          {ownerFinancialReviewLoadingId === item.id ? '...' : 'رفض وعكس الأثر'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="owner-hint">
+                        {item.status === 'approved' ? 'تم اعتمادها من المالك.' : 'تم رفضها من المالك.'}
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
 
       <div className="owner-dashboard-grid">
         <aside className="owner-dashboard-side">

@@ -26,6 +26,7 @@ import {
 } from '../services/wallet-reconciliation.js'
 import { createLocalizedNotification } from '../services/notifications.js'
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
+import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const PRINCIPAL_UNLOCK_RATIO = 0.5
@@ -1297,6 +1298,25 @@ export function createBalanceRouter(db) {
           balanceAfter: balanceAfterAdjust,
           extra: { delta, currency },
         })
+        if (delta > 0) {
+          await maybeQueueOwnerFinancialApproval(tx, {
+            actionType: 'manual_balance_add',
+            actorUser: req.user,
+            actorUserId: req.user.id,
+            targetUserId: userId,
+            currency,
+            amount: delta,
+            referenceType: 'admin_adjust',
+            referenceId: req.user.id,
+            walletTransactionId: walletTxnId,
+            note: note || 'Admin balance adjustment',
+            metadata: {
+              action: type,
+              balanceBefore: balanceBeforeAdjust,
+              balanceAfter: balanceAfterAdjust,
+            },
+          })
+        }
           await createLocalizedNotification(tx, userId, 'balance_adjusted', {
             currency,
             amount: Math.abs(amount),
@@ -1840,6 +1860,25 @@ export function createBalanceRouter(db) {
           balanceBefore: balanceBeforeDeposit,
           balanceAfter: balanceAfterDeposit,
           extra: { requestId, amount: Number(item.amount), currency: item.currency },
+        })
+        await maybeQueueOwnerFinancialApproval(tx, {
+          actionType: 'deposit_approval',
+          actorUser: req.user,
+          actorUserId: req.user.id,
+          targetUserId: item.user_id,
+          currency: item.currency,
+          amount: Number(item.amount),
+          referenceType: 'deposit_request',
+          referenceId: requestId,
+          walletTransactionId: walletTxnId,
+          note: adminNote || `Approved deposit request #${requestId}`,
+          metadata: {
+            depositRequestId: requestId,
+            method: item.method || null,
+            transferRef: item.transfer_ref || null,
+            balanceBefore: balanceBeforeDeposit,
+            balanceAfter: balanceAfterDeposit,
+          },
         })
         const rules = await getRules(tx)
         const unlockProfile = await getEffectiveUnlockProfile(tx, item.user_id, item.currency, rules)

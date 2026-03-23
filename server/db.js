@@ -986,6 +986,33 @@ async function ensureSchema(db) {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference ON wallet_transactions(reference_type, reference_id)`)
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_transactions_idempotency ON wallet_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL`)
 
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS owner_financial_approval_reports (
+      id SERIAL PRIMARY KEY,
+      action_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      actor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL DEFAULT 'USDT',
+      amount DOUBLE PRECISION NOT NULL,
+      reference_type TEXT,
+      reference_id INTEGER,
+      wallet_transaction_id INTEGER NOT NULL REFERENCES wallet_transactions(id) ON DELETE CASCADE,
+      reversal_wallet_transaction_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+      note TEXT,
+      owner_note TEXT,
+      metadata TEXT,
+      reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMP,
+      reversed_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_financial_approval_wallet_txn ON owner_financial_approval_reports(wallet_transaction_id)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_status ON owner_financial_approval_reports(status, created_at DESC)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_target ON owner_financial_approval_reports(target_user_id, created_at DESC)`)
+
   await db.query(`ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS wallet_transaction_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL`)
   await db.query(`ALTER TABLE withdrawal_requests ADD COLUMN IF NOT EXISTS wallet_transaction_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_wallet_txn ON deposit_requests(wallet_transaction_id) WHERE wallet_transaction_id IS NOT NULL`).catch(() => {})

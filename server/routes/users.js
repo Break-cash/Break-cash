@@ -6,6 +6,7 @@ import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
 import { getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { sendPushToUser } from '../services/push-notifications.js'
+import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
 
 async function withTransaction(db, fn) {
   if (typeof db.connect === 'function') {
@@ -408,7 +409,7 @@ export function createUsersRouter(db) {
     const delta = type === 'add' ? amount : -amount
     try {
       await withTransaction(db, async (tx) => {
-        await adjustBalance(tx, {
+        const result = await adjustBalance(tx, {
           userId,
           currency,
           delta,
@@ -417,6 +418,21 @@ export function createUsersRouter(db) {
           createdBy: req.user.id,
           note: 'owner bonus action',
         })
+        if (delta > 0) {
+          await maybeQueueOwnerFinancialApproval(tx, {
+            actionType: 'bonus_add',
+            actorUser: req.user,
+            actorUserId: req.user.id,
+            targetUserId: userId,
+            currency,
+            amount: delta,
+            referenceType: 'admin_bonus',
+            referenceId: req.user.id,
+            walletTransactionId: result.walletTxnId,
+            note: 'owner bonus action',
+            metadata: { action: type },
+          })
+        }
       })
     } catch (error) {
       if (error instanceof Error && error.message === 'INSUFFICIENT_BALANCE') {

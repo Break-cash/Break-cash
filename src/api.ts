@@ -1049,6 +1049,64 @@ export async function updateBalanceRules(
   }) as Promise<{ ok: boolean; rules: BalanceRules }>
 }
 
+export type OwnerFinancialGuardConfig = {
+  enabled: boolean
+  watchDepositApprovals: boolean
+  watchManualBalanceAdds: boolean
+  watchBonusAdds: boolean
+}
+
+export type OwnerFinancialApprovalItem = {
+  id: number
+  actionType: 'deposit_approval' | 'manual_balance_add' | 'bonus_add'
+  status: 'pending' | 'approved' | 'rejected'
+  targetUserId: number
+  actorUserId: number
+  reviewedBy: number | null
+  currency: string
+  amount: number
+  referenceType: string | null
+  referenceId: number | null
+  walletTransactionId: number | null
+  note: string | null
+  ownerNote: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  reviewedAt: string | null
+  reversedAt: string | null
+  metadata: Record<string, unknown> | null
+  targetUser: {
+    id: number
+    displayName: string | null
+    email: string | null
+    phone: string | null
+    referralCode: string | null
+  }
+  actorUser: {
+    id: number
+    displayName: string | null
+    email: string | null
+    phone: string | null
+    role: string | null
+  }
+  reviewerUser: {
+    id: number
+    displayName: string | null
+    email: string | null
+  } | null
+}
+
+export type OwnerFinancialGuardResponse = {
+  config: OwnerFinancialGuardConfig
+  summary: {
+    pendingCount: number
+    approvedCount: number
+    rejectedCount: number
+    pendingAmount: number
+  }
+  items: OwnerFinancialApprovalItem[]
+}
+
 export async function getWithdrawSummaryMy(currency = 'USDT') {
   return apiFetch(`/api/balance/withdraw-summary/my?currency=${encodeURIComponent(currency)}`) as Promise<{
     summary: PublicWithdrawalSummary
@@ -1646,6 +1704,28 @@ export async function getOwnerGrowthSummary() {
     activePartners: number
     activeContent: number
   }>
+}
+
+export async function getOwnerFinancialGuard() {
+  return apiFetch('/api/owner-growth/financial-guard') as Promise<OwnerFinancialGuardResponse>
+}
+
+export async function updateOwnerFinancialGuardConfig(config: Partial<OwnerFinancialGuardConfig>) {
+  return apiFetch('/api/owner-growth/financial-guard/config', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  }) as Promise<{ ok: boolean; config: OwnerFinancialGuardConfig }>
+}
+
+export async function reviewOwnerFinancialGuardReport(payload: {
+  reportId: number
+  decision: 'approve' | 'reject'
+  ownerNote?: string
+}) {
+  return apiFetch('/api/owner-growth/financial-guard/review', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean; result: { decision: 'approved' | 'rejected'; reversed: boolean } }>
 }
 
 export async function getDailyTradeCampaigns() {
