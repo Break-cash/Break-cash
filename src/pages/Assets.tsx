@@ -1,5 +1,6 @@
 import { appData } from '../data'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
+import { useAssetVisibility } from '../hooks/useAssetVisibility'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
@@ -7,8 +8,14 @@ export function Assets() {
   const { t } = useI18n()
   const { summary } = useWalletSummary()
   const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
+  const { isHidden } = useAssetVisibility()
   const { balance_info } = appData
   const currency = balance_info.currency || 'USDT'
+
+  function formatVisibleAmount(value: number, withCurrency = false) {
+    if (isHidden) return withCurrency ? `•••••• ${currency}` : '••••••'
+    return withCurrency ? `${value.toFixed(2)} ${currency}` : value.toFixed(2)
+  }
 
   return (
     <div className="page space-y-4">
@@ -21,7 +28,7 @@ export function Assets() {
             <span className="card-pill elite-chip border-white/15 bg-white/6 text-white/90">{currency}</span>
           </div>
           <div className="card-main-value text-3xl lg:text-4xl">
-            {summary.totalAssets.toFixed(2)}
+            {formatVisibleAmount(summary.totalAssets)}
           </div>
           <div className="card-footer">
             <div>
@@ -36,7 +43,7 @@ export function Assets() {
             <div>
               <div className="label text-[11px] uppercase tracking-[0.08em]">{t('wallet_overview_main_balance')}</div>
               <div className="value">
-                {summary.mainBalance.toFixed(2)} {currency}
+                {formatVisibleAmount(summary.mainBalance, true)}
               </div>
             </div>
           </div>
@@ -47,15 +54,15 @@ export function Assets() {
           <div className="mt-3 space-y-2">
             <div className="elite-subpanel flex items-center justify-between px-3 py-2 text-sm">
               <span className="text-app-muted">{t('wallet_overview_total_assets')}</span>
-              <span className="font-semibold text-white">{summary.totalAssets.toFixed(2)} {currency}</span>
+              <span className="font-semibold text-white">{formatVisibleAmount(summary.totalAssets, true)}</span>
             </div>
             <div className="elite-subpanel flex items-center justify-between px-3 py-2 text-sm">
               <span className="text-app-muted">{t('wallet_overview_locked')}</span>
-              <span className="font-semibold text-amber-300">{summary.lockedBalance.toFixed(2)} {currency}</span>
+              <span className="font-semibold text-amber-300">{formatVisibleAmount(summary.lockedBalance, true)}</span>
             </div>
             <div className="elite-subpanel flex items-center justify-between px-3 py-2 text-sm">
               <span className="text-app-muted">{t('wallet_overview_withdrawable')}</span>
-              <span className="font-semibold text-positive">{summary.withdrawableBalance.toFixed(2)} {currency}</span>
+              <span className="font-semibold text-positive">{formatVisibleAmount(summary.withdrawableBalance, true)}</span>
             </div>
           </div>
         </div>

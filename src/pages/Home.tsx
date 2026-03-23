@@ -4,6 +4,7 @@ import { appData } from '../data'
 import { AdBanner } from '../components/ads/AdBanner'
 import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
+import { useAssetVisibility } from '../hooks/useAssetVisibility'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
@@ -13,7 +14,12 @@ export function Home() {
   const [ads, setAds] = useState<AdItem[]>([])
   const { summary: walletSummary } = useWalletSummary()
   const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
+  const { isHidden } = useAssetVisibility()
   const { mostTraded, usingFallback, loading } = useMarketBoard(5000)
+
+  function formatVisibleAmount(value: number) {
+    return isHidden ? '••••••' : value.toFixed(2)
+  }
 
   useEffect(() => {
     getAds('home')
@@ -47,7 +53,7 @@ export function Home() {
               
               <div>
                 <div className="text-4xl lg:text-5xl font-black bg-gradient-to-r from-brand-blue to-brand-blue/70 bg-clip-text text-transparent">
-                  {walletSummary.totalAssets.toFixed(2)}
+                  {formatVisibleAmount(walletSummary.totalAssets)}
                 </div>
               </div>
 
@@ -77,7 +83,7 @@ export function Home() {
               <div>
                 <div className="text-xs font-medium text-app-muted uppercase tracking-wide mb-3">{t('home_funding_account')}</div>
                 <div className="text-3xl font-bold text-amber-400">
-                  {walletSummary.mainBalance.toFixed(2)}
+                  {formatVisibleAmount(walletSummary.mainBalance)}
                 </div>
               </div>
               <div className="text-xs text-app-muted leading-relaxed pt-3 border-t border-app-border">{t('home_funding_hint')}</div>

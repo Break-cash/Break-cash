@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useI18n } from '../../i18nCore'
-
-const ASSET_VISIBILITY_STORAGE_KEY = 'breakcash_assets_hidden'
+import { useAssetVisibility } from '../../hooks/useAssetVisibility'
 
 function formatAmount(n: number, currency = 'USDT'): string {
   return `${Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} ${currency}`
@@ -33,21 +31,11 @@ export function TotalAssetsCard({
   const isRtl = direction === 'rtl'
   const Chevron = isRtl ? ChevronLeft : ChevronRight
   const isHero = variant === 'hero'
-  const [isHidden, setIsHidden] = useState(false)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    setIsHidden(window.localStorage.getItem(ASSET_VISIBILITY_STORAGE_KEY) === '1')
-  }, [])
+  const { isHidden, setHidden } = useAssetVisibility()
 
   function toggleHidden(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
-    const next = !isHidden
-    setIsHidden(next)
-    if (typeof window !== 'undefined') {
-      if (next) window.localStorage.setItem(ASSET_VISIBILITY_STORAGE_KEY, '1')
-      else window.localStorage.removeItem(ASSET_VISIBILITY_STORAGE_KEY)
-    }
+    setHidden(!isHidden)
   }
 
   const content = (
