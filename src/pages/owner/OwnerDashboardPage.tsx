@@ -8,6 +8,7 @@ import {
   createContentCampaign,
   createAd,
   createDailyTradeCampaign,
+  getBalanceRules,
   getAdminUnlockOverride,
   getAdminStaffList,
   getAdminUserWallet,
@@ -57,6 +58,7 @@ import {
   getOwnerKycSubmissions,
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
+  updateBalanceRules,
   updateRewardPayoutRulesOwner,
   updateStrategyTradeDisplayConfig,
   updateUserTwoFactor,
@@ -153,7 +155,7 @@ const REWARD_PAYOUT_MODE_OPTIONS: Array<{ value: RewardPayoutMode; label: string
 function createDefaultRewardPayoutRules(): RewardPayoutRulesResponse {
   return {
     defaultMode: 'withdrawable',
-    sourceModes: {},
+    sourceModes: { referrals: 'withdrawable' },
     defaultLockHours: 0,
     sourceLockHours: {},
     overridesCount: 0,
@@ -1292,6 +1294,51 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       }
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ قواعد السحب العامة.' })
+    } finally {
+      setRewardPayoutSaving(false)
+    }
+  }
+
+  async function handleApplyHalfAssetsReferralPreset() {
+    setRewardPayoutSaving(true)
+    setMessage(null)
+    try {
+      const currentBalanceRules = await getBalanceRules()
+      const nextUnlockRatioByLevel = { ...currentBalanceRules.rules.unlockRatioByLevel }
+      for (const vipLevel of [0, 1, 2, 3, 4, 5]) {
+        nextUnlockRatioByLevel[String(vipLevel)] = 0.5
+      }
+      await updateBalanceRules({
+        ...currentBalanceRules.rules,
+        defaultUnlockRatio: 0.5,
+        unlockRatioByLevel: nextUnlockRatioByLevel,
+      })
+      const result = await updateRewardPayoutRulesOwner({
+        defaultMode: rewardPayoutRules.defaultMode,
+        sourceModes: {
+          ...rewardPayoutRules.sourceModes,
+          referrals: 'withdrawable',
+        },
+        defaultLockHours: Number(rewardPayoutRules.defaultLockHours || 0),
+        sourceLockHours: rewardPayoutRules.sourceLockHours,
+        applyPending: rewardPayoutApplyPendingGlobal,
+      })
+      const refreshed = await refreshRewardPayoutRules()
+      setRewardPayoutRules({
+        ...refreshed,
+        sourceModes: {
+          ...refreshed.sourceModes,
+          referrals: 'withdrawable',
+        },
+      })
+      const applyMessage = formatRewardApplyResult(result.applyPendingResult)
+      setRewardPayoutApplyPendingGlobal(false)
+      setMessage({
+        type: 'success',
+        text: `تم تطبيق 50% فقط من إجمالي الأصول كقابلية سحب، مع إبقاء أرباح الإحالات قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`,
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تطبيق إعداد 50% للأصول مع فتح سحب الإحالات.' })
     } finally {
       setRewardPayoutSaving(false)
     }
@@ -3184,6 +3231,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 <span>طبّق القواعد الحالية أيضًا على الأرباح المعلقة الحالية. إذا كانت هناك مدة تقييد فسيتم تمديد القفل من وقت فك القفل الحالي أو من الآن.</span>
               </label>
               <div className="owner-buttons">
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleApplyHalfAssetsReferralPreset} disabled={rewardPayoutSaving}>
+                  {rewardPayoutSaving ? '...' : 'تطبيق 50% للأصول + فتح الإحالات'}
+                </button>
                 <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSaveRewardPayoutConfig} disabled={rewardPayoutSaving}>
                   {rewardPayoutSaving ? '...' : 'حفظ القواعد العامة'}
                 </button>

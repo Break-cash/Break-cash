@@ -28,7 +28,7 @@ import { createLocalizedNotification } from '../services/notifications.js'
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
-const PRINCIPAL_UNLOCK_RATIO = 0
+const PRINCIPAL_UNLOCK_RATIO = 0.5
 const UNRESTRICTED_DAILY_WITHDRAWAL_LIMIT = 1000000000
 const DEFAULT_BALANCE_RULES = {
   minDeposit: 10,
@@ -106,16 +106,10 @@ function normalizeRules(raw) {
   const minWithdrawal = Number(base.minWithdrawal)
   const withdrawalFeePercent = Number(base.withdrawalFeePercent)
   const minimumProfitToUnlock = Number(base.minimumProfitToUnlock)
-  const defaultUnlockRatio = Number(base.defaultUnlockRatio)
   const normalizeRatio = (value, fallback) =>
     Number.isFinite(value) && value >= 0 && value <= 10 ? Number(value.toFixed(4)) : fallback
-  const map = base.unlockRatioByLevel && typeof base.unlockRatioByLevel === 'object' ? base.unlockRatioByLevel : {}
-  const unlockRatioByLevel = { ...DEFAULT_BALANCE_RULES.unlockRatioByLevel }
-  for (const [k, v] of Object.entries(map)) {
-    const key = String(k).trim()
-    if (!/^\d+$/.test(key)) continue
-    unlockRatioByLevel[key] = normalizeRatio(Number(v), unlockRatioByLevel[key] ?? DEFAULT_BALANCE_RULES.defaultUnlockRatio)
-  }
+  const enforcedUnlockRatio = 0.5
+  const unlockRatioByLevel = { 0: enforcedUnlockRatio, 1: enforcedUnlockRatio, 2: enforcedUnlockRatio, 3: enforcedUnlockRatio, 4: enforcedUnlockRatio, 5: enforcedUnlockRatio }
   return {
     minDeposit: Number.isFinite(minDeposit) && minDeposit >= 0 ? Number(minDeposit.toFixed(8)) : DEFAULT_BALANCE_RULES.minDeposit,
     minWithdrawal: Number.isFinite(minWithdrawal) && minWithdrawal >= 0 ? Number(minWithdrawal.toFixed(8)) : DEFAULT_BALANCE_RULES.minWithdrawal,
@@ -130,7 +124,7 @@ function normalizeRules(raw) {
       Number.isFinite(minimumProfitToUnlock) && minimumProfitToUnlock >= 0
         ? Number(minimumProfitToUnlock.toFixed(8))
         : DEFAULT_BALANCE_RULES.minimumProfitToUnlock,
-    defaultUnlockRatio: normalizeRatio(defaultUnlockRatio, DEFAULT_BALANCE_RULES.defaultUnlockRatio),
+    defaultUnlockRatio: normalizeRatio(enforcedUnlockRatio, DEFAULT_BALANCE_RULES.defaultUnlockRatio),
     unlockRatioByLevel,
   }
 }
