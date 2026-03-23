@@ -188,6 +188,10 @@ function createDefaultBalanceRules(): BalanceRules {
   }
 }
 
+function getPrincipalWithdrawPercent(rules: BalanceRules) {
+  return Math.round(Number(rules.principalWithdrawalRule?.withdrawableRatio ?? rules.defaultUnlockRatio ?? 0.5) * 100)
+}
+
 function formatRewardApplyResult(result?: RewardPayoutApplyResult | null) {
   const releasedEntries = Number(result?.releasedEntries || 0)
   const releasedAmount = Number(result?.releasedAmount || 0)
@@ -3224,8 +3228,26 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           </section>
 
           <section className="owner-balance-section">
-            <h2 className="owner-section-title">قاعدة سحب أصل الإيداع</h2>
-            <p className="owner-hint">هذه القاعدة أصبحت داخل لوحة المالك نفسها، وتتحكم مباشرة في مقدار أصل الإيداع الذي يمكن للمستخدم سحبه، مع إمكانية فك قيود الربح المطلوبة عنها وتوحيدها على كل المستخدمين الحاليين والجدد.</p>
+            <h2 className="owner-section-title">سياسة السحب الموحدة</h2>
+            <p className="owner-hint">هذا القسم هو المرجع الرئيسي لقرار السحب داخل النظام. من هنا تضبط أصل الإيداع، والمكتسبات، والاستثناءات الفردية، بينما تبقى حقول السحب داخل VIP للعرض المرجعي فقط لتقليل التعارض.</p>
+            <div className="owner-history-card">
+              <div className="owner-form-row">
+                <div className="owner-actions-card">
+                  <h3 className="owner-wallet-heading">ملخص السياسة الحالية</h3>
+                  <div className="owner-hint">{`أصل الإيداع القابل للسحب الآن: ${getPrincipalWithdrawPercent(balanceRules)}%`}</div>
+                  <div className="owner-hint">
+                    {balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false
+                      ? 'لا يوجد شرط ربح إضافي على أصل الإيداع ضمن هذه القاعدة.'
+                      : 'ما زال شرط الربح مفعّلًا على أصل الإيداع.'}
+                  </div>
+                </div>
+                <div className="owner-actions-card">
+                  <h3 className="owner-wallet-heading">المكتسبات الافتراضية</h3>
+                  <div className="owner-hint">{rewardPayoutRules.defaultMode === 'bonus_locked' ? 'المكتسبات الجديدة غير قابلة للسحب افتراضيًا.' : 'المكتسبات الجديدة قابلة للسحب افتراضيًا.'}</div>
+                  <div className="owner-hint">{`عدد الاستثناءات الحالية: ${Number(rewardPayoutRules.overridesCount || 0)}`}</div>
+                </div>
+              </div>
+            </div>
             <div className="owner-actions-card">
               <div className="owner-form-row">
                 <label className="owner-checkbox">
@@ -3325,7 +3347,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 />
                 <span>طبّق القاعدة الآن على جميع المستخدمين الحاليين، وأزل أي استثناءات قديمة كانت تغيّر نسبة فك أصل الإيداع أو تعيد تقييده.</span>
               </label>
-              <div className="owner-hint">{`الوضع الحالي: ${Math.round(Number(balanceRules.principalWithdrawalRule?.withdrawableRatio ?? balanceRules.defaultUnlockRatio ?? 0.5) * 100)}% من أصل الإيداع قابل للسحب.${balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false ? ' لا يوجد شرط ربح إضافي لهذه القاعدة.' : ' ما زال شرط الربح مفعّلًا.'}`}</div>
+              <div className="owner-hint">{`الوضع الحالي: ${getPrincipalWithdrawPercent(balanceRules)}% من أصل الإيداع قابل للسحب.${balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false ? ' لا يوجد شرط ربح إضافي لهذه القاعدة.' : ' ما زال شرط الربح مفعّلًا.'}`}</div>
               <div className="owner-hint">هذا الإعداد يخص أصل الإيداع نفسه في السحب، وليس قواعد أرباح الإحالات أو مكافآت الإيداع أو بقية المكتسبات.</div>
               <div className="owner-buttons">
                 <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSavePrincipalWithdrawalRule} disabled={balanceRulesSaving}>
@@ -3336,8 +3358,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           </section>
 
           <section className="owner-balance-section">
-            <h2 className="owner-section-title">صلاحيات سحب المكتسبات</h2>
-            <p className="owner-hint">تحكم شامل في كل المكتسبات القادمة من التعدين والمهام والإحالات ومكافآت الإيداع: افتراضي عام، قواعد حسب المصدر، واستثناءات فردية أو جماعية للمستخدمين.</p>
+            <h2 className="owner-section-title">المكتسبات والاستثناءات</h2>
+            <p className="owner-hint">هذا الجزء يكمل سياسة السحب الموحدة: يحدد قابلية سحب الإحالات، والإيداع، والتعدين، والمهام، مع دعم الاستثناءات الفردية أو الجماعية عند الحاجة فقط.</p>
             <div className="owner-actions-card">
               <h3 className="owner-wallet-heading">القاعدة العامة</h3>
               <div className="owner-form-row">
@@ -3378,7 +3400,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <div className="owner-hint">{`إجمالي الاستثناءات الحالية: ${Number(rewardPayoutRules.overridesCount || 0)}`}</div>
                 </div>
               </div>
-              <div className="owner-hint">{`الوضع المالي الحالي: ${Math.round(Number(balanceRules.principalWithdrawalRule?.withdrawableRatio ?? balanceRules.defaultUnlockRatio ?? 0.5) * 100)}% من أصل الإيداع قابل للسحب من خلال قاعدة السحب أعلاه، بينما أرباح الإحالات والإيداع تتبع إعدادات هذا القسم.`}</div>
+              <div className="owner-hint">{`الوضع المالي الحالي: ${getPrincipalWithdrawPercent(balanceRules)}% من أصل الإيداع قابل للسحب من خلال قاعدة السحب أعلاه، بينما أرباح الإحالات والإيداع تتبع إعدادات هذا القسم.`}</div>
               {REWARD_PAYOUT_SOURCE_OPTIONS.filter((source) => source.value !== 'all').map((source) => {
                 const sourceKey = source.value as Exclude<RewardPayoutSource, 'all'>
                 const currentMode = rewardPayoutRules.sourceModes[sourceKey] || rewardPayoutRules.defaultMode
@@ -3569,7 +3591,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
 
           <section className="owner-balance-section">
             <h2 className="owner-section-title">إدارة مستويات VIP</h2>
-            <p className="owner-hint">تحكم مباشر بمستويات VIP الفعالة: الحد الأدنى، نسبة الإحالة، المضاعف، والمزايا النصية.</p>
+            <p className="owner-hint">تحكم مباشر بمستويات VIP الفعالة: الحد الأدنى، نسبة الإحالة، المضاعف، والمزايا النصية. إعدادات السحب داخل هذا القسم أصبحت مرجعية للعرض فقط، بينما مصدر القرار الفعلي موجود في سياسة السحب الموحدة أعلاه.</p>
             <div className="owner-actions-card">
               <div className="owner-form-row">
                 <select className="field-input" value={vipTierDraft.level} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, level: Number(e.target.value || 1) }))}>
@@ -3586,13 +3608,14 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
               <div className="owner-form-row">
                 <input type="number" className="field-input" placeholder="عائد التعدين اليومي %" value={vipTierDraft.dailyMiningPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, dailyMiningPercent: e.target.value }))} />
                 <input type="number" className="field-input" placeholder="سرعة التعدين %" value={vipTierDraft.miningSpeedPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, miningSpeedPercent: e.target.value }))} />
-                <input type="number" className="field-input" placeholder="الحد اليومي للسحب" value={vipTierDraft.dailyWithdrawalLimit} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, dailyWithdrawalLimit: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="الحد اليومي للسحب" value={vipTierDraft.dailyWithdrawalLimit} disabled readOnly />
               </div>
               <div className="owner-form-row">
-                <input type="number" className="field-input" placeholder="أدنى مدة معالجة بالساعات" value={vipTierDraft.processingHoursMin} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, processingHoursMin: e.target.value }))} />
-                <input type="number" className="field-input" placeholder="أعلى مدة معالجة بالساعات" value={vipTierDraft.processingHoursMax} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, processingHoursMax: e.target.value }))} />
-                <input type="number" className="field-input" placeholder="رسوم السحب %" value={vipTierDraft.withdrawalFeePercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, withdrawalFeePercent: e.target.value }))} />
+                <input type="number" className="field-input" placeholder="أدنى مدة معالجة بالساعات" value={vipTierDraft.processingHoursMin} disabled readOnly />
+                <input type="number" className="field-input" placeholder="أعلى مدة معالجة بالساعات" value={vipTierDraft.processingHoursMax} disabled readOnly />
+                <input type="number" className="field-input" placeholder="رسوم السحب %" value={vipTierDraft.withdrawalFeePercent} disabled readOnly />
               </div>
+              <div className="owner-hint">لمنع التعارض، أي تعديل على حد السحب أو الرسوم أو أوقات المعالجة يتم من سياسة السحب الموحدة فقط، وليس من نموذج VIP.</div>
               <div className="owner-form-row">
                 <input type="number" className="field-input" placeholder="رسوم إضافية عند نشاط التعدين/الصفقات %" value={vipTierDraft.activeExtraFeePercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, activeExtraFeePercent: e.target.value }))} />
                 <input type="number" className="field-input" placeholder="عمولة المستوى الثاني %" value={vipTierDraft.level2ReferralPercent} onChange={(e) => setVipTierDraft((prev) => ({ ...prev, level2ReferralPercent: e.target.value }))} />
