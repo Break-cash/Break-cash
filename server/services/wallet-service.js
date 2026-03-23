@@ -389,6 +389,18 @@ export async function approveDeposit(db, opts) {
   return createDeposit(db, { ...opts, referenceType: 'deposit_request' })
 }
 
+async function getMainSourceBalance(db, userId, currency, sourceType = 'system') {
+  const row = await get(
+    db,
+    `SELECT COALESCE(balance_amount, 0) AS balance
+     FROM wallet_accounts
+     WHERE user_id = ? AND currency = ? AND account_type = 'main' AND source_type = ?
+     LIMIT 1`,
+    [userId, String(currency || 'USDT').trim().toUpperCase(), String(sourceType || 'system').trim().toLowerCase()],
+  )
+  return Number(row?.balance || 0)
+}
+
 /**
  * Create withdrawal (debit main balance). Idempotent.
  * @param {object} db - Database handle
@@ -407,24 +419,59 @@ export async function createWithdrawal(db, opts) {
     createdBy,
   } = opts
   if (!userId || !Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_INPUT')
-  const balance = await getMainBalance(db, userId, currency)
-  if (balance < amount) throw new Error('INSUFFICIENT_BALANCE')
+  const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  let referralBalance = await getMainSourceBalance(db, userId, normalizedCurrency, 'referrals')
+  let systemBalance = await getMainSourceBalance(db, userId, normalizedCurrency, 'system')
+  const totalBalance = Number((referralBalance + systemBalance).toFixed(8))
+  if (totalBalance < amount) throw new Error('INSUFFICIENT_BALANCE')
   const safeFeeAmount = Number.isFinite(Number(feeAmount)) && Number(feeAmount) > 0 ? Number(Number(feeAmount).toFixed(8)) : 0
   const payoutAmount = Number(Math.max(0, amount - safeFeeAmount).toFixed(8))
-  const txn = await recordTransaction(db, {
-    userId,
-    currency,
-    transactionType: 'withdrawal',
-    sourceType: 'system',
-    referenceType,
-    referenceId,
-    amount: -payoutAmount,
-    feeAmount: safeFeeAmount,
-    idempotencyKey,
-    createdBy,
-  })
-  const balanceAfter = await getMainBalance(db, userId, currency)
-  return { walletTxnId: txn.id, balanceAfter }
+  let primaryTxnId = null
+  const baseKey = idempotencyKey || `withdraw_${userId}_${referenceId || Date.now()}`
+  const debitFromSource = async (sourceType, value, kind, keySuffix) => {
+    const normalizedValue = Number(Number(value || 0).toFixed(8))
+    if (normalizedValue <= 0) return
+    const txn = await recordTransaction(db, {
+      userId,
+      currency: normalizedCurrency,
+      transactionType: kind,
+      sourceType,
+      referenceType,
+      referenceId,
+      amount: -normalizedValue,
+      feeAmount: 0,
+      idempotencyKey: `${baseKey}_${keySuffix}`,
+      createdBy,
+    })
+    if (!primaryTxnId) primaryTxnId = txn.id
+  }
+
+  let remainingPayout = payoutAmount
+  const referralPayout = Math.min(referralBalance, remainingPayout)
+  await debitFromSource('referrals', referralPayout, 'withdrawal', 'referrals_withdraw')
+  referralBalance = Number((referralBalance - referralPayout).toFixed(8))
+  remainingPayout = Number((remainingPayout - referralPayout).toFixed(8))
+
+  if (remainingPayout > 0) {
+    await debitFromSource('system', remainingPayout, 'withdrawal', 'system_withdraw')
+    systemBalance = Number((systemBalance - remainingPayout).toFixed(8))
+  }
+
+  let remainingFee = safeFeeAmount
+  const referralFee = Math.min(referralBalance, remainingFee)
+  await debitFromSource('referrals', referralFee, 'fee', 'referrals_fee')
+  referralBalance = Number((referralBalance - referralFee).toFixed(8))
+  remainingFee = Number((remainingFee - referralFee).toFixed(8))
+
+  if (remainingFee > 0) {
+    await debitFromSource('system', remainingFee, 'fee', 'system_fee')
+  }
+
+  const balanceAfter = Number((
+    await getMainSourceBalance(db, userId, normalizedCurrency, 'system') +
+    await getMainSourceBalance(db, userId, normalizedCurrency, 'referrals')
+  ).toFixed(8))
+  return { walletTxnId: primaryTxnId, balanceAfter }
 }
 
 /**

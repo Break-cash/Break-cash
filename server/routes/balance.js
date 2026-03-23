@@ -184,8 +184,27 @@ async function upsertRules(db, rules) {
   )
 }
 
+async function getMainBalanceBySource(db, userId, currency, sourceType = 'system') {
+  const row = await get(
+    db,
+    `SELECT COALESCE(balance_amount, 0) AS balance
+     FROM wallet_accounts
+     WHERE user_id = ? AND currency = ? AND account_type = 'main' AND source_type = ?
+     LIMIT 1`,
+    [userId, normalizeCurrency(currency), String(sourceType || 'system').trim().toLowerCase()],
+  )
+  return Number(row?.balance || 0)
+}
+
 async function getBalanceAmount(db, userId, currency) {
-  return getMainBalance(db, userId, currency)
+  const row = await get(
+    db,
+    `SELECT COALESCE(SUM(balance_amount), 0) AS balance
+     FROM wallet_accounts
+     WHERE user_id = ? AND currency = ? AND account_type = 'main'`,
+    [userId, normalizeCurrency(currency)],
+  )
+  return Number(row?.balance || 0)
 }
 
 async function createAdminAuditLog(db, payload) {
@@ -947,7 +966,9 @@ async function getDailyWithdrawalRequestedAmount(db, userId, currency) {
 
 async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const safeRules = rules || (await getRules(db))
-  const balance = await getBalanceAmount(db, userId, currency)
+  const systemMainBalance = await getMainBalanceBySource(db, userId, currency, 'system')
+  const referralMainBalance = await getMainBalanceBySource(db, userId, currency, 'referrals')
+  const balance = Number((systemMainBalance + referralMainBalance).toFixed(8))
   const profile = await getEffectiveUnlockProfile(db, userId, currency, safeRules)
   const principalRule = getPrincipalWithdrawalRuleConfig(safeRules)
   const withdrawalPolicy = await getEffectiveWithdrawalPolicy(db, userId)
@@ -961,13 +982,14 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   )
   const principalLocked = Number(lockRows.reduce((acc, row) => acc + Number(row.principal_amount || 0), 0).toFixed(8))
   const unlockTargetProfit = Number(lockRows.reduce((acc, row) => acc + Number(row.required_profit_amount || 0), 0).toFixed(8))
-  const earnedProfit = Number(Math.max(0, balance - principalLocked).toFixed(8))
+  const earnedProfit = Number(Math.max(0, systemMainBalance - principalLocked).toFixed(8))
   const isPrincipalUnlocked =
     profile.forceUnlockPrincipal ||
     principalLocked <= 0 ||
     (unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
   const withdrawableMainRatio = principalRule.enabled ? principalRule.withdrawableRatio : 1
-  const withdrawableMainBalance = Number((Math.max(0, balance) * withdrawableMainRatio).toFixed(8))
+  const withdrawableSystemBalance = Number((Math.max(0, systemMainBalance) * withdrawableMainRatio).toFixed(8))
+  const withdrawableMainBalance = Number(Math.min(balance, withdrawableSystemBalance + referralMainBalance).toFixed(8))
   const lockedMainBalance = Number(Math.max(0, balance - withdrawableMainBalance).toFixed(8))
   const todayRequestedAmount = await getDailyWithdrawalRequestedAmount(db, userId, currency)
   const dailyRemaining =
