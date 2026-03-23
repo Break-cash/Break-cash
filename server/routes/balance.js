@@ -1045,6 +1045,42 @@ function buildLockBreakdown(locks, earnedProfitPool) {
   })
 }
 
+function buildUserWithdrawalSummary(summary) {
+  const isUnlocked = summary?.is_principal_unlocked === true
+  return {
+    currency: String(summary?.currency || 'USDT'),
+    current_balance: Number(summary?.current_balance || 0),
+    locked_balance: Number(summary?.locked_balance || 0),
+    withdrawable_balance: Number(summary?.withdrawable_balance || 0),
+    is_principal_unlocked: isUnlocked,
+    withdrawal_fee_percent: Number(summary?.withdrawal_fee_percent || 0),
+    daily_withdrawal_limit: Number(summary?.daily_withdrawal_limit || 0),
+    daily_withdrawal_remaining: Number(summary?.daily_withdrawal_remaining || 0),
+    processing_hours_min: Number(summary?.processing_hours_min || 0),
+    processing_hours_max: Number(summary?.processing_hours_max || 0),
+    status_label: isUnlocked ? 'available' : 'partially_restricted',
+    status_message: isUnlocked
+      ? 'السحب متاح وفق الرصيد القابل للسحب الظاهر في حسابك.'
+      : 'قد يبقى جزء من أصل الإيداع محميًا مؤقتًا حسب سياسة الحساب، ويتم تحديث المتاح للسحب تلقائيًا.',
+  }
+}
+
+function buildUserPrincipalLockItems(items) {
+  return (items || []).map((row) => ({
+    id: Number(row.id || 0),
+    status_label: String(row.lock_status || '') === 'unlocked' ? 'available' : 'protected',
+    display_title: 'جزء محمي من أصل الإيداع',
+    display_message:
+      String(row.lock_status || '') === 'unlocked'
+        ? 'هذا الجزء أصبح متاحًا ضمن الرصيد القابل للسحب.'
+        : 'هذا الجزء يخضع لسياسة السحب الحالية وسيُفتح تلقائيًا عند تحقق الأهلية.',
+    lock_status: String(row.lock_status || ''),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    unlocked_at: row.unlocked_at,
+  }))
+}
+
 export function createBalanceRouter(db) {
   const router = Router()
   const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
@@ -1302,7 +1338,7 @@ export function createBalanceRouter(db) {
     const rules = await getRules(db)
     await reapplyPrincipalLocksForUser(db, req.user.id, currency, rules)
     const summary = await calculateWithdrawalSummary(db, req.user.id, currency, rules)
-    return res.json({ summary })
+    return res.json({ summary: buildUserWithdrawalSummary(summary) })
   })
 
   router.get('/withdraw-locks/my', async (req, res) => {
@@ -1325,7 +1361,10 @@ export function createBalanceRouter(db) {
     const breakdownForward = buildLockBreakdown(orderedForProgress, summary.earned_profit)
     const mapById = new Map(breakdownForward.map((x) => [x.id, x]))
     const items = rows.map((row) => mapById.get(Number(row.id)) || row)
-    return res.json({ items, summary })
+    return res.json({
+      items: buildUserPrincipalLockItems(items),
+      summary: buildUserWithdrawalSummary(summary),
+    })
   })
 
   router.get('/admin/unlock-override', requireRole('owner'), async (req, res) => {

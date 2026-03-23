@@ -20,8 +20,8 @@ import {
   type BalanceRules,
   type DepositRequestItem,
   type PromotionRule,
-  type PrincipalLockItem,
-  type WithdrawalSummary,
+  type PublicPrincipalLockItem,
+  type PublicWithdrawalSummary,
   type WithdrawalRequestItem,
   type AuthUser,
   updateLogoUrl,
@@ -56,8 +56,8 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [copyDone, setCopyDone] = useState(false)
   const [logoBroken, setLogoBroken] = useState(false)
-  const [withdrawSummary, setWithdrawSummary] = useState<WithdrawalSummary | null>(null)
-  const [principalLocks, setPrincipalLocks] = useState<PrincipalLockItem[]>([])
+  const [withdrawSummary, setWithdrawSummary] = useState<PublicWithdrawalSummary | null>(null)
+  const [principalLocks, setPrincipalLocks] = useState<PublicPrincipalLockItem[]>([])
   const [rules, setRules] = useState<BalanceRules>({
     minDeposit: 10,
     minWithdrawal: 10,
@@ -538,15 +538,15 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         {withdrawSummary ? (
           <div className="owner-history-card" style={{ marginBottom: 12 }}>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
-              <span className="owner-hint">قد يبقى جزء من أصل الإيداع محميًا مؤقتًا حسب سياسة الحساب.</span>
-              <span className="owner-hint">يتم تحديث الحالة المتاحة للسحب تلقائيًا دون الحاجة لأي إجراء إضافي.</span>
+              <span className="owner-hint">{withdrawSummary.status_message}</span>
+              <span className="owner-hint">تُحتسب الرسوم والمتاح للسحب تلقائيًا وفق القاعدة الحالية.</span>
             </div>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
               <span className="owner-hint">{t('wallet_lock_withdrawable')}: {walletSummary.withdrawableBalance.toFixed(2)} USDT</span>
-              <span className="owner-hint">سيظهر هنا دائمًا المبلغ المتاح للسحب فعليًا من حسابك.</span>
+              <span className="owner-hint">هذا هو المبلغ المتاح للسحب فعليًا من حسابك حاليًا.</span>
             </div>
             <div className="owner-form-row" style={{ marginBottom: 0 }}>
-              <span className="owner-hint">إذا كانت الحالة مقيدة، فسيتم فتح السحب تلقائيًا عندما يصبح الحساب مؤهلًا.</span>
+              <span className="owner-hint">إذا بقي جزء غير متاح الآن، فسيظهر تلقائيًا ضمن المتاح للسحب عند تحقق الأهلية.</span>
               <span className={`request-status-badge ${withdrawSummary.is_principal_unlocked ? 'status-approved' : 'status-pending'}`}>
                 {withdrawSummary.is_principal_unlocked ? t('wallet_lock_unlocked') : t('wallet_lock_locked')}
               </span>
@@ -562,9 +562,8 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
               {principalLocks.map((lock) => (
                 <li key={`lock-${lock.id}`} className="owner-history-item">
                   <span>#{lock.id}</span>
-                  <span>جزء محمي من أصل الإيداع</span>
-                  <span>يخضع لسياسة السحب الحالية للحساب</span>
-                  <span>سيُفتح تلقائيًا عند تحقق الأهلية</span>
+                  <span>{lock.display_title}</span>
+                  <span>{lock.display_message}</span>
                   <span className={`request-status-badge ${lock.lock_status === 'unlocked' ? 'status-approved' : 'status-pending'}`}>
                     {lock.lock_status === 'unlocked' ? t('wallet_lock_unlocked') : t('wallet_lock_locked')}
                   </span>

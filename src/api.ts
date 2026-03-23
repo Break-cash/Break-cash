@@ -980,6 +980,32 @@ export type WithdrawalSummary = {
   force_unlock_principal: boolean
 }
 
+export type PublicWithdrawalSummary = {
+  currency: string
+  current_balance: number
+  locked_balance: number
+  withdrawable_balance: number
+  is_principal_unlocked: boolean
+  withdrawal_fee_percent: number
+  daily_withdrawal_limit: number
+  daily_withdrawal_remaining: number
+  processing_hours_min: number
+  processing_hours_max: number
+  status_label: 'available' | 'partially_restricted'
+  status_message: string
+}
+
+export type PublicPrincipalLockItem = {
+  id: number
+  status_label: 'available' | 'protected'
+  display_title: string
+  display_message: string
+  lock_status: string
+  created_at: string
+  updated_at: string
+  unlocked_at?: string | null
+}
+
 export type PrincipalLockItem = {
   id: number
   source_type: string
@@ -1025,14 +1051,14 @@ export async function updateBalanceRules(
 
 export async function getWithdrawSummaryMy(currency = 'USDT') {
   return apiFetch(`/api/balance/withdraw-summary/my?currency=${encodeURIComponent(currency)}`) as Promise<{
-    summary: WithdrawalSummary
+    summary: PublicWithdrawalSummary
   }>
 }
 
 export async function getWithdrawLocksMy(currency = 'USDT') {
   return apiFetch(`/api/balance/withdraw-locks/my?currency=${encodeURIComponent(currency)}`) as Promise<{
-    items: PrincipalLockItem[]
-    summary: WithdrawalSummary
+    items: PublicPrincipalLockItem[]
+    summary: PublicWithdrawalSummary
   }>
 }
 
