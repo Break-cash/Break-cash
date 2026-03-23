@@ -535,6 +535,11 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
             ({t('wallet_overview_link')})
           </Link>
         </p>
+        {isWithdrawPage ? (
+          <p className="deposit-welcome" style={{ marginTop: -4, fontSize: '0.92rem', opacity: 0.88 }}>
+            المتاح للسحب يساوي 50% من الرصيد الرئيسي الحالي، ويتحدث تلقائيًا مع أي تغير في الرصيد.
+          </p>
+        ) : null}
         {withdrawSummary ? (
           <div className="owner-history-card" style={{ marginBottom: 12 }}>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
