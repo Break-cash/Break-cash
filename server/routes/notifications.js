@@ -32,7 +32,22 @@ export function createNotificationsRouter(db) {
   router.get('/unreadCount', async (req, res) => {
     const row = await get(
       db,
-      `SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0`,
+      `SELECT COUNT(*) AS count
+       FROM (
+         SELECT n.title, n.body
+         FROM notifications n
+         WHERE n.user_id = ?
+           AND n.is_read = 0
+           AND NOT EXISTS (
+             SELECT 1
+             FROM notifications r
+             WHERE r.user_id = n.user_id
+               AND COALESCE(r.title, '') = COALESCE(n.title, '')
+               AND COALESCE(r.body, '') = COALESCE(n.body, '')
+               AND r.is_read = 1
+           )
+         GROUP BY n.title, n.body
+       ) unread_keys`,
       [req.user.id],
     )
     return res.json({ unreadCount: Number(row?.count || 0) })
@@ -78,10 +93,24 @@ export function createNotificationsRouter(db) {
 
   router.post('/markAsRead', async (req, res) => {
     const id = Number(req.body?.id)
-    await run(db, `UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?`, [
-      id,
-      req.user.id,
-    ])
+    const title = String(req.body?.title || '').trim()
+    const body = String(req.body?.body || '').trim()
+    if (title || body) {
+      await run(
+        db,
+        `UPDATE notifications
+         SET is_read = 1
+         WHERE user_id = ?
+           AND COALESCE(title, '') = ?
+           AND COALESCE(body, '') = ?`,
+        [req.user.id, title, body],
+      )
+    } else {
+      await run(db, `UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?`, [
+        id,
+        req.user.id,
+      ])
+    }
     return res.json({ ok: true })
   })
 

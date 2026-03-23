@@ -173,6 +173,9 @@ export function Layout({
         continue
       }
       if (Number(existing.is_read || 0) === 1 && Number(item.is_read || 0) === 0) {
+        continue
+      }
+      if (Number(existing.is_read || 0) === 0 && Number(item.is_read || 0) === 1) {
         byKey.set(key, item)
         continue
       }
@@ -777,7 +780,7 @@ export function Layout({
                             onClick={async () => {
                               await apiFetch('/api/notifications/markAsRead', {
                                 method: 'POST',
-                                body: JSON.stringify({ id: item.id }),
+                                body: JSON.stringify({ id: item.id, title: item.title, body: item.body }),
                               })
                               readNotificationKeysRef.current.add(getNotificationKey(item))
                               setNotifications((rows) =>
