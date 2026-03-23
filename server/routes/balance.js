@@ -949,6 +949,7 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const safeRules = rules || (await getRules(db))
   const balance = await getBalanceAmount(db, userId, currency)
   const profile = await getEffectiveUnlockProfile(db, userId, currency, safeRules)
+  const principalRule = getPrincipalWithdrawalRuleConfig(safeRules)
   const withdrawalPolicy = await getEffectiveWithdrawalPolicy(db, userId)
   const lockRows = await all(
     db,
@@ -965,13 +966,15 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     profile.forceUnlockPrincipal ||
     principalLocked <= 0 ||
     (unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
-  const unlockedBalance = Number((isPrincipalUnlocked ? balance : Math.max(0, balance - principalLocked)).toFixed(8))
+  const withdrawableMainRatio = principalRule.enabled ? principalRule.withdrawableRatio : 1
+  const withdrawableMainBalance = Number((Math.max(0, balance) * withdrawableMainRatio).toFixed(8))
+  const lockedMainBalance = Number(Math.max(0, balance - withdrawableMainBalance).toFixed(8))
   const todayRequestedAmount = await getDailyWithdrawalRequestedAmount(db, userId, currency)
   const dailyRemaining =
     withdrawalPolicy.dailyLimit > 0
       ? Number(Math.max(0, withdrawalPolicy.dailyLimit - todayRequestedAmount).toFixed(8))
-      : unlockedBalance
-  const withdrawableBalance = Number(Math.min(unlockedBalance, dailyRemaining).toFixed(8))
+      : withdrawableMainBalance
+  const withdrawableBalance = Number(Math.min(withdrawableMainBalance, dailyRemaining).toFixed(8))
   const remainingProfitToUnlock = Number((isPrincipalUnlocked ? 0 : Math.max(0, unlockTargetProfit - earnedProfit)).toFixed(8))
   const unlockProgressPct = Number(
     (
@@ -986,7 +989,7 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     currency,
     current_balance: Number(balance.toFixed(8)),
     deposited_principal: principalLocked,
-    locked_balance: isPrincipalUnlocked ? 0 : principalLocked,
+    locked_balance: lockedMainBalance,
     earned_profit: earnedProfit,
     withdrawable_balance: withdrawableBalance,
     unlock_target_profit: unlockTargetProfit,
@@ -1008,7 +1011,7 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
 
 async function unlockAllPrincipalLocksIfEligible(db, userId, currency, rules = null) {
   const summary = await calculateWithdrawalSummary(db, userId, currency, rules)
-  if (!summary.is_principal_unlocked) return summary
+  if (!summary.is_principal_unlocked || Number(summary.deposited_principal || 0) <= 0) return summary
   await run(
     db,
     `UPDATE user_principal_locks
@@ -1016,7 +1019,14 @@ async function unlockAllPrincipalLocksIfEligible(db, userId, currency, rules = n
      WHERE user_id = ? AND currency = ? AND lock_status = 'locked'`,
     [userId, currency],
   )
-  return { ...summary, locked_balance: 0 }
+  return {
+    ...summary,
+    deposited_principal: 0,
+    unlock_target_profit: 0,
+    remaining_profit_to_unlock: 0,
+    unlock_progress_pct: 100,
+    is_principal_unlocked: true,
+  }
 }
 
 function buildLockBreakdown(locks, earnedProfitPool) {
