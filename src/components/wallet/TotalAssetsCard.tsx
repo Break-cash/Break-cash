@@ -1,5 +1,8 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useI18n } from '../../i18nCore'
+
+const ASSET_VISIBILITY_STORAGE_KEY = 'breakcash_assets_hidden'
 
 function formatAmount(n: number, currency = 'USDT'): string {
   return `${Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} ${currency}`
@@ -30,6 +33,22 @@ export function TotalAssetsCard({
   const isRtl = direction === 'rtl'
   const Chevron = isRtl ? ChevronLeft : ChevronRight
   const isHero = variant === 'hero'
+  const [isHidden, setIsHidden] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setIsHidden(window.localStorage.getItem(ASSET_VISIBILITY_STORAGE_KEY) === '1')
+  }, [])
+
+  function toggleHidden(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    const next = !isHidden
+    setIsHidden(next)
+    if (typeof window !== 'undefined') {
+      if (next) window.localStorage.setItem(ASSET_VISIBILITY_STORAGE_KEY, '1')
+      else window.localStorage.removeItem(ASSET_VISIBILITY_STORAGE_KEY)
+    }
+  }
 
   const content = (
     <>
@@ -40,15 +59,25 @@ export function TotalAssetsCard({
             : 'absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_38%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.1),transparent_32%)]'
         }
       />
-      <p
-        className={
-          isHero
-            ? 'relative mb-4 text-sm font-medium uppercase tracking-wider text-[var(--text-secondary)] sm:mb-5 sm:text-base'
-            : 'relative mb-2 text-sm font-medium uppercase tracking-wider text-[var(--text-secondary)]'
-        }
-      >
-        {t(titleKey)}
-      </p>
+      <div className="relative mb-2 flex items-center justify-between gap-3 sm:mb-3">
+        <p
+          className={
+            isHero
+              ? 'text-sm font-medium uppercase tracking-wider text-[var(--text-secondary)] sm:text-base'
+              : 'text-sm font-medium uppercase tracking-wider text-[var(--text-secondary)]'
+          }
+        >
+          {t(titleKey)}
+        </p>
+        <button
+          type="button"
+          onClick={toggleHidden}
+          className="icon-interactive flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:border-brand-blue/35 hover:text-brand-blue"
+          aria-label={isHidden ? t('owner_action_show') : t('owner_action_hide')}
+        >
+          {isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
+        </button>
+      </div>
       <p
         className={
           isHero
@@ -56,7 +85,7 @@ export function TotalAssetsCard({
             : 'relative text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl'
         }
       >
-        {isLoading ? '...' : formatAmount(totalAssets, currency)}
+        {isLoading ? '...' : isHidden ? '••••••' : formatAmount(totalAssets, currency)}
       </p>
       {onClick ? (
         <span
@@ -86,14 +115,21 @@ export function TotalAssetsCard({
 
   if (onClick) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onClick()
+          }
+        }}
         className={cardClassName}
         aria-label={t(titleKey)}
       >
         {content}
-      </button>
+      </div>
     )
   }
 
