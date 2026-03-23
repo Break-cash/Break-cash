@@ -538,17 +538,15 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         {withdrawSummary ? (
           <div className="owner-history-card" style={{ marginBottom: 12 }}>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
-              <span className="owner-hint">{t('wallet_lock_principal')}: {walletSummary.lockedBalance.toFixed(2)} USDT</span>
-              <span className="owner-hint">{t('wallet_lock_profit')}: {withdrawSummary.earned_profit.toFixed(2)} USDT</span>
+              <span className="owner-hint">قد يبقى جزء من أصل الإيداع محميًا مؤقتًا حسب سياسة الحساب.</span>
+              <span className="owner-hint">يتم تحديث الحالة المتاحة للسحب تلقائيًا دون الحاجة لأي إجراء إضافي.</span>
             </div>
             <div className="owner-form-row" style={{ marginBottom: 6 }}>
               <span className="owner-hint">{t('wallet_lock_withdrawable')}: {walletSummary.withdrawableBalance.toFixed(2)} USDT</span>
-              <span className="owner-hint">
-                {t('wallet_lock_remaining_to_unlock')}: {withdrawSummary.remaining_profit_to_unlock.toFixed(2)} USDT
-              </span>
+              <span className="owner-hint">سيظهر هنا دائمًا المبلغ المتاح للسحب فعليًا من حسابك.</span>
             </div>
             <div className="owner-form-row" style={{ marginBottom: 0 }}>
-              <span className="owner-hint">{t('wallet_lock_unlock_progress')}: {withdrawSummary.unlock_progress_pct.toFixed(2)}%</span>
+              <span className="owner-hint">إذا كانت الحالة مقيدة، فسيتم فتح السحب تلقائيًا عندما يصبح الحساب مؤهلًا.</span>
               <span className={`request-status-badge ${withdrawSummary.is_principal_unlocked ? 'status-approved' : 'status-pending'}`}>
                 {withdrawSummary.is_principal_unlocked ? t('wallet_lock_unlocked') : t('wallet_lock_locked')}
               </span>
@@ -564,10 +562,9 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
               {principalLocks.map((lock) => (
                 <li key={`lock-${lock.id}`} className="owner-history-item">
                   <span>#{lock.id}</span>
-                  <span>{t('wallet_lock_principal')}: {lock.principal_amount.toFixed(2)} USDT</span>
-                  <span>{t('wallet_lock_required_profit')}: {lock.required_profit_amount.toFixed(2)} USDT</span>
-                  <span>{t('wallet_lock_remaining_to_unlock')}: {lock.remaining_profit_to_unlock.toFixed(2)} USDT</span>
-                  <span>{t('wallet_lock_unlock_progress')}: {lock.progress_pct.toFixed(2)}%</span>
+                  <span>جزء محمي من أصل الإيداع</span>
+                  <span>يخضع لسياسة السحب الحالية للحساب</span>
+                  <span>سيُفتح تلقائيًا عند تحقق الأهلية</span>
                   <span className={`request-status-badge ${lock.lock_status === 'unlocked' ? 'status-approved' : 'status-pending'}`}>
                     {lock.lock_status === 'unlocked' ? t('wallet_lock_unlocked') : t('wallet_lock_locked')}
                   </span>
