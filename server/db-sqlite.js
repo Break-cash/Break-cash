@@ -314,6 +314,50 @@ CREATE TABLE IF NOT EXISTS task_reward_redemptions (
 );
 CREATE INDEX IF NOT EXISTS idx_task_reward_redemptions_user ON task_reward_redemptions(user_id);
 
+CREATE TABLE IF NOT EXISTS strategy_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT,
+  expert_name TEXT,
+  feature_type TEXT NOT NULL DEFAULT 'trial_trade',
+  reward_mode TEXT NOT NULL DEFAULT 'percent',
+  reward_value REAL NOT NULL DEFAULT 0,
+  asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT',
+  trade_return_percent REAL NOT NULL DEFAULT 0,
+  expires_at TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_strategy_codes_active ON strategy_codes(is_active);
+
+CREATE TABLE IF NOT EXISTS strategy_code_usages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code_id INTEGER NOT NULL REFERENCES strategy_codes(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending_confirmation',
+  selected_symbol TEXT,
+  feature_type TEXT NOT NULL DEFAULT 'trial_trade',
+  balance_snapshot REAL NOT NULL DEFAULT 0,
+  stake_amount REAL NOT NULL DEFAULT 0,
+  reward_value REAL NOT NULL DEFAULT 0,
+  trade_return_percent REAL NOT NULL DEFAULT 0,
+  entry_price REAL,
+  exit_price REAL,
+  wallet_debit_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+  wallet_credit_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+  metadata_json TEXT,
+  confirmed_at TEXT,
+  settled_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(code_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_strategy_code_usages_user ON strategy_code_usages(user_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_code_usages_status ON strategy_code_usages(status);
+
 CREATE TABLE IF NOT EXISTS mining_profiles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
@@ -913,6 +957,13 @@ async function ensureSchema(db) {
   }
   await ensureMiningCol('video_access_unlocked', `ALTER TABLE mining_profiles ADD COLUMN video_access_unlocked INTEGER NOT NULL DEFAULT 0`)
   await ensureMiningCol('video_access_unlocked_at', `ALTER TABLE mining_profiles ADD COLUMN video_access_unlocked_at TEXT`)
+  const strategyCodeCols = await allAsync(db, `PRAGMA table_info(strategy_codes)`)
+  const ensureStrategyCodeCol = async (name, sql) => {
+    if (!strategyCodeCols.some((row) => String(row.name) === name)) {
+      await runAsync(db, sql)
+    }
+  }
+  await ensureStrategyCodeCol('expert_name', `ALTER TABLE strategy_codes ADD COLUMN expert_name TEXT`)
   const lockCols = await allAsync(db, `PRAGMA table_info(user_principal_locks)`)
   const ensureLockCol = async (name, sql) => {
     if (!lockCols.some((row) => String(row.name) === name)) {

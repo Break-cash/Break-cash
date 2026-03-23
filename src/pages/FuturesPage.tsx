@@ -9,7 +9,6 @@ import {
   savePushSubscription,
   sendPushTest,
   settleStrategyTrade,
-  updateStrategyTradeDetails,
   apiFetch,
   getStrategyTradeDisplayConfig,
   type StrategyCodeItem,
@@ -38,8 +37,6 @@ export function FuturesPage() {
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
-  const [expertName, setExpertName] = useState('')
-  const [savingTradeDetails, setSavingTradeDetails] = useState(false)
   const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
     active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
@@ -51,12 +48,12 @@ export function FuturesPage() {
     () => codes.map((item) => item.usage).find((usage) => usage?.status === 'trade_active') || null,
     [codes],
   )
+  const publishedStrategyTrades = useMemo(
+    () => codes.filter((item) => item.featureType === 'trial_trade' && item.isActive),
+    [codes],
+  )
   const activeTradeAutoSettleAtMs = activeTrade?.autoSettleAt ? Date.parse(activeTrade.autoSettleAt) : Number.NaN
   const activeTradeReadyToSettle = !!activeTrade && (Number.isNaN(activeTradeAutoSettleAtMs) || activeTradeAutoSettleAtMs <= Date.now())
-
-  useEffect(() => {
-    setExpertName(String(activeTrade?.expertName || ''))
-  }, [activeTrade?.id, activeTrade?.expertName])
 
   useEffect(() => {
     if (quotes.length > 0 && !quotes.find((x) => x.symbol === selected)) {
@@ -262,20 +259,6 @@ export function FuturesPage() {
     }
   }
 
-  async function handleSaveTradeDetails() {
-    if (!activeTrade) return
-    setSavingTradeDetails(true)
-    try {
-      await updateStrategyTradeDetails({ usageId: activeTrade.id, expertName })
-      await refreshCodes()
-      setMessage({ type: 'success', text: 'تم حفظ معلومات الصفقة بنجاح.' })
-    } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر حفظ معلومات الصفقة.' })
-    } finally {
-      setSavingTradeDetails(false)
-    }
-  }
-
   return (
     <div className="page futures-page ku-mobile-page space-y-3">
       <h1 className="page-title">لوحة صفقة</h1>
@@ -426,6 +409,74 @@ export function FuturesPage() {
             {submitting ? '...' : 'تحقق من الكود'}
           </button>
         </div>
+        {publishedStrategyTrades.length > 0 ? (
+          <div className="mt-3 grid gap-3">
+            <div className="rounded-2xl border border-brand-blue/20 bg-brand-blue/10 px-3 py-2 text-xs text-brand-blue">
+              هذه اللوحات منشورة من الإدارة وتظهر لك للعرض فقط. انسخ الكود من اللوحة المقفولة ثم فعّله من الخانة أعلاه لبدء الصفقة.
+            </div>
+            {publishedStrategyTrades.map((item) => {
+              const isUsed = Boolean(item.alreadyUsed)
+              return (
+                <div key={item.id} className="rounded-2xl border border-amber-500/20 bg-app-elevated p-3 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.06)]">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-white">{item.title || 'صفقة استراتيجية'}</div>
+                      <div className="text-xs text-app-muted">
+                        {item.description || 'تم نشر هذه الصفقة من الإدارة وتنتظر نسخ الكود وتفعيله.'}
+                      </div>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${isUsed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>
+                      {isUsed ? 'تم تفعيلها على الحساب' : 'لوحة مقفولة حتى التفعيل'}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">الأصل</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{item.assetSymbol}</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">العائد المحدد</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{Number(item.tradeReturnPercent || 0).toFixed(2)}%</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">الخبير المعتمد</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{item.expertName || 'سيحدده المشرف أو المالك'}</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">حالة اللوحة</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{isUsed ? 'مرتبطة بالحساب' : 'جاهزة للنسخ والتفعيل'}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+                    <div className="text-[11px] text-amber-100/80">كود الاستراتيجية</div>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <input className="field-input flex-1" value={item.code} readOnly />
+                      <button
+                        type="button"
+                        className="wallet-action-btn owner-set-btn whitespace-nowrap"
+                        onClick={() => {
+                          navigator.clipboard.writeText(item.code).then(
+                            () => setMessage({ type: 'success', text: 'تم نسخ كود الاستراتيجية.' }),
+                            () => setMessage({ type: 'error', text: 'تعذر نسخ كود الاستراتيجية.' }),
+                          )
+                        }}
+                      >
+                        نسخ الكود
+                      </button>
+                      <button
+                        type="button"
+                        className="wallet-action-btn wallet-action-deposit whitespace-nowrap"
+                        onClick={() => setTaskCode(item.code)}
+                      >
+                        وضعه في الخانة
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
         {message ? (
           <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${message.type === 'success' ? 'owner-message-success' : 'owner-message-error'}`}>
             {message.text}
@@ -495,23 +546,8 @@ export function FuturesPage() {
             </div>
             <div className="rounded-xl border border-brand-blue/20 bg-app-elevated p-3">
               <div className="text-[11px] text-app-muted">اسم الخبير المعتمد للصفقة</div>
-              <div className="mt-2 flex gap-2">
-                <input
-                  className="field-input flex-1"
-                  value={expertName}
-                  onChange={(e) => setExpertName(e.target.value)}
-                  placeholder="أدخل اسم الخبير المعتمد"
-                />
-                <button
-                  type="button"
-                  className="wallet-action-btn wallet-action-deposit whitespace-nowrap"
-                  onClick={() => {
-                    handleSaveTradeDetails().catch(() => {})
-                  }}
-                  disabled={savingTradeDetails}
-                >
-                  {savingTradeDetails ? '...' : 'حفظ'}
-                </button>
+              <div className="mt-2 rounded-xl border border-app-border bg-app-card px-3 py-2 text-sm font-semibold text-white">
+                {String(activeTrade.expertName || '').trim() || 'يظهر هنا الاسم الذي تحدده الإدارة لهذه الصفقة'}
               </div>
             </div>
           </div>

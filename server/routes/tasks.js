@@ -94,7 +94,10 @@ function enrichStrategyUsageRow(row) {
     settledAt: row.settled_at,
     usedAt: row.used_at,
     strategyCode: typeof meta?.code === 'string' ? meta.code : '',
-    expertName: typeof meta?.expertName === 'string' ? meta.expertName : '',
+    expertName:
+      typeof meta?.expertName === 'string' && meta.expertName.trim()
+        ? meta.expertName
+        : String(row?.expert_name || ''),
     autoSettleAt,
     settleDelayMs: Number.isFinite(settleDelayMs) && settleDelayMs > 0 ? settleDelayMs : null,
   }
@@ -254,6 +257,7 @@ function buildStrategyCodeRow(row) {
     code: String(row.code || ''),
     title: String(row.title || ''),
     description: String(row.description || ''),
+    expertName: String(row.expert_name || ''),
     featureType: normalizeFeatureType(row.feature_type),
     rewardMode: normalizeRewardMode(row.reward_mode),
     rewardValue: Number(row.reward_value || 0),
@@ -525,7 +529,7 @@ export function createTasksRouter(db) {
     const codeRows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
-              sc.asset_symbol, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_at, sc.updated_at,
+              sc.asset_symbol, sc.expert_name, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_at, sc.updated_at,
               scu.id AS usage_id, scu.status AS usage_status, scu.selected_symbol, scu.balance_snapshot,
               scu.stake_amount, scu.entry_price, scu.exit_price, scu.reward_value AS usage_reward_value,
               scu.trade_return_percent AS usage_trade_return_percent, scu.confirmed_at, scu.settled_at, scu.created_at AS used_at,
@@ -542,6 +546,7 @@ export function createTasksRouter(db) {
       code: String(row.code || ''),
       title: String(row.title || ''),
       description: String(row.description || ''),
+      expertName: String(row.expert_name || ''),
       featureType: normalizeFeatureType(row.feature_type),
       rewardMode: normalizeRewardMode(row.reward_mode),
       rewardValue: Number(row.reward_value || 0),
@@ -564,7 +569,7 @@ export function createTasksRouter(db) {
 
     const row = await get(
       db,
-      `SELECT id, code, title, description, feature_type, reward_mode, reward_value, asset_symbol,
+      `SELECT id, code, title, description, expert_name, feature_type, reward_mode, reward_value, asset_symbol,
               trade_return_percent, expires_at, is_active
        FROM strategy_codes
        WHERE code = ?
@@ -619,6 +624,7 @@ export function createTasksRouter(db) {
       codeId: Number(row.id),
       title: row.title,
       description: row.description,
+      expertName: String(row.expert_name || ''),
       featureType,
       assetSymbol: symbol,
       currentPrice: Number(quote?.price || 0),
@@ -645,7 +651,7 @@ export function createTasksRouter(db) {
       const payload = await withTransaction(db, async (tx) => {
         const row = await get(
           tx,
-          `SELECT id, code, title, description, feature_type, reward_mode, reward_value, asset_symbol,
+          `SELECT id, code, title, description, expert_name, feature_type, reward_mode, reward_value, asset_symbol,
                   trade_return_percent, expires_at, is_active
            FROM strategy_codes
            WHERE code = ?
@@ -698,7 +704,14 @@ export function createTasksRouter(db) {
               Number(row.trade_return_percent || 0),
               Number(liveQuote.price || 0),
               debit.walletTxnId,
-              JSON.stringify({ code: row.code, title: row.title, confirmedByUser: req.user.id, autoSettleAt, settleDelayMs }),
+              JSON.stringify({
+                code: row.code,
+                title: row.title,
+                expertName: String(row.expert_name || ''),
+                confirmedByUser: req.user.id,
+                autoSettleAt,
+                settleDelayMs,
+              }),
             ],
           )
           const usageId = Number(inserted.rows?.[0]?.id || inserted.lastID || 0)
@@ -717,7 +730,7 @@ export function createTasksRouter(db) {
             tradeReturnPercent: Number(row.trade_return_percent || 0),
             entryPrice: Number(liveQuote.price || 0),
             strategyCode: String(row.code || ''),
-            expertName: '',
+            expertName: String(row.expert_name || ''),
             balanceAfter: debit.balanceAfter,
             autoSettleAt,
             settleDelayMs,
@@ -741,7 +754,12 @@ export function createTasksRouter(db) {
             featureType,
             balanceSnapshot,
             rewardAmount,
-            JSON.stringify({ code: row.code, title: row.title, rewardMode: normalizeRewardMode(row.reward_mode) }),
+            JSON.stringify({
+              code: row.code,
+              title: row.title,
+              expertName: String(row.expert_name || ''),
+              rewardMode: normalizeRewardMode(row.reward_mode),
+            }),
           ],
         )
         const usageId = Number(inserted.rows?.[0]?.id || inserted.lastID || 0)
@@ -822,46 +840,11 @@ export function createTasksRouter(db) {
     }
   })
 
-  router.post('/strategy-codes/:usageId/details', async (req, res) => {
-    const usageId = Number(req.params.usageId || 0)
-    const expertName = normalizeText(req.body?.expertName, 120)
-    if (!usageId) return res.status(400).json({ error: 'INVALID_INPUT' })
-
-    const usage = await get(
-      db,
-      `SELECT id, user_id, metadata_json
-       FROM strategy_code_usages
-       WHERE id = ? AND user_id = ?
-       LIMIT 1`,
-      [usageId, req.user.id],
-    )
-    if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
-
-    const meta = parseJsonSafe(usage.metadata_json, {})
-    const nextMeta = JSON.stringify({
-      ...meta,
-      expertName,
-    })
-    await run(
-      db,
-      `UPDATE strategy_code_usages
-       SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND user_id = ?`,
-      [nextMeta, usageId, req.user.id],
-    )
-    return res.json({
-      ok: true,
-      usageId,
-      strategyCode: typeof meta?.code === 'string' ? meta.code : '',
-      expertName,
-    })
-  })
-
   router.get('/admin/strategy-codes', requirePermission(db, TASK_PERMISSION), async (_req, res) => {
     const rows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
-              sc.asset_symbol, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_by, sc.created_at, sc.updated_at,
+              sc.asset_symbol, sc.expert_name, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_by, sc.created_at, sc.updated_at,
               creator.display_name AS created_by_name,
               COUNT(scu.id) AS usage_count,
               COUNT(CASE WHEN scu.status IN ('promo_granted', 'trade_settled', 'trade_active') THEN 1 END) AS consumed_count
@@ -875,9 +858,10 @@ export function createTasksRouter(db) {
       db,
       `SELECT scu.id, scu.code_id, scu.user_id, scu.status, scu.selected_symbol, scu.balance_snapshot,
               scu.stake_amount, scu.reward_value, scu.trade_return_percent, scu.entry_price, scu.exit_price,
-              scu.confirmed_at, scu.settled_at, scu.created_at,
+              scu.confirmed_at, scu.settled_at, scu.created_at, sc.expert_name,
               u.display_name, u.email, u.phone
        FROM strategy_code_usages scu
+       LEFT JOIN strategy_codes sc ON sc.id = scu.code_id
        LEFT JOIN users u ON u.id = scu.user_id
        ORDER BY scu.id DESC
        LIMIT 400`,
@@ -897,6 +881,7 @@ export function createTasksRouter(db) {
         stakeAmount: Number(row.stake_amount || 0),
         rewardValue: Number(row.reward_value || 0),
         tradeReturnPercent: Number(row.trade_return_percent || 0),
+        expertName: String(row.expert_name || ''),
         entryPrice: row.entry_price == null ? null : Number(row.entry_price),
         exitPrice: row.exit_price == null ? null : Number(row.exit_price),
         confirmedAt: row.confirmed_at,
@@ -911,6 +896,7 @@ export function createTasksRouter(db) {
     const code = normalizeCode(req.body?.code)
     const title = normalizeText(req.body?.title, 90)
     const description = normalizeText(req.body?.description, 220)
+    const expertName = normalizeText(req.body?.expertName, 120)
     const featureType = normalizeFeatureType(req.body?.featureType)
     const rewardMode = normalizeRewardMode(req.body?.rewardMode)
     const rewardValue = Math.max(0, Number(req.body?.rewardValue || 0))
@@ -925,9 +911,9 @@ export function createTasksRouter(db) {
         db,
         `UPDATE strategy_codes
          SET code = ?, title = ?, description = ?, feature_type = ?, reward_mode = ?, reward_value = ?,
-             asset_symbol = ?, trade_return_percent = ?, expires_at = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+             asset_symbol = ?, expert_name = ?, trade_return_percent = ?, expires_at = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
-        [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, tradeReturnPercent, expiresAt, isActive, id],
+        [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, expertName || null, tradeReturnPercent, expiresAt, isActive, id],
       )
       return res.json({ ok: true, id })
     }
@@ -935,11 +921,11 @@ export function createTasksRouter(db) {
       db,
       `INSERT INTO strategy_codes (
         code, title, description, feature_type, reward_mode, reward_value,
-        asset_symbol, trade_return_percent, expires_at, is_active, created_by
+        asset_symbol, expert_name, trade_return_percent, expires_at, is_active, created_by
       )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
-      [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, tradeReturnPercent, expiresAt, isActive, req.user.id],
+      [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, expertName || null, tradeReturnPercent, expiresAt, isActive, req.user.id],
     )
     return res.json({ ok: true, id: Number(inserted.lastID || inserted.rows?.[0]?.id || 0) })
   })

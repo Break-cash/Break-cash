@@ -2209,6 +2209,7 @@ export type StrategyCodeItem = {
   code: string
   title: string
   description?: string
+  expertName?: string
   featureType: StrategyCodeFeatureType
   rewardMode: StrategyCodeRewardMode
   rewardValue: number
@@ -2261,6 +2262,7 @@ export type StrategyCodeUsageAdminItem = {
   stakeAmount: number
   rewardValue: number
   tradeReturnPercent: number
+  expertName?: string
   entryPrice?: number | null
   exitPrice?: number | null
   confirmedAt?: string | null
@@ -2323,6 +2325,7 @@ export async function previewStrategyCode(code: string, symbol?: string) {
     codeId: number
     title: string
     description?: string
+    expertName?: string
     featureType: StrategyCodeFeatureType
     assetSymbol: string
     currentPrice: number
@@ -2363,13 +2366,6 @@ export async function redeemStrategyCode(payload: { code: string; symbol?: strin
   }>
 }
 
-export async function updateStrategyTradeDetails(payload: { usageId: number; expertName: string }) {
-  return apiFetch(`/api/tasks/strategy-codes/${payload.usageId}/details`, {
-    method: 'POST',
-    body: JSON.stringify({ expertName: payload.expertName }),
-  }) as Promise<{ ok: boolean; usageId: number; strategyCode: string; expertName: string }>
-}
-
 export async function settleStrategyTrade(usageId: number) {
   return apiFetch(`/api/tasks/strategy-codes/${usageId}/settle`, {
     method: 'POST',
@@ -2398,6 +2394,7 @@ export async function upsertStrategyCodeAdmin(payload: {
   code: string
   title: string
   description?: string
+  expertName?: string
   featureType: StrategyCodeFeatureType
   rewardMode: StrategyCodeRewardMode
   rewardValue: number

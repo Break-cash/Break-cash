@@ -288,6 +288,7 @@ async function ensureSchema(db) {
       code TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
       description TEXT,
+      expert_name TEXT,
       feature_type TEXT NOT NULL DEFAULT 'trial_trade',
       reward_mode TEXT NOT NULL DEFAULT 'percent',
       reward_value DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -798,6 +799,7 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS reward_mode TEXT NOT NULL DEFAULT 'percent'`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS reward_value DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT'`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS expert_name TEXT`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL`)

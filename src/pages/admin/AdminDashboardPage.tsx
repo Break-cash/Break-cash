@@ -4,7 +4,10 @@ import {
   getAdminDepositRequests,
   getAdminUsersList,
   getAdminWithdrawalRequests,
+  getStrategyCodesAdmin,
   getStrategyTradeDisplayConfig,
+  upsertStrategyCodeAdmin,
+  type StrategyCodeAdminItem,
   updateStrategyTradeDisplayConfig,
   type StrategyTradeDisplayConfig,
 } from '../../api'
@@ -30,8 +33,11 @@ export function AdminDashboardPage() {
     vipUsers: 0,
   })
   const [displayConfig, setDisplayConfig] = useState<StrategyTradeDisplayConfig>(DEFAULT_DISPLAY_CONFIG)
+  const [strategyCodes, setStrategyCodes] = useState<StrategyCodeAdminItem[]>([])
+  const [expertDrafts, setExpertDrafts] = useState<Record<number, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingExpertId, setSavingExpertId] = useState<number | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -39,14 +45,16 @@ export function AdminDashboardPage() {
     async function loadDashboard() {
       setLoading(true)
       try {
-        const [usersRes, depositsRes, withdrawalsRes, displayRes] = await Promise.all([
+        const [usersRes, depositsRes, withdrawalsRes, displayRes, strategyRes] = await Promise.all([
           getAdminUsersList({ limit: 20 }),
           getAdminDepositRequests('pending'),
           getAdminWithdrawalRequests('pending'),
           getStrategyTradeDisplayConfig(),
+          getStrategyCodesAdmin(),
         ])
         if (!active) return
         const users = usersRes.users || []
+        const strategyItems = (strategyRes.items || []).filter((item) => item.featureType === 'trial_trade')
         setSnapshot({
           usersCount: users.length,
           pendingDeposits: Number(depositsRes.items?.length || 0),
@@ -54,6 +62,10 @@ export function AdminDashboardPage() {
           vipUsers: users.filter((item) => Number(item.vip_level || 0) > 0).length,
         })
         setDisplayConfig(displayRes.config || DEFAULT_DISPLAY_CONFIG)
+        setStrategyCodes(strategyItems)
+        setExpertDrafts(
+          Object.fromEntries(strategyItems.map((item) => [item.id, String(item.expertName || '')])),
+        )
       } catch (error) {
         if (!active) return
         setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر تحميل لوحة الإدارة.' })
@@ -78,6 +90,38 @@ export function AdminDashboardPage() {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل تحديث وصف الصفقات.' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSaveExpertName(item: StrategyCodeAdminItem) {
+    setSavingExpertId(item.id)
+    setMessage(null)
+    try {
+      await upsertStrategyCodeAdmin({
+        id: item.id,
+        code: item.code,
+        title: item.title,
+        description: item.description || '',
+        expertName: String(expertDrafts[item.id] || '').trim(),
+        featureType: item.featureType,
+        rewardMode: item.rewardMode,
+        rewardValue: Number(item.rewardValue || 0),
+        assetSymbol: item.assetSymbol,
+        tradeReturnPercent: Number(item.tradeReturnPercent || 0),
+        expiresAt: item.expiresAt || null,
+        isActive: item.isActive,
+      })
+      const refreshed = await getStrategyCodesAdmin()
+      const strategyItems = (refreshed.items || []).filter((entry) => entry.featureType === 'trial_trade')
+      setStrategyCodes(strategyItems)
+      setExpertDrafts(
+        Object.fromEntries(strategyItems.map((entry) => [entry.id, String(entry.expertName || '')])),
+      )
+      setMessage({ type: 'success', text: 'تم تحديث اسم الخبير المعتمد للصفقة.' })
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل تحديث اسم الخبير.' })
+    } finally {
+      setSavingExpertId(null)
     }
   }
 
@@ -153,6 +197,48 @@ export function AdminDashboardPage() {
               {saving ? '...' : 'حفظ الوصف'}
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-app-border bg-app-card p-4">
+        <h2 className="text-sm font-semibold text-white">أسماء الخبراء للصفقات المنشورة</h2>
+        <p className="mt-1 text-xs text-app-muted">الاسم يظهر للمستخدم كعرض فقط تحت خانة كود الاستراتيجية، ولا يستطيع المستخدم تعديله من جهته.</p>
+        <div className="mt-3 space-y-3">
+          {strategyCodes.length > 0 ? strategyCodes.map((item) => (
+            <div key={item.id} className="rounded-2xl border border-app-border bg-app-elevated p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-white">{item.title || item.code}</div>
+                  <div className="text-xs text-app-muted">
+                    {item.code} · {item.assetSymbol} · {item.isActive ? 'منشورة' : 'معطلة'}
+                  </div>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${item.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-300'}`}>
+                  {item.isActive ? 'ظاهرة للمستخدم' : 'غير منشورة'}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="field-input flex-1"
+                  placeholder="اسم الخبير المعتمد الظاهر للمستخدم"
+                  value={expertDrafts[item.id] ?? ''}
+                  onChange={(e) => setExpertDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                />
+                <button
+                  type="button"
+                  className="wallet-action-btn wallet-action-deposit whitespace-nowrap"
+                  onClick={() => handleSaveExpertName(item)}
+                  disabled={savingExpertId === item.id}
+                >
+                  {savingExpertId === item.id ? '...' : 'حفظ اسم الخبير'}
+                </button>
+              </div>
+            </div>
+          )) : (
+            <div className="rounded-xl border border-dashed border-app-border bg-app-elevated px-3 py-4 text-sm text-app-muted">
+              لا توجد صفقات استراتيجية منشورة أو محفوظة حاليًا.
+            </div>
+          )}
         </div>
       </section>
     </div>

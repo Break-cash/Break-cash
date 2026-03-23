@@ -246,6 +246,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     code: '',
     title: '',
     description: '',
+    expertName: '',
     featureType: 'trial_trade' as 'trial_trade' | 'promo_bonus',
     rewardMode: 'percent' as 'percent' | 'fixed',
     rewardValue: '0',
@@ -1049,6 +1050,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         code: strategyCodeDraft.code,
         title: strategyCodeDraft.title,
         description: strategyCodeDraft.description,
+        expertName: strategyCodeDraft.expertName,
         featureType: strategyCodeDraft.featureType,
         rewardMode: strategyCodeDraft.rewardMode,
         rewardValue: Number(strategyCodeDraft.rewardValue || 0),
@@ -1063,6 +1065,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         code: '',
         title: '',
         description: '',
+        expertName: '',
         rewardValue: '0',
         tradeReturnPercent: '0',
         expiresAt: '',
@@ -2278,6 +2281,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 value={strategyCodeDraft.description}
                 onChange={(e) => setStrategyCodeDraft((prev) => ({ ...prev, description: e.target.value }))}
               />
+              <input
+                className="field-input owner-note-input"
+                placeholder="اسم الخبير المعتمد الظاهر للمستخدم"
+                value={strategyCodeDraft.expertName}
+                onChange={(e) => setStrategyCodeDraft((prev) => ({ ...prev, expertName: e.target.value }))}
+              />
               <div className="owner-form-row">
                 <select
                   className="field-input"
@@ -2362,6 +2371,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <li key={item.id} className="owner-history-item">
                     <span>{item.code}</span>
                     <span>{item.featureType === 'trial_trade' ? 'صفقات استراتيجية' : 'مكافأة'}</span>
+                    <span>{item.expertName || 'بدون خبير'}</span>
                     <span>{item.usageCount} استخدام</span>
                     <span>{item.createdByName || `#${item.createdBy || '-'}`}</span>
                     <button
@@ -2401,6 +2411,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                       <span>{usage.userDisplayName || usage.userEmail || usage.userPhone || `#${usage.userId}`}</span>
                       <span>{usage.status}</span>
                       <span>{usage.selectedSymbol || '--'}</span>
+                      <span>{usage.expertName || 'بدون خبير'}</span>
                       <span>{Number(usage.stakeAmount || 0).toFixed(2)} USDT</span>
                       <span>{usage.usedAt || usage.confirmedAt || '-'}</span>
                     </li>
