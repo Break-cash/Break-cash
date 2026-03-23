@@ -52,6 +52,13 @@ function normalizeAmount(value, fallback = 0) {
   return Number(n.toFixed(8))
 }
 
+function normalizeMiningProfitAmount(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  const normalized = Math.floor(n * 10000) / 10000
+  return normalized >= 0.0001 ? Number(normalized.toFixed(4)) : 0
+}
+
 function computeMinimumTopUpAmount(currentPrincipal) {
   const principal = Number(currentPrincipal || 0)
   if (!Number.isFinite(principal) || principal <= 0) return 0.01
@@ -201,8 +208,8 @@ function computeAccrual(profile, nowMs) {
   const lastDailyClaimMs = parseDateTime(profile?.last_daily_claim_at) || startedMs
   const elapsedDailyMs = Math.max(0, nowMs - lastDailyClaimMs)
   const elapsedMonthlyMs = Math.max(0, nowMs - startedMs)
-  const dailyClaimable = Number(((principal * (dailyPercent / 100) * elapsedDailyMs) / DAY_MS).toFixed(8))
-  const monthlyAccrued = Number(((principal * (monthlyPercent / 100) * elapsedMonthlyMs) / MONTH_MS).toFixed(8))
+  const dailyClaimable = normalizeMiningProfitAmount((principal * (dailyPercent / 100) * elapsedDailyMs) / DAY_MS)
+  const monthlyAccrued = normalizeMiningProfitAmount((principal * (monthlyPercent / 100) * elapsedMonthlyMs) / MONTH_MS)
   return { dailyClaimable, monthlyAccrued }
 }
 
@@ -367,12 +374,13 @@ export function createMiningRouter(db) {
           const { dailyClaimable } = computeAccrual(currentProfile, nowMs)
           if (dailyClaimable > 0) {
             const referenceId = buildMiningReferenceId(req.user.id, currentProfile.id, nowMs, 'second')
-            await recordMiningDailyProfit(tx, {
+            const topUpClaim = await recordMiningDailyProfit(tx, {
               userId: req.user.id,
               amount: dailyClaimable,
               profileId: currentProfile.id,
               referenceId,
             })
+            const creditedAmount = Number(topUpClaim?.amount || 0)
             await run(
               tx,
               `UPDATE mining_profiles
@@ -380,7 +388,7 @@ export function createMiningRouter(db) {
                    monthly_profit_accrued_total = COALESCE(monthly_profit_accrued_total, 0) + ?,
                    updated_at = CURRENT_TIMESTAMP
                WHERE user_id = ?`,
-              [dailyClaimable, dailyClaimable, req.user.id],
+              [creditedAmount, creditedAmount, req.user.id],
             )
           }
         }
@@ -511,6 +519,7 @@ export function createMiningRouter(db) {
         })
         if (!result) throw new Error('EARNING_ENTRY_FAILED')
         const { balanceAfter } = result
+        const claimedAmount = Number(result.amount || 0)
 
         await run(
           tx,
@@ -519,10 +528,10 @@ export function createMiningRouter(db) {
                daily_profit_claimed_total = COALESCE(daily_profit_claimed_total, 0) + ?,
                monthly_profit_accrued_total = COALESCE(monthly_profit_accrued_total, 0) + ?,
                updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = ?`,
-          [dailyClaimable, dailyClaimable, req.user.id],
+            WHERE user_id = ?`,
+          [claimedAmount, claimedAmount, req.user.id],
         )
-        return { claimedAmount: dailyClaimable, balanceAfter }
+        return { claimedAmount, balanceAfter }
       })
       publishLiveUpdate({ type: 'balance_updated', scope: 'user', userId: req.user.id, source: 'mining_claim' })
       return res.json({ ok: true, ...result })

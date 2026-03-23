@@ -19,6 +19,13 @@ export { getMainBalance, getWalletHistory, getEarningHistory }
 const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits'])
 const MAX_REWARD_LOCK_HOURS = 24 * 365
 
+function normalizeMiningTransferAmount(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount <= 0) return 0
+  const normalized = Math.floor(amount * 10000) / 10000
+  return normalized >= 0.0001 ? Number(normalized.toFixed(4)) : 0
+}
+
 export function normalizeRewardPayoutMode(value) {
   return String(value || '').trim().toLowerCase() === 'bonus_locked' ? 'bonus_locked' : 'withdrawable'
 }
@@ -516,14 +523,15 @@ export async function createMiningSubscription(db, opts) {
  */
 export async function recordMiningDailyProfit(db, opts) {
   const { userId, amount, profileId, referenceId } = opts
-  if (!userId || !Number.isFinite(amount) || amount <= 0 || !referenceId) throw new Error('INVALID_INPUT')
+  const safeAmount = normalizeMiningTransferAmount(amount)
+  if (!userId || safeAmount <= 0 || !referenceId) throw new Error('INVALID_INPUT')
   const earningResult = await createEarningEntry(db, {
     userId,
     sourceType: 'mining',
     referenceType: 'mining_daily_claim',
     referenceId,
     currency: 'USDT',
-    amount,
+    amount: safeAmount,
   })
   const entryRow = typeof earningResult?.id === 'number' ? earningResult : await get(db, `SELECT id FROM earning_entries WHERE source_type = 'mining' AND reference_type = 'mining_daily_claim' AND reference_id = ? LIMIT 1`, [referenceId])
   const entryId = entryRow?.id
@@ -537,7 +545,7 @@ export async function recordMiningDailyProfit(db, opts) {
   })
   if (!txn) return null
   const balanceAfter = await getMainBalance(db, userId, 'USDT')
-  return { earningEntryId: entryId, walletTxnId: txn.walletTxnId, balanceAfter, payoutMode: txn.payoutMode }
+  return { earningEntryId: entryId, walletTxnId: txn.walletTxnId, balanceAfter, payoutMode: txn.payoutMode, amount: safeAmount }
 }
 
 /**
