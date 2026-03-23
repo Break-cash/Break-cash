@@ -432,6 +432,7 @@ export async function createWithdrawal(db, opts) {
   const totalBalance = Number((referralBalance + systemBalance).toFixed(8))
   if (totalBalance < amount) throw new Error('INSUFFICIENT_BALANCE')
   const safeFeeAmount = Number.isFinite(Number(feeAmount)) && Number(feeAmount) > 0 ? Number(Number(feeAmount).toFixed(8)) : 0
+  if (systemBalance < safeFeeAmount) throw new Error('INSUFFICIENT_BALANCE')
   const payoutAmount = Number(Math.max(0, amount - safeFeeAmount).toFixed(8))
   let primaryTxnId = null
   const baseKey = idempotencyKey || `withdraw_${userId}_${referenceId || Date.now()}`
@@ -460,24 +461,18 @@ export async function createWithdrawal(db, opts) {
   remainingPayout = Number((remainingPayout - referralPayout).toFixed(8))
 
   if (remainingPayout > 0) {
+    const systemPayoutCapacity = Number((systemBalance - safeFeeAmount).toFixed(8))
+    if (systemPayoutCapacity < remainingPayout) throw new Error('INSUFFICIENT_BALANCE')
     await debitFromSource('system', remainingPayout, 'withdrawal', 'system_withdraw')
     systemBalance = Number((systemBalance - remainingPayout).toFixed(8))
   }
 
-  let remainingFee = safeFeeAmount
-  const referralFee = Math.min(referralBalance, remainingFee)
-  await debitFromSource('referrals', referralFee, 'fee', 'referrals_fee')
-  referralBalance = Number((referralBalance - referralFee).toFixed(8))
-  remainingFee = Number((remainingFee - referralFee).toFixed(8))
-
-  if (remainingFee > 0) {
-    await debitFromSource('system', remainingFee, 'fee', 'system_fee')
+  if (safeFeeAmount > 0) {
+    await debitFromSource('system', safeFeeAmount, 'fee', 'system_fee')
+    systemBalance = Number((systemBalance - safeFeeAmount).toFixed(8))
   }
 
-  const balanceAfter = Number((
-    await getMainSourceBalance(db, userId, normalizedCurrency, 'system') +
-    await getMainSourceBalance(db, userId, normalizedCurrency, 'referrals')
-  ).toFixed(8))
+  const balanceAfter = Number((referralBalance + systemBalance).toFixed(8))
   return { walletTxnId: primaryTxnId, balanceAfter }
 }
 
