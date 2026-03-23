@@ -1321,7 +1321,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         },
         defaultLockHours: Number(rewardPayoutRules.defaultLockHours || 0),
         sourceLockHours: rewardPayoutRules.sourceLockHours,
-        applyPending: rewardPayoutApplyPendingGlobal,
+        applyPending: true,
       })
       const refreshed = await refreshRewardPayoutRules()
       setRewardPayoutRules({
@@ -1335,7 +1335,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       setRewardPayoutApplyPendingGlobal(false)
       setMessage({
         type: 'success',
-        text: `تم تطبيق 50% فقط من إجمالي الأصول كقابلية سحب، مع إبقاء أرباح الإحالات قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`,
+        text: `تم تطبيق الإعداد على المستخدمين الحاليين والجدد: 50% فقط من إجمالي الأصول قابلة للسحب، مع إبقاء أرباح الإحالات قابلة للسحب.${applyMessage ? ` ${applyMessage}` : ''}`,
       })
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تطبيق إعداد 50% للأصول مع فتح سحب الإحالات.' })
