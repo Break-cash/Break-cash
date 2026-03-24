@@ -4337,6 +4337,119 @@ button:focus-visible,
   background: #0b111f;
 }
 
+.owner-kyc-attachments,
+.owner-kyc-attachment-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.owner-kyc-attachment-btn,
+.owner-kyc-link-btn {
+  border: 1px solid #2a3a58;
+  border-radius: 999px;
+  background: #111a2b;
+  color: #dce7ff;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 7px 12px;
+  text-decoration: none;
+}
+
+.owner-kyc-attachment-btn:hover,
+.owner-kyc-link-btn:hover {
+  border-color: #4a6fb7;
+  color: #ffffff;
+}
+
+.owner-kyc-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 6, 14, 0.78);
+  backdrop-filter: blur(6px);
+}
+
+.owner-kyc-preview-modal {
+  width: min(92vw, 760px);
+  max-height: min(88vh, 920px);
+  overflow: hidden;
+  border: 1px solid #24314d;
+  border-radius: 18px;
+  background: #0d1423;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.owner-kyc-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid #1a2438;
+}
+
+.owner-kyc-preview-title {
+  margin: 0;
+  color: #eef4ff;
+  font-size: 16px;
+}
+
+.owner-kyc-preview-subtitle {
+  margin: 6px 0 0;
+  color: #96a6c7;
+  font-size: 12px;
+}
+
+.owner-kyc-preview-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #2c3956;
+  border-radius: 10px;
+  background: #162034;
+  color: #dbe7ff;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.owner-kyc-preview-content {
+  padding: 16px 18px;
+}
+
+.owner-kyc-preview-image {
+  width: 100%;
+  max-height: min(62vh, 640px);
+  object-fit: contain;
+  border-radius: 14px;
+  border: 1px solid #202c45;
+  background: #0a101c;
+}
+
+.owner-kyc-preview-error {
+  border: 1px dashed #334566;
+  border-radius: 14px;
+  padding: 28px 18px;
+  text-align: center;
+  background: #0a101c;
+  color: #aebcda;
+  font-size: 13px;
+}
+
+.owner-kyc-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
 /* ========== Friends Page ========== */
 .friends-page {
   padding: 16px;

@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { hashPassword } from '../auth.js'
@@ -25,6 +26,7 @@ import {
   reviewOwnerFinancialApproval,
   saveOwnerFinancialGuardConfig,
 } from '../services/owner-financial-approvals.js'
+import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -50,6 +52,22 @@ function randomDelayMinutes(min = 10, max = 180) {
 
 function toIsoAfterMinutes(minutes) {
   return new Date(Date.now() + Number(minutes) * 60 * 1000).toISOString()
+}
+
+function toPublicUploadUrl(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/uploads/')) {
+    return toUploadPublicUrl(raw)
+  }
+  if (path.isAbsolute(raw)) {
+    const serverRoot = path.join(process.cwd(), 'server')
+    const relativePath = path.relative(serverRoot, raw)
+    if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath)) {
+      return toUploadPublicUrl(`/${relativePath.replaceAll('\\', '/')}`)
+    }
+  }
+  return toUploadPublicUrl(raw)
 }
 
 async function logAudit(db, actorUserId, section, action, targetUserId = null, metadata = {}) {
@@ -1831,12 +1849,12 @@ export function createOwnerGrowthRouter(db) {
       params.push(token, token, token, token)
     }
     const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
-    const items = await all(
+    const rows = await all(
       db,
       `SELECT k.id, k.user_id, k.id_document_path, k.selfie_path, k.review_status, k.rejection_reason,
               k.full_name_match_score, k.face_match_score, k.aml_risk_level, k.auto_review_at, k.reviewed_note,
               k.reviewed_by, k.reviewed_at, k.created_at,
-              u.display_name, u.email, u.phone, u.verification_status, u.is_approved
+              u.display_name, u.email, u.phone, u.verification_status, u.is_approved, u.avatar_path
        FROM kyc_submissions k
        LEFT JOIN users u ON u.id = k.user_id
        ${sqlWhere}
@@ -1844,6 +1862,12 @@ export function createOwnerGrowthRouter(db) {
        LIMIT 200`,
       params,
     )
+    const items = rows.map((row) => ({
+      ...row,
+      id_document_url: toPublicUploadUrl(row.id_document_path),
+      selfie_url: toPublicUploadUrl(row.selfie_path),
+      avatar_url: toPublicUploadUrl(row.avatar_path),
+    }))
     return res.json({ items })
   })
 

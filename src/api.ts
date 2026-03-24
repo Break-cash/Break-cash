@@ -2064,6 +2064,9 @@ export type KycSubmissionRow = {
   user_id: number
   id_document_path: string
   selfie_path: string
+  id_document_url?: string | null
+  selfie_url?: string | null
+  avatar_url?: string | null
   review_status: string
   rejection_reason?: string | null
   full_name_match_score?: number | null

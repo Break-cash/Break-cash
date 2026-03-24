@@ -120,6 +120,12 @@ type OwnerDashboardProps = {
   user: AuthUser | null
 }
 
+type KycAttachmentPreview = {
+  title: string
+  url: string
+  alt: string
+}
+
 type OwnerProfitSnapshot = {
   user: { id: number; email: string | null; phone: string | null; display_name: string | null } | null
   overview: {
@@ -327,6 +333,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [kycSubmissions, setKycSubmissions] = useState<KycSubmissionRow[]>([])
   const [kycLoading, setKycLoading] = useState(false)
   const [kycReviewLoadingId, setKycReviewLoadingId] = useState<number | null>(null)
+  const [kycPreview, setKycPreview] = useState<KycAttachmentPreview | null>(null)
+  const [kycPreviewError, setKycPreviewError] = useState(false)
   const [recoveryRequests, setRecoveryRequests] = useState<RecoveryCodeReviewRequestItem[]>([])
   const [recoveryLoading, setRecoveryLoading] = useState(false)
   const [recoveryReviewLoadingId, setRecoveryReviewLoadingId] = useState<number | null>(null)
@@ -957,6 +965,29 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     } finally {
       setKycLoading(false)
     }
+  }
+
+  function getKycAttachmentLabel(item: KycSubmissionRow) {
+    return item.display_name || item.email || item.phone || `المستخدم #${item.user_id}`
+  }
+
+  function openKycAttachmentPreview(title: string, url: string | null | undefined, alt: string) {
+    const normalizedUrl = String(url || '').trim()
+    if (!normalizedUrl) {
+      setMessage({ type: 'error', text: 'هذا المرفق غير متاح حاليًا أو أن رابطه مفقود.' })
+      return
+    }
+    setKycPreview({ title, url: normalizedUrl, alt })
+    setKycPreviewError(false)
+  }
+
+  function handleOpenKycAttachmentInNewTab(url: string | null | undefined) {
+    const normalizedUrl = String(url || '').trim()
+    if (!normalizedUrl) {
+      setMessage({ type: 'error', text: 'تعذر فتح المرفق لأن الرابط غير متاح.' })
+      return
+    }
+    window.open(normalizedUrl, '_blank', 'noopener,noreferrer')
   }
 
   async function handleReviewRecovery(item: RecoveryCodeReviewRequestItem, decision: 'approve' | 'reject') {
@@ -3161,11 +3192,74 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                         <small>
                           الحالة الحالية: {item.review_status} | تاريخ الرفع: {item.created_at}
                         </small>
-                        <small>
-                          <a href={item.id_document_path} target="_blank" rel="noreferrer" className="owner-nav-link">عرض الهوية</a>
-                          {' | '}
-                          <a href={item.selfie_path} target="_blank" rel="noreferrer" className="owner-nav-link">عرض السيلفي</a>
-                        </small>
+                        <div className="owner-kyc-attachments">
+                          <button
+                            type="button"
+                            className="owner-kyc-attachment-btn"
+                            onClick={() =>
+                              openKycAttachmentPreview(
+                                `الهوية - ${getKycAttachmentLabel(item)}`,
+                                item.id_document_url || item.id_document_path,
+                                `الهوية - ${getKycAttachmentLabel(item)}`,
+                              )
+                            }
+                          >
+                            عرض الهوية
+                          </button>
+                          <button
+                            type="button"
+                            className="owner-kyc-attachment-btn"
+                            onClick={() =>
+                              openKycAttachmentPreview(
+                                `السيلفي - ${getKycAttachmentLabel(item)}`,
+                                item.selfie_url || item.selfie_path,
+                                `السيلفي - ${getKycAttachmentLabel(item)}`,
+                              )
+                            }
+                          >
+                            عرض السيلفي
+                          </button>
+                          {item.avatar_url ? (
+                            <button
+                              type="button"
+                              className="owner-kyc-attachment-btn"
+                              onClick={() =>
+                                openKycAttachmentPreview(
+                                  `صورة الحساب - ${getKycAttachmentLabel(item)}`,
+                                  item.avatar_url,
+                                  `صورة الحساب - ${getKycAttachmentLabel(item)}`,
+                                )
+                              }
+                            >
+                              صورة الحساب
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="owner-kyc-attachment-links">
+                          <button
+                            type="button"
+                            className="owner-nav-link owner-kyc-link-btn"
+                            onClick={() => handleOpenKycAttachmentInNewTab(item.id_document_url || item.id_document_path)}
+                          >
+                            فتح الهوية
+                          </button>
+                          <button
+                            type="button"
+                            className="owner-nav-link owner-kyc-link-btn"
+                            onClick={() => handleOpenKycAttachmentInNewTab(item.selfie_url || item.selfie_path)}
+                          >
+                            فتح السيلفي
+                          </button>
+                          {item.avatar_url ? (
+                            <button
+                              type="button"
+                              className="owner-nav-link owner-kyc-link-btn"
+                              onClick={() => handleOpenKycAttachmentInNewTab(item.avatar_url)}
+                            >
+                              فتح صورة الحساب
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="owner-history-actions">
                         <button
@@ -4677,6 +4771,53 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           </section>
         </div>
       </div>
+      {kycPreview ? (
+        <div className="owner-kyc-preview-backdrop" onClick={() => setKycPreview(null)}>
+          <div
+            className="owner-kyc-preview-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={kycPreview.title}
+          >
+            <div className="owner-kyc-preview-header">
+              <div>
+                <h3 className="owner-kyc-preview-title">{kycPreview.title}</h3>
+                <p className="owner-kyc-preview-subtitle">يمكنك المعاينة هنا أو فتح المرفق في تبويب جديد.</p>
+              </div>
+              <button type="button" className="owner-kyc-preview-close" onClick={() => setKycPreview(null)}>
+                ×
+              </button>
+            </div>
+            <div className="owner-kyc-preview-content">
+              {kycPreviewError ? (
+                <div className="owner-kyc-preview-error">
+                  تعذر تحميل الصورة. قد يكون الملف محذوفًا أو أن الرابط غير صالح.
+                </div>
+              ) : (
+                <img
+                  src={kycPreview.url}
+                  alt={kycPreview.alt}
+                  className="owner-kyc-preview-image"
+                  onError={() => setKycPreviewError(true)}
+                />
+              )}
+            </div>
+            <div className="owner-kyc-preview-actions">
+              <button
+                type="button"
+                className="wallet-action-btn owner-set-btn"
+                onClick={() => handleOpenKycAttachmentInNewTab(kycPreview.url)}
+              >
+                فتح في تبويب جديد
+              </button>
+              <button type="button" className="wallet-action-btn wallet-action-withdraw" onClick={() => setKycPreview(null)}>
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
