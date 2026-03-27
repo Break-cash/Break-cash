@@ -19,6 +19,7 @@ import {
   updateBalanceRules,
 } from '../../api'
 import { useI18n } from '../../i18nCore'
+import { getWithdrawalRequestDetails } from '../../utils/withdrawRequestDetails'
 
 function CopyButton({ value, label }: { value: string; label?: string }) {
   const { t } = useI18n()
@@ -698,6 +699,11 @@ export function AdminBalancesPage() {
                 <span>{item.user_display_name || item.user_email || item.user_phone || `#${item.user_id}`}</span>
                 <span>{Number(item.amount).toFixed(2)} {item.currency}</span>
                 <span>{item.method}</span>
+                <span>
+                  {getWithdrawalRequestDetails(item.account_info).map((detail) => (
+                    <div key={`${item.id}-${detail}`}>{detail}</div>
+                  ))}
+                </span>
                 <span className={`request-status-badge ${statusClass(item.request_status)}`}>{getStatusLabel(item.request_status)}</span>
                 <input
                   className="field-input"
@@ -705,6 +711,7 @@ export function AdminBalancesPage() {
                   value={adminNoteById[`wd_${item.id}`] || ''}
                   onChange={(e) => setAdminNoteById((prev) => ({ ...prev, [`wd_${item.id}`]: e.target.value }))}
                 />
+                {item.user_notes ? <span className="owner-history-note">{item.user_notes}</span> : null}
                 {item.request_status === 'pending' ? (
                   <div className="owner-buttons">
                     <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={() => reviewWithdrawal(item.id, 'approve')}>

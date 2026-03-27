@@ -90,3 +90,18 @@ export function requirePermission(db, permission) {
     return next()
   }
 }
+
+export function requireAnyPermission(db, permissions) {
+  const normalizedPermissions = Array.isArray(permissions)
+    ? permissions.map((permission) => String(permission || '').trim()).filter(Boolean)
+    : []
+  return async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'AUTH_REQUIRED' })
+    for (const permission of normalizedPermissions) {
+      if (await hasPermission(db, req.user.id, permission)) {
+        return next()
+      }
+    }
+    return res.status(403).json({ error: 'FORBIDDEN' })
+  }
+}

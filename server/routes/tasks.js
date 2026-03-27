@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
-import { requireAuth, requirePermission } from '../middleware/auth.js'
+import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth.js'
 import { adjustBalance, createStrategyPromoReward, createTaskReward, getMainBalance } from '../services/wallet-service.js'
 import { fetchBestQuote, sharedMarketFeed } from '../services/marketFeed.js'
 import { createLocalizedNotification } from '../services/notifications.js'
@@ -840,7 +840,9 @@ export function createTasksRouter(db) {
     }
   })
 
-  router.get('/admin/strategy-codes', requirePermission(db, TASK_PERMISSION), async (_req, res) => {
+  const requireStrategyCodeManager = requireAnyPermission(db, [TASK_PERMISSION, 'trades.manage'])
+
+  router.get('/admin/strategy-codes', requireStrategyCodeManager, async (_req, res) => {
     const rows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
@@ -891,7 +893,7 @@ export function createTasksRouter(db) {
     })
   })
 
-  router.post('/admin/strategy-codes', requirePermission(db, TASK_PERMISSION), async (req, res) => {
+  router.post('/admin/strategy-codes', requireStrategyCodeManager, async (req, res) => {
     const id = Number(req.body?.id || 0)
     const code = normalizeCode(req.body?.code)
     const title = normalizeText(req.body?.title, 90)
@@ -930,7 +932,7 @@ export function createTasksRouter(db) {
     return res.json({ ok: true, id: Number(inserted.lastID || inserted.rows?.[0]?.id || 0) })
   })
 
-  router.post('/admin/strategy-codes/:id/toggle', requirePermission(db, TASK_PERMISSION), async (req, res) => {
+  router.post('/admin/strategy-codes/:id/toggle', requireStrategyCodeManager, async (req, res) => {
     const id = Number(req.params.id || 0)
     const isActive = req.body?.isActive === false ? 0 : 1
     if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
@@ -944,7 +946,7 @@ export function createTasksRouter(db) {
     return res.json({ ok: true })
   })
 
-  router.delete('/admin/strategy-codes/:id', requirePermission(db, TASK_PERMISSION), async (req, res) => {
+  router.delete('/admin/strategy-codes/:id', requireStrategyCodeManager, async (req, res) => {
     const id = Number(req.params.id || 0)
     if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
     await run(db, `DELETE FROM strategy_codes WHERE id = ?`, [id])

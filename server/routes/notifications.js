@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
-import { requireApproved, requireAuth, requirePermission, requireRole } from '../middleware/auth.js'
+import { requireAnyPermission, requireApproved, requireAuth, requirePermission } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import {
   deactivateAllUserPushSubscriptions,
@@ -122,7 +122,7 @@ export function createNotificationsRouter(db) {
     return res.json({ ok: true })
   })
 
-  router.post('/create', requirePermission(db, 'manage_users'), async (req, res) => {
+  router.post('/create', requireAnyPermission(db, ['manage_users', 'notifications.manage']), async (req, res) => {
     const userId = Number(req.body?.userId)
     const title = String(req.body?.title || '').trim()
     const body = String(req.body?.body || '').trim()
@@ -136,7 +136,7 @@ export function createNotificationsRouter(db) {
     return res.status(201).json({ ok: true })
   })
 
-  router.post('/broadcast', requireRole('owner'), async (req, res) => {
+  router.post('/broadcast', requireAnyPermission(db, ['notifications.manage']), async (req, res) => {
     const title = String(req.body?.title || '').trim().slice(0, 180)
     const body = String(req.body?.body || '').trim().slice(0, 1200)
     const vibrate = req.body?.vibrate !== false

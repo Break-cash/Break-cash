@@ -218,6 +218,20 @@ export async function sendPushTest() {
   }) as Promise<{ ok: boolean; result: { sent: number; failed: number } }>
 }
 
+export async function createAdminNotification(payload: { userId: number; title: string; body: string }) {
+  return apiFetch('/api/notifications/create', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function broadcastAdminNotification(payload: { title: string; body: string; vibrate?: boolean }) {
+  return apiFetch('/api/notifications/broadcast', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ ok: boolean; createdCount: number; vibrate: boolean }>
+}
+
 export async function getMyPermissions() {
   return apiFetch('/api/permissions/my') as Promise<{ role: string; permissions: string[] }>
 }

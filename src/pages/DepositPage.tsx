@@ -32,6 +32,7 @@ import { DEPOSIT_TERMS_AR } from '../depositTerms'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
+import { getWithdrawalRequestDetails } from '../utils/withdrawRequestDetails'
 
 type DepositPageProps = {
   user: AuthUser | null
@@ -792,10 +793,16 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
                   <span>#{item.id}</span>
                   <span>{Number(item.amount).toFixed(2)} {item.currency}</span>
                   <span>{item.method}</span>
+                  <span>
+                    {getWithdrawalRequestDetails(item.account_info).map((detail) => (
+                      <div key={`${item.id}-${detail}`}>{detail}</div>
+                    ))}
+                  </span>
                   <span className={`request-status-badge ${statusBadgeClass(item.request_status)}`}>
                     {statusLabel(item.request_status)}
                   </span>
                   <span className="owner-history-date">{item.created_at}</span>
+                  {item.user_notes ? <span className="owner-history-note">{item.user_notes}</span> : null}
                   {item.admin_note ? <span className="owner-history-note">{item.admin_note}</span> : null}
                 </li>
               ))}
