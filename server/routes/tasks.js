@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth.js'
-import { adjustBalance, createStrategyPromoReward, createTaskReward, getMainBalance } from '../services/wallet-service.js'
+import { adjustBalance, createStrategyPromoReward, createStrategyTradeProfitReward, createTaskReward, getMainBalance } from '../services/wallet-service.js'
 import { fetchBestQuote, sharedMarketFeed } from '../services/marketFeed.js'
 import { createLocalizedNotification } from '../services/notifications.js'
 
@@ -120,16 +120,24 @@ async function settleStrategyTradeUsage(tx, usage, actorUserId) {
   const stakeAmount = Number(usage.stake_amount || 0)
   const returnPercent = Number(usage.trade_return_percent || 0)
   const profitAmount = Number(((stakeAmount * returnPercent) / 100).toFixed(8))
-  const payoutAmount = Number((stakeAmount + profitAmount).toFixed(8))
-  const credit = await adjustBalance(tx, {
+  const principalCredit = await adjustBalance(tx, {
     userId: usage.user_id,
     currency: 'USDT',
-    delta: payoutAmount,
-    referenceType: 'strategy_trade_settlement',
+    delta: stakeAmount,
+    referenceType: 'strategy_trade_principal_return',
     referenceId: Number(usage.code_id),
-    idempotencyKey: `strategy_trade_settlement_${usage.id}`,
+    idempotencyKey: `strategy_trade_principal_${usage.id}`,
     createdBy: actorUserId,
   })
+  const profitCredit =
+    profitAmount > 0
+      ? await createStrategyTradeProfitReward(tx, {
+          userId: usage.user_id,
+          amount: profitAmount,
+          usageId: Number(usage.id),
+          currency: 'USDT',
+        })
+      : null
   const nextMeta = JSON.stringify({
     ...meta,
     autoSettled: true,
@@ -147,19 +155,181 @@ async function settleStrategyTradeUsage(tx, usage, actorUserId) {
          settled_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
-    [Number(liveQuote.price || 0), profitAmount, credit.walletTxnId, nextMeta, usage.id],
+    [Number(liveQuote.price || 0), profitAmount, principalCredit.walletTxnId, nextMeta, usage.id],
   )
   await createLocalizedNotification(tx, usage.user_id, 'strategy_trade_settled', {
-    amount: payoutAmount,
+    amount: profitAmount,
     currency: 'USDT',
   })
   return {
     usageId: Number(usage.id || 0),
     status: 'trade_settled',
     exitPrice: Number(liveQuote.price || 0),
-    payoutAmount,
+    payoutAmount: Number((stakeAmount + profitAmount).toFixed(8)),
     profitAmount,
-    balanceAfter: credit.balanceAfter,
+    balanceAfter: principalCredit.balanceAfter,
+    profitLockedUntil: profitCredit?.lockedUntil || null,
+  }
+}
+
+async function repairSettledStrategyTradeUsage(tx, usage, actorUserId) {
+  if (!usage) return { repaired: false, reason: 'NOT_FOUND' }
+  if (String(usage.status || '') !== 'trade_settled') return { repaired: false, reason: 'NOT_SETTLED' }
+
+  const usageId = Number(usage.id || 0)
+  const codeId = Number(usage.code_id || 0)
+  const userId = Number(usage.user_id || 0)
+  const stakeAmount = Number(usage.stake_amount || 0)
+  const rewardValue = Number(usage.reward_value || 0)
+  const returnPercent = Number(usage.trade_return_percent || 0)
+  const profitAmount = Number((rewardValue > 0 ? rewardValue : (stakeAmount * returnPercent) / 100).toFixed(8))
+
+  const linkedTxn = await get(
+    tx,
+    `SELECT id, reference_type, amount, metadata
+     FROM wallet_transactions
+     WHERE user_id = ?
+       AND currency = 'USDT'
+       AND source_type = 'system'
+       AND (
+         id = ?
+         OR idempotency_key = ?
+         OR (reference_type = 'strategy_trade_settlement' AND reference_id = ?)
+         OR (reference_type = 'admin_adjust' AND metadata LIKE ?)
+       )
+     ORDER BY id DESC
+     LIMIT 1`,
+    [userId, Number(usage.wallet_credit_txn_id || 0), `strategy_trade_principal_${usageId}`, codeId, `%usageId=${usageId}%`],
+  )
+
+  const handledByLegacyOrManual =
+    linkedTxn &&
+    (String(linkedTxn.reference_type || '') === 'strategy_trade_settlement' ||
+      String(linkedTxn.reference_type || '') === 'admin_adjust')
+
+  const principalCredit =
+    linkedTxn && Number(linkedTxn.amount || 0) > 0
+      ? { walletTxnId: Number(linkedTxn.id || 0), balanceAfter: await getMainBalance(tx, userId, 'USDT') }
+      : stakeAmount > 0
+        ? await adjustBalance(tx, {
+            userId,
+            currency: 'USDT',
+            delta: stakeAmount,
+            referenceType: 'strategy_trade_principal_return',
+            referenceId: codeId,
+            idempotencyKey: `strategy_trade_principal_${usageId}`,
+            createdBy: actorUserId,
+          })
+        : { walletTxnId: null, balanceAfter: await getMainBalance(tx, userId, 'USDT') }
+
+  let profitCredit = null
+  if (!handledByLegacyOrManual && profitAmount > 0) {
+    profitCredit = await createStrategyTradeProfitReward(tx, {
+      userId,
+      amount: profitAmount,
+      usageId,
+      currency: 'USDT',
+    })
+  }
+
+  const meta = parseJsonSafe(usage.metadata_json, {})
+  const nextMeta = JSON.stringify({
+    ...meta,
+    settlementRepairCheckedAt: new Date().toISOString(),
+    settlementRepairActor: actorUserId,
+    settlementRepairMode: handledByLegacyOrManual
+      ? String(linkedTxn.reference_type || 'existing_credit')
+      : 'principal_and_profit_rehydrated',
+  })
+
+  await run(
+    tx,
+    `UPDATE strategy_code_usages
+     SET reward_value = ?,
+         wallet_credit_txn_id = COALESCE(wallet_credit_txn_id, ?),
+         metadata_json = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [profitAmount, principalCredit?.walletTxnId || null, nextMeta, usageId],
+  )
+
+  return {
+    repaired: true,
+    principalTxnId: principalCredit?.walletTxnId || null,
+    profitLockedUntil: profitCredit?.lockedUntil || null,
+    skippedProfitRepair: handledByLegacyOrManual,
+  }
+}
+
+async function repairSettledStrategyTradeGaps(db, userId, limit = 20) {
+  const rows = await all(
+    db,
+    `SELECT id
+     FROM strategy_code_usages
+     WHERE user_id = ?
+       AND status = 'trade_settled'
+     ORDER BY id DESC
+     LIMIT ?`,
+    [userId, Math.max(1, Math.min(100, Number(limit) || 20))],
+  )
+
+  for (const row of rows) {
+    try {
+      await withTransaction(db, async (tx) => {
+        const usage = await get(
+          tx,
+          `SELECT id, user_id, code_id, status, selected_symbol, stake_amount, reward_value,
+                  trade_return_percent, wallet_credit_txn_id, metadata_json
+           FROM strategy_code_usages
+           WHERE id = ? AND user_id = ?
+           LIMIT 1`,
+          [row.id, userId],
+        )
+        if (!usage) return
+        const profitEntry = await get(
+          tx,
+          `SELECT id
+           FROM earning_entries
+           WHERE source_type = 'tasks'
+             AND reference_type = 'strategy_trade_profit'
+             AND reference_id = ?
+           LIMIT 1`,
+          [usage.id],
+        )
+        const principalTxn = await get(
+          tx,
+          `SELECT id
+           FROM wallet_transactions
+           WHERE user_id = ?
+             AND currency = 'USDT'
+             AND source_type = 'system'
+             AND (
+               id = ?
+               OR idempotency_key = ?
+               OR (reference_type = 'strategy_trade_settlement' AND reference_id = ?)
+               OR (reference_type = 'admin_adjust' AND metadata LIKE ?)
+             )
+           LIMIT 1`,
+          [
+            userId,
+            Number(usage.wallet_credit_txn_id || 0),
+            `strategy_trade_principal_${usage.id}`,
+            Number(usage.code_id || 0),
+            `%usageId=${Number(usage.id || 0)}%`,
+          ],
+        )
+
+        const rewardValue = Number(usage.reward_value || 0)
+        if (principalTxn && (profitEntry || rewardValue <= 0)) return
+        await repairSettledStrategyTradeUsage(tx, usage, userId)
+      })
+    } catch (error) {
+      console.warn('[strategy-trade] settlement repair skipped', {
+        userId,
+        usageId: Number(row.id || 0),
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 }
 
@@ -525,6 +695,7 @@ export function createTasksRouter(db) {
   })
 
   router.get('/strategy-codes/my', async (req, res) => {
+    await repairSettledStrategyTradeGaps(db, req.user.id)
     await autoSettleDueStrategyTrades(db, req.user.id)
     const codeRows = await all(
       db,
@@ -592,10 +763,26 @@ export function createTasksRouter(db) {
     }
     const balanceSnapshot = await getMainBalance(db, req.user.id, 'USDT')
     const featureType = normalizeFeatureType(row.feature_type)
-    const symbol = requestedSymbol || String(row.asset_symbol || 'BTCUSDT').toUpperCase()
+    const configuredSymbol = String(row.asset_symbol || 'BTCUSDT').toUpperCase()
+    if (requestedSymbol && requestedSymbol !== configuredSymbol) {
+      return res.status(400).json({ error: 'SYMBOL_LOCKED', assetSymbol: configuredSymbol })
+    }
+    const symbol = configuredSymbol
     const quote = await resolveLiveQuote(symbol).catch(() => null)
 
     if (featureType === 'trial_trade') {
+      const activeTrade = await get(
+        db,
+        `SELECT id
+         FROM strategy_code_usages
+         WHERE user_id = ?
+           AND status = 'trade_active'
+         LIMIT 1`,
+        [req.user.id],
+      )
+      if (activeTrade) {
+        return res.status(400).json({ error: 'ACTIVE_TRADE_EXISTS', usageId: Number(activeTrade.id || 0) })
+      }
       const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
       if (stakeAmount <= 0) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
       return res.json({
@@ -668,11 +855,23 @@ export function createTasksRouter(db) {
         if (existing) throw new Error('CODE_ALREADY_USED')
 
         const featureType = normalizeFeatureType(row.feature_type)
-        const symbol = requestedSymbol || String(row.asset_symbol || 'BTCUSDT').toUpperCase()
+        const configuredSymbol = String(row.asset_symbol || 'BTCUSDT').toUpperCase()
+        if (requestedSymbol && requestedSymbol !== configuredSymbol) throw new Error('SYMBOL_LOCKED')
+        const symbol = configuredSymbol
         const liveQuote = await resolveLiveQuote(symbol)
         const balanceSnapshot = await getMainBalance(tx, req.user.id, 'USDT')
 
         if (featureType === 'trial_trade') {
+          const activeTrade = await get(
+            tx,
+            `SELECT id
+             FROM strategy_code_usages
+             WHERE user_id = ?
+               AND status = 'trade_active'
+             LIMIT 1`,
+            [req.user.id],
+          )
+          if (activeTrade) throw new Error('ACTIVE_TRADE_EXISTS')
           const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
           if (stakeAmount <= 0) throw new Error('INSUFFICIENT_BALANCE')
           const settleDelayMs = getStrategyTradeDelayMs()
@@ -796,6 +995,8 @@ export function createTasksRouter(db) {
         'CODE_NOT_FOUND',
         'CODE_EXPIRED',
         'CODE_ALREADY_USED',
+        'ACTIVE_TRADE_EXISTS',
+        'SYMBOL_LOCKED',
         'INVALID_REWARD_RULE',
         'INSUFFICIENT_BALANCE',
         'QUOTE_UNAVAILABLE',
@@ -949,6 +1150,19 @@ export function createTasksRouter(db) {
   router.delete('/admin/strategy-codes/:id', requireStrategyCodeManager, async (req, res) => {
     const id = Number(req.params.id || 0)
     if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const usageRow = await get(
+      db,
+      `SELECT COUNT(*) AS usage_count
+       FROM strategy_code_usages
+       WHERE code_id = ?`,
+      [id],
+    )
+    if (Number(usageRow?.usage_count || 0) > 0) {
+      return res.status(400).json({
+        error: 'CODE_HAS_USAGES',
+        message: 'لا يمكن حذف كود الاستراتيجية بعد استخدامه. أوقفه فقط للحفاظ على السجل والصفقات المرتبطة به.',
+      })
+    }
     await run(db, `DELETE FROM strategy_codes WHERE id = ?`, [id])
     return res.json({ ok: true })
   })

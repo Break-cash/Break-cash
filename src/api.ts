@@ -2502,6 +2502,7 @@ export async function settleStrategyTrade(usageId: number) {
     profitAmount: number
     balanceAfter: number
     availableAt?: string | null
+    profitLockedUntil?: string | null
   }>
 }
 

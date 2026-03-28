@@ -64,17 +64,32 @@ function formatDate(s: string): string {
   })
 }
 
-function formatRemainingDuration(targetAt: string | null | undefined): string {
+function formatRemainingDuration(targetAt: string | null | undefined, nowMs = Date.now()): string {
   if (!targetAt) return ''
-  const ms = Date.parse(targetAt) - Date.now()
+  const ms = Date.parse(targetAt) - nowMs
   if (!Number.isFinite(ms) || ms <= 0) return 'الآن'
-  const totalMinutes = Math.ceil(ms / 60000)
-  const days = Math.floor(totalMinutes / (60 * 24))
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
-  const minutes = totalMinutes % 60
+  const totalSeconds = Math.ceil(ms / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
   if (days > 0) return `${days} يوم ${hours} ساعة`
   if (hours > 0) return `${hours} ساعة ${minutes} دقيقة`
   return `${minutes} دقيقة`
+}
+
+function formatLiveCountdown(targetAt: string | null | undefined, nowMs: number): string {
+  if (!targetAt) return ''
+  const ms = Date.parse(targetAt) - nowMs
+  if (!Number.isFinite(ms) || ms <= 0) return 'الآن'
+  const totalSeconds = Math.ceil(ms / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (days > 0) return `${days} يوم ${hours} ساعة ${minutes} دقيقة`
+  if (hours > 0) return `${hours} ساعة ${minutes} دقيقة ${seconds} ثانية`
+  if (minutes > 0) return `${minutes} دقيقة ${seconds} ثانية`
+  return `${seconds} ثانية`
 }
 
 function parseMetadata(meta: string | null): string {
@@ -165,6 +180,7 @@ function buildEarningDisplayGroup(group: EarningGroup, t: (key: string) => strin
 
 export function WalletPage() {
   const { t } = useI18n()
+  const [nowTick, setNowTick] = useState(() => Date.now())
   const [tab, setTab] = useState<TabId>('overview')
   const [transactions, setTransactions] = useState<WalletTxn[]>([])
   const [earningGrouped, setEarningGrouped] = useState<EarningGroup[]>([])
@@ -232,6 +248,12 @@ export function WalletPage() {
     }, 0)
     return () => window.clearTimeout(id)
   }, [loadHistory, tab])
+
+  useEffect(() => {
+    if (tab !== 'earnings') return
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [tab])
 
   const earningDisplayGroups = useMemo(
     () =>
@@ -549,6 +571,7 @@ export function WalletPage() {
               <p className="mt-0.5">{t('earning_transferred_explain')}</p>
               <p className="mt-2 font-medium text-[var(--text-primary)]">{t('earning_status_pending')}</p>
               <p className="mt-0.5">{t('earning_pending_explain')}</p>
+              <p className="mt-2 text-amber-200">أرباح المهام والأكواد الاستراتيجية تصبح قابلة للسحب بعد 7 أيام كاملة من وقت الربح.</p>
             </div>
           </div>
 
@@ -601,9 +624,14 @@ export function WalletPage() {
                             {` · ${formatDate(entry.created_at)}`}
                           </p>
                           {entry.status === 'pending' && entry.locked_until ? (
-                            <p className="mt-1 text-[11px] text-amber-300">
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-1 font-mono text-[11px] text-amber-200">
+                                {formatLiveCountdown(entry.locked_until, nowTick)}
+                              </span>
+                              <p className="text-[11px] text-amber-300">
                               {`متاح للسحب بعد ${formatRemainingDuration(entry.locked_until)} (${formatDate(entry.locked_until)}).`}
                             </p>
+                            </div>
                           ) : null}
                           {entry.status === 'pending' && entry.payout_mode === 'bonus_locked' ? (
                             <p className="mt-1 text-[11px] text-rose-300">هذا الربح غير قابل للسحب حاليًا.</p>

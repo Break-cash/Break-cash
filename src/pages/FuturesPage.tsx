@@ -21,6 +21,34 @@ import { useI18n } from '../i18nCore'
 
 type Candle = { time: number; open: number; high: number; low: number; close: number }
 const intervals = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
+const TASK_REWARD_LOCK_MS = 7 * 24 * 60 * 60 * 1000
+
+function formatUnlockDate(value?: string | null) {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleString('ar', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatLiveCountdown(value?: string | null, now = Date.now()) {
+  if (!value) return 'بانتظار تحديد موعد الإتاحة'
+  const target = Date.parse(value)
+  if (Number.isNaN(target)) return 'بانتظار تحديد موعد الإتاحة'
+  const diff = target - now
+  if (diff <= 0) return 'أصبح الربح قابلاً للسحب الآن'
+  const totalSeconds = Math.floor(diff / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${days}ي ${hours}س ${minutes}د ${seconds}ث`
+}
 
 export function FuturesPage() {
   const { t } = useI18n()
@@ -37,6 +65,7 @@ export function FuturesPage() {
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
+  const [nowTick, setNowTick] = useState(() => Date.now())
   const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
     active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
@@ -44,16 +73,46 @@ export function FuturesPage() {
   })
 
   const current = useMemo(() => quotes.find((item) => item.symbol === selected) || quotes[0], [quotes, selected])
-  const activeTrade = useMemo(
-    () => codes.map((item) => item.usage).find((usage) => usage?.status === 'trade_active') || null,
+  const activeTrades = useMemo(
+    () =>
+      codes
+        .map((item) => item.usage)
+        .filter((usage): usage is NonNullable<typeof usage> => Boolean(usage))
+        .filter((usage) => usage.status === 'trade_active')
+        .sort((left, right) => {
+          const leftTime = Date.parse(left.confirmedAt || left.usedAt || '') || 0
+          const rightTime = Date.parse(right.confirmedAt || right.usedAt || '') || 0
+          return rightTime - leftTime
+        }),
     [codes],
   )
   const publishedStrategyTrades = useMemo(
     () => codes.filter((item) => item.featureType === 'trial_trade' && item.isActive),
     [codes],
   )
-  const activeTradeAutoSettleAtMs = activeTrade?.autoSettleAt ? Date.parse(activeTrade.autoSettleAt) : Number.NaN
-  const activeTradeReadyToSettle = !!activeTrade && (Number.isNaN(activeTradeAutoSettleAtMs) || activeTradeAutoSettleAtMs <= Date.now())
+  const latestSettledTrade = useMemo(() => {
+    const settledUsages = codes
+      .map((item) => item.usage)
+      .filter((usage): usage is NonNullable<typeof usage> => Boolean(usage))
+      .filter((usage) => usage.status === 'trade_settled')
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.settledAt || left.usedAt || '') || 0
+        const rightTime = Date.parse(right.settledAt || right.usedAt || '') || 0
+        return rightTime - leftTime
+      })
+    return settledUsages[0] || null
+  }, [codes])
+  const latestSettledTradeUnlockAt = useMemo(() => {
+    if (!latestSettledTrade?.settledAt) return null
+    const settledAtMs = Date.parse(latestSettledTrade.settledAt)
+    if (Number.isNaN(settledAtMs)) return null
+    return new Date(settledAtMs + TASK_REWARD_LOCK_MS).toISOString()
+  }, [latestSettledTrade])
+  const latestSettledTradeProfit = useMemo(() => {
+    if (!latestSettledTrade) return 0
+    return Number(latestSettledTrade.stakeAmount || 0) * (Number(latestSettledTrade.tradeReturnPercent || 0) / 100)
+  }, [latestSettledTrade])
+  const activeTradesCount = activeTrades.length
 
   useEffect(() => {
     if (quotes.length > 0 && !quotes.find((x) => x.symbol === selected)) {
@@ -102,6 +161,11 @@ export function FuturesPage() {
     getStrategyTradeDisplayConfig()
       .then((res) => setTradeDisplayConfig(res.config))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000)
+    return () => window.clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -230,16 +294,16 @@ export function FuturesPage() {
     }
   }
 
-  async function handleSettleTrade() {
-    if (!activeTrade) return
+  async function handleSettleTrade(usageId: number) {
+    if (!usageId) return
     setSubmitting(true)
     setMessage(null)
     try {
-      const res = await settleStrategyTrade(activeTrade.id)
+      const res = await settleStrategyTrade(usageId)
       await refreshCodes()
       setMessage({
         type: 'success',
-        text: `${tradeDisplayConfig.settled_notice} تم إرجاع ${Number(res.payoutAmount || 0).toFixed(2)} USDT إلى رصيدك.`,
+        text: `${tradeDisplayConfig.settled_notice} تم إرجاع أصل الصفقة فورًا، بينما ربح الصفقة ${Number(res.profitAmount || 0).toFixed(2)} USDT يصبح قابلاً للسحب بتاريخ ${formatUnlockDate(res.profitLockedUntil)}.`,
       })
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إغلاق الصفقة الاستراتيجية.' })
@@ -248,8 +312,8 @@ export function FuturesPage() {
     }
   }
 
-  async function handleCopyStrategyCode() {
-    const codeToCopy = String(activeTrade?.strategyCode || '').trim()
+  async function handleCopyStrategyCode(strategyCode?: string | null) {
+    const codeToCopy = String(strategyCode || '').trim()
     if (!codeToCopy) return
     try {
       await navigator.clipboard.writeText(codeToCopy)
@@ -307,7 +371,7 @@ export function FuturesPage() {
           </div>
           <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
             <div className="text-[11px] text-app-muted">حالة الصفقة</div>
-            <div className="mt-1 text-sm font-semibold text-white">{activeTrade ? 'مفتوحة' : 'لا توجد صفقة نشطة'}</div>
+            <div className="mt-1 text-sm font-semibold text-white">{activeTradesCount > 0 ? 'مفتوحة' : 'لا توجد صفقة نشطة'}</div>
           </div>
           <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
             <div className="text-[11px] text-app-muted">الأصل</div>
@@ -484,71 +548,133 @@ export function FuturesPage() {
         ) : null}
       </section>
 
-      {activeTrade ? (
+      {activeTrades.length > 0 ? (
         <section className="rounded-2xl border border-brand-blue/25 bg-app-card p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-white">حالة الصفقة الاستراتيجية</h2>
               <p className="text-xs text-app-muted">{tradeDisplayConfig.active_notice}</p>
             </div>
-            <button
-              type="button"
-              className="wallet-action-btn owner-set-btn"
-              onClick={handleSettleTrade}
-              disabled={submitting || !activeTradeReadyToSettle}
-            >
-              {submitting ? '...' : activeTradeReadyToSettle ? 'إغلاق الصفقة الآن' : 'بانتظار موعد الإغلاق'}
-            </button>
+            <div className="rounded-full border border-brand-blue/20 bg-app-elevated px-3 py-1 text-[11px] font-semibold text-white">
+              {activeTradesCount === 1 ? 'صفقة نشطة واحدة' : `${activeTradesCount} صفقات نشطة`}
+            </div>
+          </div>
+          <div className="space-y-3">
+            {activeTrades.map((trade) => {
+              const tradeAutoSettleAtMs = trade.autoSettleAt ? Date.parse(trade.autoSettleAt) : Number.NaN
+              const tradeReadyToSettle = Number.isNaN(tradeAutoSettleAtMs) || tradeAutoSettleAtMs <= Date.now()
+              return (
+                <div key={trade.id} className="rounded-2xl border border-brand-blue/20 bg-app-elevated p-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-white">{trade.selectedSymbol}</div>
+                      <div className="text-xs text-app-muted">
+                        {String(trade.expertName || '').trim() || 'يظهر هنا الاسم الذي تحدده الإدارة لهذه الصفقة'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="wallet-action-btn owner-set-btn"
+                      onClick={() => {
+                        handleSettleTrade(trade.id).catch(() => {})
+                      }}
+                      disabled={submitting || !tradeReadyToSettle}
+                    >
+                      {submitting ? '...' : tradeReadyToSettle ? 'إغلاق الصفقة الآن' : 'بانتظار موعد الإغلاق'}
+                    </button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">سعر الدخول</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{Number(trade.entryPrice || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">المبلغ المحجوز</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{Number(trade.stakeAmount || 0).toFixed(2)} USDT</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">نسبة العائد المحددة</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{Number(trade.tradeReturnPercent || 0).toFixed(2)}%</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">موعد الإغلاق</div>
+                      <div className="mt-1 text-sm font-semibold text-white">
+                        {trade.autoSettleAt ? formatUnlockDate(trade.autoSettleAt) : 'جاهزة الآن'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+                      <div className="text-[11px] text-amber-100/80">كود الاستراتيجية</div>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          className="field-input flex-1"
+                          value={String(trade.strategyCode || '')}
+                          readOnly
+                          placeholder="سيظهر الكود هنا"
+                        />
+                        <button
+                          type="button"
+                          className="wallet-action-btn owner-set-btn whitespace-nowrap"
+                          onClick={() => {
+                            handleCopyStrategyCode(trade.strategyCode).catch(() => {})
+                          }}
+                          disabled={!String(trade.strategyCode || '').trim()}
+                        >
+                          نسخ
+                        </button>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">وصف المعالجة</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{tradeDisplayConfig.active_notice}</div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {latestSettledTrade ? (
+        <section className="rounded-2xl border border-amber-500/25 bg-app-card p-3">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">آخر صفقة استراتيجية مكتملة</h2>
+              <p className="text-xs text-app-muted">
+                أصل الصفقة عاد إلى الرصيد، أما الربح فيبقى مقفلاً لمدة 7 أيام كاملة من وقت التسوية.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-center">
+              <div className="text-[11px] text-amber-200/80">الوقت المتبقي لسحب الربح</div>
+              <div className="mt-1 font-mono text-sm font-semibold text-amber-100">
+                {formatLiveCountdown(latestSettledTradeUnlockAt, nowTick)}
+              </div>
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
               <div className="text-[11px] text-app-muted">الرمز</div>
-              <div className="mt-1 text-sm font-semibold text-white">{activeTrade.selectedSymbol}</div>
+              <div className="mt-1 text-sm font-semibold text-white">{latestSettledTrade.selectedSymbol || '--'}</div>
             </div>
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
               <div className="text-[11px] text-app-muted">سعر الدخول</div>
-              <div className="mt-1 text-sm font-semibold text-white">{Number(activeTrade.entryPrice || 0).toLocaleString()}</div>
+              <div className="mt-1 text-sm font-semibold text-white">{Number(latestSettledTrade.entryPrice || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">المبلغ المحجوز</div>
-              <div className="mt-1 text-sm font-semibold text-white">{Number(activeTrade.stakeAmount || 0).toFixed(2)} USDT</div>
+              <div className="text-[11px] text-app-muted">سعر الإغلاق</div>
+              <div className="mt-1 text-sm font-semibold text-white">{Number(latestSettledTrade.exitPrice || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">نسبة العائد المحددة</div>
-              <div className="mt-1 text-sm font-semibold text-white">{Number(activeTrade.tradeReturnPercent || 0).toFixed(2)}%</div>
-            </div>
-            <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2 sm:col-span-2">
-              <div className="text-[11px] text-app-muted">وصف المعالجة</div>
-              <div className="mt-1 text-sm font-semibold text-white">{tradeDisplayConfig.active_notice}</div>
+              <div className="text-[11px] text-app-muted">ربح الصفقة المقفل</div>
+              <div className="mt-1 text-sm font-semibold text-white">{latestSettledTradeProfit.toFixed(2)} USDT</div>
             </div>
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
-              <div className="text-[11px] text-amber-100/80">كود الاستراتيجية</div>
-              <div className="mt-2 flex gap-2">
-                <input
-                  className="field-input flex-1"
-                  value={String(activeTrade.strategyCode || '')}
-                  readOnly
-                  placeholder="سيظهر الكود هنا"
-                />
-                <button
-                  type="button"
-                  className="wallet-action-btn owner-set-btn whitespace-nowrap"
-                  onClick={() => {
-                    handleCopyStrategyCode().catch(() => {})
-                  }}
-                  disabled={!String(activeTrade.strategyCode || '').trim()}
-                >
-                  نسخ
-                </button>
-              </div>
-            </div>
-            <div className="rounded-xl border border-brand-blue/20 bg-app-elevated p-3">
-              <div className="text-[11px] text-app-muted">اسم الخبير المعتمد للصفقة</div>
-              <div className="mt-2 rounded-xl border border-app-border bg-app-card px-3 py-2 text-sm font-semibold text-white">
-                {String(activeTrade.expertName || '').trim() || 'يظهر هنا الاسم الذي تحدده الإدارة لهذه الصفقة'}
-              </div>
+          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
+            <div>موعد فتح السحب: {formatUnlockDate(latestSettledTradeUnlockAt)}</div>
+            <div className="mt-1">
+              يتم عرض هذا العداد لكل صفقة ربح من الأكواد الاستراتيجية حتى يوضح للمستخدم متى يصبح الربح متاحًا للسحب.
             </div>
           </div>
         </section>

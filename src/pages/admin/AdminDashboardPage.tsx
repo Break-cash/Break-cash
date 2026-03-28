@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   broadcastAdminNotification,
   createAdminNotification,
+  deleteStrategyCodeAdmin,
   getAdminDepositRequests,
   getAdminUsersList,
   getAdminWithdrawalRequests,
@@ -63,6 +64,7 @@ export function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [savingDisplay, setSavingDisplay] = useState(false)
   const [savingExpertId, setSavingExpertId] = useState<number | null>(null)
+  const [deletingStrategyId, setDeletingStrategyId] = useState<number | null>(null)
   const [savingStrategy, setSavingStrategy] = useState(false)
   const [sendingNotification, setSendingNotification] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -191,6 +193,23 @@ export function AdminDashboardPage() {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل إنشاء كود الاستراتيجية.' })
     } finally {
       setSavingStrategy(false)
+    }
+  }
+
+  async function handleDeleteStrategyCode(item: StrategyCodeAdminItem) {
+    const confirmed = window.confirm(`هل تريد حذف الصفقة "${item.title || item.code}" نهائيا؟`)
+    if (!confirmed) return
+
+    setDeletingStrategyId(item.id)
+    setMessage(null)
+    try {
+      await deleteStrategyCodeAdmin(item.id)
+      await reloadStrategyCodes()
+      setMessage({ type: 'success', text: 'تم حذف الصفقة السابقة بنجاح.' })
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف الصفقة السابقة.' })
+    } finally {
+      setDeletingStrategyId(null)
     }
   }
 
@@ -422,6 +441,33 @@ export function AdminDashboardPage() {
               )) : (
                 <div className="rounded-xl border border-dashed border-app-border bg-app-elevated px-3 py-4 text-sm text-app-muted">
                   لا توجد أكواد استراتيجية محفوظة حاليا.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-app-border bg-app-card p-4">
+            <h2 className="text-sm font-semibold text-white">حذف الصفقات السابقة</h2>
+            <p className="mt-1 text-xs text-app-muted">يمكن للمشرف حذف أي صفقة استراتيجية قديمة من هنا بشكل نهائي.</p>
+            <div className="mt-3 space-y-2">
+              {strategyCodes.length > 0 ? strategyCodes.map((item) => (
+                <div key={`delete-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-app-border bg-app-elevated px-3 py-3">
+                  <div className="text-sm text-white">
+                    {item.title || item.code}
+                    <span className="ml-2 text-xs text-app-muted">{item.code}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="wallet-action-btn whitespace-nowrap border border-red-500/30 bg-red-500/10 text-red-200"
+                    onClick={() => handleDeleteStrategyCode(item)}
+                    disabled={deletingStrategyId === item.id}
+                  >
+                    {deletingStrategyId === item.id ? '...' : 'حذف'}
+                  </button>
+                </div>
+              )) : (
+                <div className="rounded-xl border border-dashed border-app-border bg-app-elevated px-3 py-4 text-sm text-app-muted">
+                  لا توجد صفقات سابقة متاحة للحذف حالياً.
                 </div>
               )}
             </div>

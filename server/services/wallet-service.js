@@ -18,6 +18,7 @@ export { getMainBalance, getWalletHistory, getEarningHistory }
 
 const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits'])
 const MAX_REWARD_LOCK_HOURS = 24 * 365
+const TASK_REWARD_WITHDRAW_LOCK_HOURS = 24 * 7
 
 function normalizeMiningTransferAmount(value) {
   const amount = Number(value)
@@ -151,8 +152,15 @@ async function updatePendingEarningPolicy(db, entryId, { payoutMode, lockedUntil
   )
 }
 
-async function finalizeRewardTransfer(db, { userId, currency, entryId, idempotencyKey, sourceType = 'all' }) {
-  const policy = await getEffectiveRewardPayoutPolicy(db, userId, sourceType)
+async function finalizeRewardTransfer(db, { userId, currency, entryId, idempotencyKey, sourceType = 'all', policyOverride = null }) {
+  const effectivePolicy =
+    policyOverride && typeof policyOverride === 'object'
+      ? {
+          payoutMode: normalizeRewardPayoutMode(policyOverride.payoutMode),
+          lockHours: normalizeRewardLockHours(policyOverride.lockHours, 0),
+        }
+      : await getEffectiveRewardPayoutPolicy(db, userId, sourceType)
+  const policy = effectivePolicy
   const payoutMode = policy.payoutMode
   if (payoutMode === 'bonus_locked') {
     await updatePendingEarningPolicy(db, entryId, { payoutMode: 'bonus_locked', lockedUntil: null })
@@ -706,6 +714,10 @@ export async function createTaskReward(db, opts) {
     entryId,
     idempotencyKey: `task_redemption_${redemptionId}`,
     sourceType: 'tasks',
+    policyOverride: {
+      payoutMode: 'withdrawable',
+      lockHours: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+    },
   })
 }
 
@@ -742,6 +754,50 @@ export async function createStrategyPromoReward(db, opts) {
     entryId,
     idempotencyKey: `strategy_code_bonus_${usageId}`,
     sourceType: 'tasks',
+    policyOverride: {
+      payoutMode: 'withdrawable',
+      lockHours: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+    },
+  })
+}
+
+/**
+ * Create strategy trade profit reward through the unified earning pipeline.
+ */
+export async function createStrategyTradeProfitReward(db, opts) {
+  const { userId, amount, usageId, currency = 'USDT' } = opts
+  if (!userId || !Number.isFinite(amount) || amount <= 0 || !usageId) throw new Error('INVALID_INPUT')
+  const earningResult = await createEarningEntry(db, {
+    userId,
+    sourceType: 'tasks',
+    referenceType: 'strategy_trade_profit',
+    referenceId: usageId,
+    currency,
+    amount,
+  })
+  const entryId =
+    earningResult?.id ??
+    (await get(
+      db,
+      `SELECT id
+       FROM earning_entries
+       WHERE source_type = 'tasks'
+         AND reference_type = 'strategy_trade_profit'
+         AND reference_id = ?
+       LIMIT 1`,
+      [usageId],
+    ))?.id
+  if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
+  return finalizeRewardTransfer(db, {
+    userId,
+    currency,
+    entryId,
+    idempotencyKey: `strategy_trade_profit_${usageId}`,
+    sourceType: 'tasks',
+    policyOverride: {
+      payoutMode: 'withdrawable',
+      lockHours: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+    },
   })
 }
 

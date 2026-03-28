@@ -36,6 +36,8 @@ import { UserIdentityBadges } from './components/user/UserIdentityBadges'
 import { type Language, useI18n } from './i18nCore'
 import { getPremiumProfileColorClass } from './premiumIdentity'
 
+const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
+
 type LayoutProps = {
   children: ReactNode
   user: AuthUser
@@ -585,6 +587,19 @@ export function Layout({
                   </span>
                 </Link>
               ) : null}
+              <a
+                href={WHATSAPP_CHANNEL_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-[#25D366] hover:border-emerald-400/55 hover:text-[#4af08a] focus:outline-none focus:ring-2 focus:ring-emerald-400/35"
+                aria-label="WhatsApp Channel"
+                title="WhatsApp Channel"
+                onClick={() => closeHeaderPopups()}
+              >
+                <svg viewBox="0 0 24 24" className="h-[17px] w-[17px] fill-current" aria-hidden="true">
+                  <path d="M19.05 4.91A9.82 9.82 0 0 0 12.03 2C6.61 2 2.2 6.41 2.2 11.83c0 1.74.45 3.43 1.3 4.92L2 22l5.4-1.42a9.8 9.8 0 0 0 4.63 1.18h.01c5.42 0 9.83-4.41 9.83-9.83a9.77 9.77 0 0 0-2.82-7.02Zm-7.02 15.19h-.01a8.15 8.15 0 0 1-4.15-1.13l-.3-.18-3.2.84.86-3.12-.2-.32a8.15 8.15 0 0 1-1.26-4.36c0-4.5 3.66-8.16 8.17-8.16a8.1 8.1 0 0 1 5.78 2.4 8.1 8.1 0 0 1 2.38 5.77c0 4.5-3.66 8.16-8.17 8.16Zm4.48-6.1c-.24-.12-1.4-.69-1.62-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.42-1.34-1.66-.14-.24-.01-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.48-.4-.41-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.68 2.56 4.07 3.59.57.25 1.02.4 1.37.51.58.18 1.1.15 1.52.09.46-.07 1.4-.57 1.6-1.12.2-.55.2-1.02.14-1.12-.06-.1-.22-.16-.46-.28Z" />
+                </svg>
+              </a>
               {effectiveHeaderIcons.map((item) => {
                 if (!item.visible) return null
                 if (item.id === 'profile') return null

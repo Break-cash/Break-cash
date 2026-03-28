@@ -8,6 +8,8 @@ import { useAssetVisibility } from '../hooks/useAssetVisibility'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
+const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
+
 export function Home() {
   const { t } = useI18n()
   const { balance_info } = appData
@@ -38,6 +40,26 @@ export function Home() {
 
   return (
     <div className="page home-page">
+      <section className="mb-4">
+        <div className="flex items-center justify-between gap-3 rounded-3xl border border-emerald-500/20 bg-gradient-to-r from-emerald-500/12 via-app-card to-app-card px-4 py-3 shadow-[0_12px_32px_rgba(16,185,129,0.08)]">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">WhatsApp Channel</div>
+            <div className="mt-1 text-sm font-medium text-white">تابع القناة الرسمية للحصول على التحديثات والإعلانات</div>
+          </div>
+          <a
+            href={WHATSAPP_CHANNEL_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="واتساب"
+            className="flex shrink-0 items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(16,185,129,0.28)] transition-all duration-300 hover:scale-[1.02] hover:bg-emerald-400"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+              <path d="M19.05 4.91A9.82 9.82 0 0 0 12.03 2C6.61 2 2.2 6.41 2.2 11.83c0 1.74.45 3.43 1.3 4.92L2 22l5.4-1.42a9.8 9.8 0 0 0 4.63 1.18h.01c5.42 0 9.83-4.41 9.83-9.83a9.77 9.77 0 0 0-2.82-7.02Zm-7.02 15.19h-.01a8.15 8.15 0 0 1-4.15-1.13l-.3-.18-3.2.84.86-3.12-.2-.32a8.15 8.15 0 0 1-1.26-4.36c0-4.5 3.66-8.16 8.17-8.16a8.1 8.1 0 0 1 5.78 2.4 8.1 8.1 0 0 1 2.38 5.77c0 4.5-3.66 8.16-8.17 8.16Zm4.48-6.1c-.24-.12-1.4-.69-1.62-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.42-1.34-1.66-.14-.24-.01-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.48-.4-.41-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.68 2.56 4.07 3.59.57.25 1.02.4 1.37.51.58.18 1.1.15 1.52.09.46-.07 1.4-.57 1.6-1.12.2-.55.2-1.02.14-1.12-.06-.1-.22-.16-.46-.28Z" />
+            </svg>
+            <span>واتساب</span>
+          </a>
+        </div>
+      </section>
       {/* Hero Section - Main Assets */}
       <section className="mb-6 lg:mb-8">
         <div className="grid gap-4 lg:grid-cols-3">
