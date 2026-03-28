@@ -4601,6 +4601,15 @@ button:focus-visible,
   color: #8e97a8;
 }
 
+.friends-public-titles {
+  margin-top: 6px;
+}
+
+.friends-public-titles .identity-vip-badge,
+.friends-public-titles .identity-badge {
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
 .friends-item-badge {
   font-size: 12px;
   color: var(--accent-emerald-soft);
@@ -4766,6 +4775,18 @@ button:focus-visible,
   margin-top: 4px;
   color: #8ea1c6;
   font-size: 12px;
+}
+
+.friends-profile-public-titles {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.friends-profile-public-titles .identity-vip-badge,
+.friends-profile-public-titles .identity-badge {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
 }
 
 .friends-profile-bio {

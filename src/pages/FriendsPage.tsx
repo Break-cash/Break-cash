@@ -108,6 +108,12 @@ export function FriendsPage() {
         ? 'gold'
         : 'none'
   const selectedVerified = selectedUser?.verificationStatus === 'verified'
+  const selectedHasPublicTitles = Boolean(
+    selectedUser &&
+      ((selectedUser.vipLevel || 0) > 0 ||
+        selectedUser.verificationStatus === 'verified' ||
+        Number(selectedUser.blueBadge || 0) === 1),
+  )
 
   return (
     <div className="friends-page page">
@@ -172,6 +178,23 @@ export function FriendsPage() {
                       mode="verified"
                     />
                   </div>
+                  {(Number(user.vipLevel || 0) > 0 ||
+                    user.verificationStatus === 'verified' ||
+                    Number(user.blueBadge || 0) === 1) ? (
+                    <div className="friends-public-titles">
+                      <UserIdentityBadges
+                        badgeColor={
+                          Number(user.blueBadge || 0) === 1
+                            ? 'blue'
+                            : user.verificationStatus === 'verified'
+                              ? 'gold'
+                              : 'none'
+                        }
+                        vipLevel={user.vipLevel || 0}
+                        mode="secondary"
+                      />
+                    </div>
+                  ) : null}
                   <span className="friends-item-id">ID: {user.id}</span>
                 </div>
                 <button
@@ -310,13 +333,16 @@ export function FriendsPage() {
                     mode="verified"
                   />
                 </div>
+                {selectedHasPublicTitles ? (
+                  <div className="friends-profile-public-titles">
+                    <UserIdentityBadges
+                      badgeColor={selectedBadgeColor}
+                      vipLevel={selectedUser.vipLevel || 0}
+                      mode="secondary"
+                    />
+                  </div>
+                ) : null}
                 <div className="friends-profile-id">ID: {selectedUser.id}</div>
-                <UserIdentityBadges
-                  badgeColor={selectedBadgeColor}
-                  vipLevel={selectedUser.vipLevel || 0}
-                  mode="secondary"
-                  className="mt-1"
-                />
               </div>
             </div>
 
