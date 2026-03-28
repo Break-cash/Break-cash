@@ -695,6 +695,7 @@ export type FriendUser = {
   blueBadge?: number
   vipLevel?: number
   premiumBadge?: PremiumProfileBadge | string | null
+  country?: string | null
   tradingBalance?: number | null
   depositPrivacyEnabled?: boolean
 }

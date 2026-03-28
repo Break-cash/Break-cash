@@ -11,6 +11,57 @@ import {
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
 
+const COUNTRY_FLAG_ALIASES: Record<string, string> = {
+  tr: 'TR',
+  turkey: 'TR',
+  turkiye: 'TR',
+  sa: 'SA',
+  'saudi arabia': 'SA',
+  saudi: 'SA',
+  eg: 'EG',
+  egypt: 'EG',
+  ae: 'AE',
+  uae: 'AE',
+  iq: 'IQ',
+  iraq: 'IQ',
+  sy: 'SY',
+  syria: 'SY',
+  jo: 'JO',
+  jordan: 'JO',
+  lb: 'LB',
+  lebanon: 'LB',
+  kw: 'KW',
+  kuwait: 'KW',
+  qa: 'QA',
+  qatar: 'QA',
+  bh: 'BH',
+  bahrain: 'BH',
+  om: 'OM',
+  oman: 'OM',
+  ye: 'YE',
+  yemen: 'YE',
+  ma: 'MA',
+  morocco: 'MA',
+  dz: 'DZ',
+  algeria: 'DZ',
+  tn: 'TN',
+  tunisia: 'TN',
+  ly: 'LY',
+  libya: 'LY',
+  us: 'US',
+  usa: 'US',
+  'united states': 'US',
+  america: 'US',
+  gb: 'GB',
+  uk: 'GB',
+  britain: 'GB',
+  england: 'GB',
+  fr: 'FR',
+  france: 'FR',
+  de: 'DE',
+  germany: 'DE',
+}
+
 export function FriendsPage() {
   const { t } = useI18n()
   const [searchQ, setSearchQ] = useState('')
@@ -115,6 +166,15 @@ export function FriendsPage() {
         Number(selectedUser.blueBadge || 0) === 1),
   )
 
+  function getCountryFlagEmoji(value?: string | null) {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    const lower = raw.toLowerCase()
+    const code = /^[a-z]{2}$/i.test(raw) ? raw.toUpperCase() : COUNTRY_FLAG_ALIASES[lower] || ''
+    if (!code) return ''
+    return String.fromCodePoint(...code.split('').map((char) => 127397 + char.charCodeAt(0)))
+  }
+
   return (
     <div className="friends-page page">
       <section className="mb-4 app-icon-hero-shell overflow-hidden rounded-2xl border border-app-border">
@@ -165,6 +225,11 @@ export function FriendsPage() {
                 <div className="friends-item-info">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="friends-item-name">{user.displayName}</span>
+                    {getCountryFlagEmoji(user.country) ? (
+                      <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/8 px-1.5 text-base leading-5">
+                        {getCountryFlagEmoji(user.country)}
+                      </span>
+                    ) : null}
                     <UserIdentityBadges
                       badgeColor={
                         Number(user.blueBadge || 0) === 1
