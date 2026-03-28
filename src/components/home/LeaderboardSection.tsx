@@ -54,8 +54,6 @@ export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
   ],
 }
 
-const podiumOrder = [1, 0, 2]
-
 const podiumStyles = [
   {
     place: 1,
@@ -151,7 +149,12 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
   const leaderboard = resolveLeaderboardConfig(config)
   if (!previewMode && !leaderboard.enabled) return null
 
-  const podium = podiumOrder.map((index) => leaderboard.competitors[index]).filter(Boolean)
+  const rankedCompetitors = leaderboard.competitors.slice(0, 3)
+  const podium = [
+    { competitor: rankedCompetitors[1], style: podiumStyles[1] },
+    { competitor: rankedCompetitors[0], style: podiumStyles[0] },
+    { competitor: rankedCompetitors[2], style: podiumStyles[2] },
+  ].filter((entry) => Boolean(entry.competitor))
 
   return (
     <section className="mb-6 lg:mb-8">
@@ -178,8 +181,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
 
         <div className="rounded-[1.75rem] border border-white/8 bg-white/[0.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] lg:p-5">
           <div className="grid gap-4 lg:grid-cols-3 lg:items-end">
-            {podium.map((competitor, index) => {
-              const style = podiumStyles[index]
+            {podium.map(({ competitor, style }, index) => {
               const Icon = style.icon
               return (
                 <motion.div
@@ -237,7 +239,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
           </div>
 
           <div className="max-h-[28rem] space-y-3 overflow-y-auto pe-1">
-            {podium.map((competitor, index) => (
+            {rankedCompetitors.map((competitor, index) => (
               <motion.div
                 key={competitor.id}
                 initial={{ opacity: 0, y: 16 }}
