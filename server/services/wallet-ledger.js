@@ -119,6 +119,40 @@ export async function getMainBalance(db, userId, currency) {
 }
 
 /**
+ * Get total main balance for user across all source buckets.
+ */
+export async function getTotalMainBalance(db, userId, currency) {
+  const curr = String(currency || 'USDT').trim().toUpperCase()
+  const row = await get(
+    db,
+    `SELECT COALESCE(SUM(balance_amount), 0) AS balance
+     FROM wallet_accounts
+     WHERE user_id = ? AND currency = ? AND account_type = 'main'`,
+    [userId, curr],
+  )
+  return Number(row?.balance || 0)
+}
+
+/**
+ * Get main balance rows by source type for a user/currency.
+ */
+export async function getMainBalanceSources(db, userId, currency) {
+  const curr = String(currency || 'USDT').trim().toUpperCase()
+  const rows = await all(
+    db,
+    `SELECT source_type, COALESCE(balance_amount, 0) AS balance
+     FROM wallet_accounts
+     WHERE user_id = ? AND currency = ? AND account_type = 'main'
+     ORDER BY source_type ASC`,
+    [userId, curr],
+  )
+  return rows.map((row) => ({
+    sourceType: String(row.source_type || 'system').trim().toLowerCase(),
+    balance: Number(row.balance || 0),
+  }))
+}
+
+/**
  * Record a wallet transaction with idempotency.
  * If idempotencyKey is provided and already exists, returns existing transaction.
  */

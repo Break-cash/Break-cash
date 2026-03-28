@@ -6,19 +6,22 @@
 import { all, get, run } from '../db.js'
 import {
   getMainBalance,
+  getMainBalanceSources,
   recordTransaction,
   createEarningEntry,
+  getTotalMainBalance,
   transferEarningToMain,
   getWalletHistory,
   getEarningHistory,
 } from './wallet-ledger.js'
 
 // Re-export for consumers
-export { getMainBalance, getWalletHistory, getEarningHistory }
+export { getMainBalance, getTotalMainBalance, getWalletHistory, getEarningHistory }
 
 const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits'])
 const MAX_REWARD_LOCK_HOURS = 24 * 365
 const TASK_REWARD_WITHDRAW_LOCK_HOURS = 24 * 7
+const STRATEGY_TRADE_SOURCE_PRIORITY = ['referrals', 'tasks', 'deposits', 'mining', 'system']
 
 function normalizeMiningTransferAmount(value) {
   const amount = Number(value)
@@ -166,7 +169,7 @@ async function finalizeRewardTransfer(db, { userId, currency, entryId, idempoten
     await updatePendingEarningPolicy(db, entryId, { payoutMode: 'bonus_locked', lockedUntil: null })
     return {
       walletTxnId: null,
-      balanceAfter: await getMainBalance(db, userId, currency),
+      balanceAfter: await getTotalMainBalance(db, userId, currency),
       payoutMode,
       lockHours: 0,
       lockedUntil: null,
@@ -177,7 +180,7 @@ async function finalizeRewardTransfer(db, { userId, currency, entryId, idempoten
     await updatePendingEarningPolicy(db, entryId, { payoutMode: 'withdrawable', lockedUntil })
     return {
       walletTxnId: null,
-      balanceAfter: await getMainBalance(db, userId, currency),
+      balanceAfter: await getTotalMainBalance(db, userId, currency),
       payoutMode,
       lockHours: policy.lockHours,
       lockedUntil,
@@ -188,7 +191,7 @@ async function finalizeRewardTransfer(db, { userId, currency, entryId, idempoten
   if (!txn) return null
   return {
     walletTxnId: txn.id,
-    balanceAfter: await getMainBalance(db, userId, currency),
+    balanceAfter: await getTotalMainBalance(db, userId, currency),
     payoutMode,
     lockHours: 0,
     lockedUntil: null,
@@ -369,7 +372,7 @@ async function moveBalanceBetweenBuckets(
   })
   return {
     walletTxnId: debitTxn.id,
-    balanceAfter: await getMainBalance(db, userId, currency),
+    balanceAfter: await getTotalMainBalance(db, userId, currency),
   }
 }
 
@@ -393,7 +396,7 @@ export async function createDeposit(db, opts) {
     idempotencyKey,
     createdBy,
   })
-  const balanceAfter = await getMainBalance(db, userId, currency)
+  const balanceAfter = await getTotalMainBalance(db, userId, currency)
   return { walletTxnId: txn.id, balanceAfter }
 }
 
@@ -416,6 +419,134 @@ async function getMainSourceBalance(db, userId, currency, sourceType = 'system')
   return Number(row?.balance || 0)
 }
 
+function sortBalancesForStrategyTrade(rows) {
+  const weightOf = (sourceType) => {
+    const idx = STRATEGY_TRADE_SOURCE_PRIORITY.indexOf(String(sourceType || '').trim().toLowerCase())
+    return idx >= 0 ? idx : STRATEGY_TRADE_SOURCE_PRIORITY.length + 1
+  }
+  return [...(rows || [])]
+    .map((row) => ({
+      sourceType: String(row?.sourceType || 'system').trim().toLowerCase(),
+      balance: Number(row?.balance || 0),
+    }))
+    .filter((row) => row.balance > 0)
+    .sort((left, right) => {
+      const weightDiff = weightOf(left.sourceType) - weightOf(right.sourceType)
+      if (weightDiff !== 0) return weightDiff
+      return right.balance - left.balance
+    })
+}
+
+function normalizeStrategyTradeSourceSplits(raw, totalAmount = 0) {
+  if (!Array.isArray(raw)) return []
+  const normalized = raw
+    .map((row) => ({
+      sourceType: String(row?.sourceType || 'system').trim().toLowerCase(),
+      amount: Number(Number(row?.amount || 0).toFixed(8)),
+    }))
+    .filter((row) => row.amount > 0)
+  const sum = Number(normalized.reduce((acc, row) => acc + row.amount, 0).toFixed(8))
+  if (sum <= 0) return []
+  const expected = Number(Number(totalAmount || 0).toFixed(8))
+  if (expected > 0 && Math.abs(sum - expected) > 0.00000001) return []
+  return normalized
+}
+
+export async function createStrategyTradeOpenDebit(db, opts) {
+  const {
+    userId,
+    currency = 'USDT',
+    amount,
+    referenceType = 'strategy_trade_open',
+    referenceId,
+    idempotencyKey,
+    createdBy,
+  } = opts || {}
+  const safeAmount = Number(Number(amount || 0).toFixed(8))
+  if (!userId || safeAmount <= 0) throw new Error('INVALID_INPUT')
+  const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  const sourceBalances = sortBalancesForStrategyTrade(await getMainBalanceSources(db, userId, normalizedCurrency))
+  const totalBalance = Number(sourceBalances.reduce((acc, row) => acc + row.balance, 0).toFixed(8))
+  if (totalBalance < safeAmount) throw new Error('INSUFFICIENT_BALANCE')
+
+  const baseKey = idempotencyKey || `strategy_trade_open_${userId}_${referenceId || Date.now()}`
+  let remaining = safeAmount
+  let primaryTxnId = null
+  const sourceDebits = []
+
+  for (const row of sourceBalances) {
+    if (remaining <= 0) break
+    const debitAmount = Number(Math.min(row.balance, remaining).toFixed(8))
+    if (debitAmount <= 0) continue
+    const txn = await recordTransaction(db, {
+      userId,
+      currency: normalizedCurrency,
+      transactionType: 'adjust',
+      sourceType: row.sourceType,
+      referenceType,
+      referenceId,
+      amount: -debitAmount,
+      idempotencyKey: `${baseKey}_${row.sourceType}`,
+      createdBy,
+      metadata: { strategyTradeStage: 'open' },
+    })
+    if (!primaryTxnId) primaryTxnId = txn.id
+    sourceDebits.push({ sourceType: row.sourceType, amount: debitAmount })
+    remaining = Number((remaining - debitAmount).toFixed(8))
+  }
+
+  if (remaining > 0.00000001) throw new Error('INSUFFICIENT_BALANCE')
+  return {
+    walletTxnId: primaryTxnId,
+    balanceAfter: await getTotalMainBalance(db, userId, normalizedCurrency),
+    sourceDebits,
+  }
+}
+
+export async function createStrategyTradePrincipalReturn(db, opts) {
+  const {
+    userId,
+    currency = 'USDT',
+    usageId,
+    referenceId,
+    amount,
+    sourceCredits,
+    createdBy,
+  } = opts || {}
+  const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  const safeAmount = Number(Number(amount || 0).toFixed(8))
+  const normalizedCredits = normalizeStrategyTradeSourceSplits(sourceCredits, safeAmount)
+  const credits =
+    normalizedCredits.length > 0
+      ? normalizedCredits
+      : safeAmount > 0
+        ? [{ sourceType: 'system', amount: safeAmount }]
+        : []
+  if (!userId || !usageId || credits.length === 0) throw new Error('INVALID_INPUT')
+
+  let primaryTxnId = null
+  for (const row of credits) {
+    const txn = await recordTransaction(db, {
+      userId,
+      currency: normalizedCurrency,
+      transactionType: 'adjust',
+      sourceType: row.sourceType,
+      referenceType: 'strategy_trade_principal_return',
+      referenceId,
+      amount: Number(row.amount || 0),
+      idempotencyKey: `strategy_trade_principal_${usageId}_${row.sourceType}`,
+      createdBy,
+      metadata: { usageId, strategyTradeStage: 'settlement_return' },
+    })
+    if (!primaryTxnId) primaryTxnId = txn.id
+  }
+
+  return {
+    walletTxnId: primaryTxnId,
+    balanceAfter: await getTotalMainBalance(db, userId, normalizedCurrency),
+  }
+}
+
 /**
  * Create withdrawal (debit main balance). Idempotent.
  * @param {object} db - Database handle
@@ -435,12 +566,11 @@ export async function createWithdrawal(db, opts) {
   } = opts
   if (!userId || !Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_INPUT')
   const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
-  let referralBalance = await getMainSourceBalance(db, userId, normalizedCurrency, 'referrals')
-  let systemBalance = await getMainSourceBalance(db, userId, normalizedCurrency, 'system')
-  const totalBalance = Number((referralBalance + systemBalance).toFixed(8))
+  const sourceBalances = sortBalancesForStrategyTrade(await getMainBalanceSources(db, userId, normalizedCurrency))
+  const balancesBySource = new Map(sourceBalances.map((row) => [row.sourceType, Number(row.balance || 0)]))
+  const totalBalance = Number(sourceBalances.reduce((acc, row) => acc + Number(row.balance || 0), 0).toFixed(8))
   if (totalBalance < amount) throw new Error('INSUFFICIENT_BALANCE')
   const safeFeeAmount = Number.isFinite(Number(feeAmount)) && Number(feeAmount) > 0 ? Number(Number(feeAmount).toFixed(8)) : 0
-  if (systemBalance < safeFeeAmount) throw new Error('INSUFFICIENT_BALANCE')
   const payoutAmount = Number(Math.max(0, amount - safeFeeAmount).toFixed(8))
   let primaryTxnId = null
   const baseKey = idempotencyKey || `withdraw_${userId}_${referenceId || Date.now()}`
@@ -462,25 +592,27 @@ export async function createWithdrawal(db, opts) {
     if (!primaryTxnId) primaryTxnId = txn.id
   }
 
-  let remainingPayout = payoutAmount
-  const referralPayout = Math.min(referralBalance, remainingPayout)
-  await debitFromSource('referrals', referralPayout, 'withdrawal', 'referrals_withdraw')
-  referralBalance = Number((referralBalance - referralPayout).toFixed(8))
-  remainingPayout = Number((remainingPayout - referralPayout).toFixed(8))
-
-  if (remainingPayout > 0) {
-    const systemPayoutCapacity = Number((systemBalance - safeFeeAmount).toFixed(8))
-    if (systemPayoutCapacity < remainingPayout) throw new Error('INSUFFICIENT_BALANCE')
-    await debitFromSource('system', remainingPayout, 'withdrawal', 'system_withdraw')
-    systemBalance = Number((systemBalance - remainingPayout).toFixed(8))
+  const consumeAcrossSources = async (targetAmount, kind, keySuffix) => {
+    let remaining = Number(Number(targetAmount || 0).toFixed(8))
+    if (remaining <= 0) return
+    for (const row of sourceBalances) {
+      if (remaining <= 0) break
+      const currentBalance = Number(balancesBySource.get(row.sourceType) || 0)
+      const debitAmount = Number(Math.min(currentBalance, remaining).toFixed(8))
+      if (debitAmount <= 0) continue
+      await debitFromSource(row.sourceType, debitAmount, kind, `${row.sourceType}_${keySuffix}`)
+      balancesBySource.set(row.sourceType, Number((currentBalance - debitAmount).toFixed(8)))
+      remaining = Number((remaining - debitAmount).toFixed(8))
+    }
+    if (remaining > 0.00000001) throw new Error('INSUFFICIENT_BALANCE')
   }
 
-  if (safeFeeAmount > 0) {
-    await debitFromSource('system', safeFeeAmount, 'fee', 'system_fee')
-    systemBalance = Number((systemBalance - safeFeeAmount).toFixed(8))
-  }
+  await consumeAcrossSources(payoutAmount, 'withdrawal', 'withdraw')
+  await consumeAcrossSources(safeFeeAmount, 'fee', 'fee')
 
-  const balanceAfter = Number((referralBalance + systemBalance).toFixed(8))
+  const balanceAfter = Number(
+    Array.from(balancesBySource.values()).reduce((acc, value) => acc + Number(value || 0), 0).toFixed(8),
+  )
   return { walletTxnId: primaryTxnId, balanceAfter }
 }
 
@@ -547,7 +679,7 @@ export async function recordMiningDailyProfit(db, opts) {
     sourceType: 'mining',
   })
   if (!txn) return null
-  const balanceAfter = await getMainBalance(db, userId, 'USDT')
+  const balanceAfter = await getTotalMainBalance(db, userId, 'USDT')
   return { earningEntryId: entryId, walletTxnId: txn.walletTxnId, balanceAfter, payoutMode: txn.payoutMode, amount: safeAmount }
 }
 
@@ -637,7 +769,7 @@ export async function executeMiningEmergencyWithdrawal(db, opts) {
   return {
     walletTxnId: transfer.walletTxnId,
     netAmount,
-    balanceAfter: await getMainBalance(db, userId, 'USDT'),
+    balanceAfter: await getTotalMainBalance(db, userId, 'USDT'),
   }
 }
 

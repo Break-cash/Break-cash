@@ -1,7 +1,14 @@
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth.js'
-import { adjustBalance, createStrategyPromoReward, createStrategyTradeProfitReward, createTaskReward, getMainBalance } from '../services/wallet-service.js'
+import {
+  createStrategyPromoReward,
+  createStrategyTradeOpenDebit,
+  createStrategyTradePrincipalReturn,
+  createStrategyTradeProfitReward,
+  createTaskReward,
+  getTotalMainBalance,
+} from '../services/wallet-service.js'
 import { fetchBestQuote, sharedMarketFeed } from '../services/marketFeed.js'
 import { createLocalizedNotification } from '../services/notifications.js'
 
@@ -98,9 +105,65 @@ function enrichStrategyUsageRow(row) {
       typeof meta?.expertName === 'string' && meta.expertName.trim()
         ? meta.expertName
         : String(row?.expert_name || ''),
+    balanceSourceDebits: Array.isArray(meta?.balanceSourceDebits)
+      ? meta.balanceSourceDebits
+          .map((item) => ({
+            sourceType: String(item?.sourceType || 'system').trim().toLowerCase(),
+            amount: Number(item?.amount || 0),
+          }))
+          .filter((item) => item.amount > 0)
+      : [],
     autoSettleAt,
     settleDelayMs: Number.isFinite(settleDelayMs) && settleDelayMs > 0 ? settleDelayMs : null,
   }
+}
+
+function getStrategyTradeSourceDebits(usage) {
+  const meta = parseJsonSafe(usage?.metadata_json, {})
+  const configured = Array.isArray(meta?.balanceSourceDebits)
+    ? meta.balanceSourceDebits
+        .map((item) => ({
+          sourceType: String(item?.sourceType || 'system').trim().toLowerCase(),
+          amount: Number(Number(item?.amount || 0).toFixed(8)),
+        }))
+        .filter((item) => item.amount > 0)
+    : []
+  if (configured.length > 0) return configured
+  const stakeAmount = Number(Number(usage?.stake_amount || 0).toFixed(8))
+  return stakeAmount > 0 ? [{ sourceType: 'system', amount: stakeAmount }] : []
+}
+
+async function getStrategyTradePrincipalTxnRows(db, usage) {
+  const usageId = Number(usage?.id || 0)
+  const codeId = Number(usage?.code_id || 0)
+  const userId = Number(usage?.user_id || 0)
+  if (!usageId || !userId) return []
+  return all(
+    db,
+    `SELECT id, reference_type, amount, metadata
+     FROM wallet_transactions
+     WHERE user_id = ?
+       AND currency = 'USDT'
+       AND (
+         id = ?
+         OR idempotency_key = ?
+         OR idempotency_key LIKE ?
+         OR (reference_type = 'strategy_trade_settlement' AND reference_id = ?)
+         OR (reference_type = 'strategy_trade_principal_return' AND metadata LIKE ?)
+         OR (reference_type = 'admin_adjust' AND metadata LIKE ?)
+       )
+     ORDER BY id DESC
+     LIMIT 20`,
+    [
+      userId,
+      Number(usage?.wallet_credit_txn_id || 0),
+      `strategy_trade_principal_${usageId}`,
+      `strategy_trade_principal_${usageId}_%`,
+      codeId,
+      `%\"usageId\":${usageId}%`,
+      `%usageId=${usageId}%`,
+    ],
+  )
 }
 
 async function settleStrategyTradeUsage(tx, usage, actorUserId) {
@@ -120,13 +183,13 @@ async function settleStrategyTradeUsage(tx, usage, actorUserId) {
   const stakeAmount = Number(usage.stake_amount || 0)
   const returnPercent = Number(usage.trade_return_percent || 0)
   const profitAmount = Number(((stakeAmount * returnPercent) / 100).toFixed(8))
-  const principalCredit = await adjustBalance(tx, {
+  const principalCredit = await createStrategyTradePrincipalReturn(tx, {
     userId: usage.user_id,
     currency: 'USDT',
-    delta: stakeAmount,
-    referenceType: 'strategy_trade_principal_return',
+    usageId: Number(usage.id),
+    amount: stakeAmount,
+    sourceCredits: getStrategyTradeSourceDebits(usage),
     referenceId: Number(usage.code_id),
-    idempotencyKey: `strategy_trade_principal_${usage.id}`,
     createdBy: actorUserId,
   })
   const profitCredit =
@@ -184,43 +247,30 @@ async function repairSettledStrategyTradeUsage(tx, usage, actorUserId) {
   const returnPercent = Number(usage.trade_return_percent || 0)
   const profitAmount = Number((rewardValue > 0 ? rewardValue : (stakeAmount * returnPercent) / 100).toFixed(8))
 
-  const linkedTxn = await get(
-    tx,
-    `SELECT id, reference_type, amount, metadata
-     FROM wallet_transactions
-     WHERE user_id = ?
-       AND currency = 'USDT'
-       AND source_type = 'system'
-       AND (
-         id = ?
-         OR idempotency_key = ?
-         OR (reference_type = 'strategy_trade_settlement' AND reference_id = ?)
-         OR (reference_type = 'admin_adjust' AND metadata LIKE ?)
-       )
-     ORDER BY id DESC
-     LIMIT 1`,
-    [userId, Number(usage.wallet_credit_txn_id || 0), `strategy_trade_principal_${usageId}`, codeId, `%usageId=${usageId}%`],
-  )
+  const linkedTxns = await getStrategyTradePrincipalTxnRows(tx, usage)
+  const linkedTxn = linkedTxns[0] || null
 
   const handledByLegacyOrManual =
-    linkedTxn &&
-    (String(linkedTxn.reference_type || '') === 'strategy_trade_settlement' ||
-      String(linkedTxn.reference_type || '') === 'admin_adjust')
+    linkedTxns.some(
+      (row) =>
+        String(row?.reference_type || '') === 'strategy_trade_settlement' ||
+        String(row?.reference_type || '') === 'admin_adjust',
+    )
 
   const principalCredit =
-    linkedTxn && Number(linkedTxn.amount || 0) > 0
-      ? { walletTxnId: Number(linkedTxn.id || 0), balanceAfter: await getMainBalance(tx, userId, 'USDT') }
+    handledByLegacyOrManual
+      ? { walletTxnId: Number(linkedTxn.id || 0), balanceAfter: await getTotalMainBalance(tx, userId, 'USDT') }
       : stakeAmount > 0
-        ? await adjustBalance(tx, {
+        ? await createStrategyTradePrincipalReturn(tx, {
             userId,
             currency: 'USDT',
-            delta: stakeAmount,
-            referenceType: 'strategy_trade_principal_return',
+            usageId,
+            amount: stakeAmount,
+            sourceCredits: getStrategyTradeSourceDebits(usage),
             referenceId: codeId,
-            idempotencyKey: `strategy_trade_principal_${usageId}`,
             createdBy: actorUserId,
           })
-        : { walletTxnId: null, balanceAfter: await getMainBalance(tx, userId, 'USDT') }
+        : { walletTxnId: null, balanceAfter: await getTotalMainBalance(tx, userId, 'USDT') }
 
   let profitCredit = null
   if (!handledByLegacyOrManual && profitAmount > 0) {
@@ -238,7 +288,7 @@ async function repairSettledStrategyTradeUsage(tx, usage, actorUserId) {
     settlementRepairCheckedAt: new Date().toISOString(),
     settlementRepairActor: actorUserId,
     settlementRepairMode: handledByLegacyOrManual
-      ? String(linkedTxn.reference_type || 'existing_credit')
+      ? String(linkedTxn?.reference_type || 'existing_credit')
       : 'principal_and_profit_rehydrated',
   })
 
@@ -296,31 +346,23 @@ async function repairSettledStrategyTradeGaps(db, userId, limit = 20) {
            LIMIT 1`,
           [usage.id],
         )
-        const principalTxn = await get(
-          tx,
-          `SELECT id
-           FROM wallet_transactions
-           WHERE user_id = ?
-             AND currency = 'USDT'
-             AND source_type = 'system'
-             AND (
-               id = ?
-               OR idempotency_key = ?
-               OR (reference_type = 'strategy_trade_settlement' AND reference_id = ?)
-               OR (reference_type = 'admin_adjust' AND metadata LIKE ?)
-             )
-           LIMIT 1`,
-          [
-            userId,
-            Number(usage.wallet_credit_txn_id || 0),
-            `strategy_trade_principal_${usage.id}`,
-            Number(usage.code_id || 0),
-            `%usageId=${Number(usage.id || 0)}%`,
-          ],
+        const principalTxns = await getStrategyTradePrincipalTxnRows(tx, usage)
+        const expectedPrincipalCreditCount = Math.max(1, getStrategyTradeSourceDebits(usage).length)
+        const principalCreditAmount = Number(
+          principalTxns.reduce((acc, row) => acc + Math.max(0, Number(row?.amount || 0)), 0).toFixed(8),
         )
+        const hasLegacyOrManualPrincipal = principalTxns.some(
+          (row) =>
+            String(row?.reference_type || '') === 'strategy_trade_settlement' ||
+            String(row?.reference_type || '') === 'admin_adjust',
+        )
+        const hasCompletePrincipalRepair =
+          hasLegacyOrManualPrincipal ||
+          (principalTxns.length >= expectedPrincipalCreditCount &&
+            principalCreditAmount + 0.00000001 >= Number(usage.stake_amount || 0))
 
         const rewardValue = Number(usage.reward_value || 0)
-        if (principalTxn && (profitEntry || rewardValue <= 0)) return
+        if (hasCompletePrincipalRepair && (profitEntry || rewardValue <= 0)) return
         await repairSettledStrategyTradeUsage(tx, usage, userId)
       })
     } catch (error) {
@@ -564,7 +606,7 @@ export function createTasksRouter(db) {
         )
         if (existing) throw new Error('CODE_ALREADY_USED')
 
-        const balanceSnapshot = await getMainBalance(tx, req.user.id, 'USDT')
+        const balanceSnapshot = await getTotalMainBalance(tx, req.user.id, 'USDT')
         let tiers = []
         try {
           tiers = normalizeTiers(JSON.parse(String(rewardCode.tiers_json || '[]')))
@@ -761,7 +803,7 @@ export function createTasksRouter(db) {
     if (existing) {
       return res.status(400).json({ error: 'CODE_ALREADY_USED', status: existing.status })
     }
-    const balanceSnapshot = await getMainBalance(db, req.user.id, 'USDT')
+    const balanceSnapshot = await getTotalMainBalance(db, req.user.id, 'USDT')
     const featureType = normalizeFeatureType(row.feature_type)
     const configuredSymbol = String(row.asset_symbol || 'BTCUSDT').toUpperCase()
     if (requestedSymbol && requestedSymbol !== configuredSymbol) {
@@ -859,7 +901,7 @@ export function createTasksRouter(db) {
         if (requestedSymbol && requestedSymbol !== configuredSymbol) throw new Error('SYMBOL_LOCKED')
         const symbol = configuredSymbol
         const liveQuote = await resolveLiveQuote(symbol)
-        const balanceSnapshot = await getMainBalance(tx, req.user.id, 'USDT')
+        const balanceSnapshot = await getTotalMainBalance(tx, req.user.id, 'USDT')
 
         if (featureType === 'trial_trade') {
           const activeTrade = await get(
@@ -876,10 +918,10 @@ export function createTasksRouter(db) {
           if (stakeAmount <= 0) throw new Error('INSUFFICIENT_BALANCE')
           const settleDelayMs = getStrategyTradeDelayMs()
           const autoSettleAt = new Date(Date.now() + settleDelayMs).toISOString()
-          const debit = await adjustBalance(tx, {
+          const debit = await createStrategyTradeOpenDebit(tx, {
             userId: req.user.id,
             currency: 'USDT',
-            delta: -stakeAmount,
+            amount: stakeAmount,
             referenceType: 'strategy_trade_open',
             referenceId: Number(row.id),
             idempotencyKey: `strategy_trade_open_${row.id}_${req.user.id}`,
@@ -908,6 +950,7 @@ export function createTasksRouter(db) {
                 title: row.title,
                 expertName: String(row.expert_name || ''),
                 confirmedByUser: req.user.id,
+                balanceSourceDebits: debit.sourceDebits,
                 autoSettleAt,
                 settleDelayMs,
               }),
