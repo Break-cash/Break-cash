@@ -270,6 +270,7 @@ export async function updateMyProfile(payload: {
   phone?: string | null
   displayName?: string | null
   bio?: string | null
+  country?: string | null
   preferredLanguage?: 'ar' | 'en' | 'tr'
   depositPrivacyEnabled?: boolean
 }) {

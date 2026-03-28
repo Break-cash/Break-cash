@@ -93,9 +93,9 @@ async function fetchProfile(db, userId) {
     db,
     `SELECT
       id, email, phone, role, is_approved, is_banned, is_frozen, created_at,
-      display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+     display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
       phone_verified, identity_submitted, verification_ready_at,
-      preferred_language, preferred_currency, deposit_privacy_enabled,
+      country, preferred_language, preferred_currency, deposit_privacy_enabled,
       referral_code, invited_by, referred_by, total_deposit, points, is_owner
      FROM users WHERE id = ? LIMIT 1`,
     [userId],
@@ -123,6 +123,7 @@ export function createProfileRouter(db) {
     const hasPhone = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone')
     const hasDisplayName = Object.prototype.hasOwnProperty.call(req.body || {}, 'displayName')
     const hasBio = Object.prototype.hasOwnProperty.call(req.body || {}, 'bio')
+    const hasCountry = Object.prototype.hasOwnProperty.call(req.body || {}, 'country')
     const hasPreferredLanguage = Object.prototype.hasOwnProperty.call(req.body || {}, 'preferredLanguage')
     const hasDepositPrivacyEnabled = Object.prototype.hasOwnProperty.call(req.body || {}, 'depositPrivacyEnabled')
 
@@ -134,6 +135,9 @@ export function createProfileRouter(db) {
     const bio = hasBio
       ? String(req.body?.bio || '').trim().slice(0, 120) || null
       : current.bio || null
+    const country = hasCountry
+      ? String(req.body?.country || '').trim().slice(0, 60) || null
+      : current.country || null
     const preferredLanguage = hasPreferredLanguage
       ? (() => {
           const raw = String(req.body?.preferredLanguage || '').trim().toLowerCase()
@@ -147,8 +151,8 @@ export function createProfileRouter(db) {
 
     await run(
       db,
-      `UPDATE users SET email = ?, phone = ?, display_name = ?, bio = ?, preferred_language = ?, deposit_privacy_enabled = ? WHERE id = ?`,
-      [email, phone, displayName, bio, preferredLanguage, depositPrivacyEnabled, req.user.id],
+      `UPDATE users SET email = ?, phone = ?, display_name = ?, bio = ?, country = ?, preferred_language = ?, deposit_privacy_enabled = ? WHERE id = ?`,
+      [email, phone, displayName, bio, country, preferredLanguage, depositPrivacyEnabled, req.user.id],
     )
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ profile })

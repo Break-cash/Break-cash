@@ -2772,6 +2772,33 @@ body {
   color: var(--elite-muted);
 }
 
+.profile-country-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-country-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+}
+
+.profile-country-flag {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.profile-country-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .field-input,
 .deposit-wallet-input,
 .deposit-owner-input,

@@ -13,6 +13,30 @@ type ProfilePageProps = {
 type SplashMode = 'always' | 'session'
 const SPLASH_MODE_KEY = 'breakcash_splash_mode'
 
+const COUNTRY_OPTIONS = [
+  { value: 'TR', label: 'تركيا', flag: '🇹🇷' },
+  { value: 'SA', label: 'السعودية', flag: '🇸🇦' },
+  { value: 'AE', label: 'الإمارات', flag: '🇦🇪' },
+  { value: 'EG', label: 'مصر', flag: '🇪🇬' },
+  { value: 'IQ', label: 'العراق', flag: '🇮🇶' },
+  { value: 'SY', label: 'سوريا', flag: '🇸🇾' },
+  { value: 'JO', label: 'الأردن', flag: '🇯🇴' },
+  { value: 'LB', label: 'لبنان', flag: '🇱🇧' },
+  { value: 'KW', label: 'الكويت', flag: '🇰🇼' },
+  { value: 'QA', label: 'قطر', flag: '🇶🇦' },
+  { value: 'BH', label: 'البحرين', flag: '🇧🇭' },
+  { value: 'OM', label: 'عمان', flag: '🇴🇲' },
+  { value: 'YE', label: 'اليمن', flag: '🇾🇪' },
+  { value: 'MA', label: 'المغرب', flag: '🇲🇦' },
+  { value: 'DZ', label: 'الجزائر', flag: '🇩🇿' },
+  { value: 'TN', label: 'تونس', flag: '🇹🇳' },
+  { value: 'LY', label: 'ليبيا', flag: '🇱🇾' },
+  { value: 'US', label: 'الولايات المتحدة', flag: '🇺🇸' },
+  { value: 'GB', label: 'بريطانيا', flag: '🇬🇧' },
+  { value: 'FR', label: 'فرنسا', flag: '🇫🇷' },
+  { value: 'DE', label: 'ألمانيا', flag: '🇩🇪' },
+] as const
+
 export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePageProps) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url || null)
   const [avatarBroken, setAvatarBroken] = useState(false)
@@ -26,6 +50,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
     birthDate: '',
   })
   const [bio, setBio] = useState(user.bio || '')
+  const [country, setCountry] = useState((user.country || '').trim().toUpperCase())
   const [identity, setIdentity] = useState({
     legalName: '',
     nationalId: '',
@@ -37,7 +62,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   const [idCardFile, setIdCardFile] = useState<File | null>(null)
   const [selfieFile, setSelfieFile] = useState<File | null>(null)
   const [openSection, setOpenSection] = useState<
-    'avatar' | 'name' | 'bio' | 'identity' | 'splash' | 'recovery' | 'deposit_privacy' | null
+    'avatar' | 'name' | 'bio' | 'identity' | 'splash' | 'recovery' | 'deposit_privacy' | 'country' | null
   >(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +89,10 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   useEffect(() => {
     setDepositPrivacyEnabled(Number(user.deposit_privacy_enabled ?? 1) === 1)
   }, [user.deposit_privacy_enabled])
+
+  useEffect(() => {
+    setCountry((user.country || '').trim().toUpperCase())
+  }, [user.country])
 
   useEffect(() => {
     setLoadingRecoveryCode(true)
@@ -115,10 +144,13 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
       const nextBio = bio.trim() || null
       const currentDisplayName = user.display_name || null
       const currentBio = user.bio || null
+      const nextCountry = country.trim() || null
+      const currentCountry = user.country ? String(user.country).trim().toUpperCase() : null
       const currentDepositPrivacyEnabled = Number(user.deposit_privacy_enabled ?? 1) === 1
       const profilePayload: {
         displayName?: string | null
         bio?: string | null
+        country?: string | null
         depositPrivacyEnabled?: boolean
       } = {}
 
@@ -127,6 +159,9 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
       }
       if (nextBio !== currentBio) {
         profilePayload.bio = nextBio
+      }
+      if (nextCountry !== currentCountry) {
+        profilePayload.country = nextCountry
       }
       if (depositPrivacyEnabled !== currentDepositPrivacyEnabled) {
         profilePayload.depositPrivacyEnabled = depositPrivacyEnabled
@@ -175,6 +210,9 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
       setCopiedRecoveryCode(false)
     }
   }
+
+  const selectedCountryOption =
+    COUNTRY_OPTIONS.find((option) => option.value === country) || null
 
   return (
     <div className="page profile-settings-page space-y-4">
@@ -332,6 +370,44 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
                 <option value="always">في كل مرة</option>
                 <option value="session">مرة واحدة لكل جلسة</option>
               </select>
+            </>
+          )}
+        </section>
+
+        <section className="elite-enter elite-hover-lift elite-panel p-3">
+          <button
+            className="profile-settings-toggle"
+            type="button"
+            onClick={() => setOpenSection((key) => (key === 'country' ? null : 'country'))}
+          >
+            <span>العلم والدولة</span>
+            <span className="profile-settings-toggle-icon">
+              {openSection === 'country' ? 'â–´' : 'â–¾'}
+            </span>
+          </button>
+          {openSection === 'country' && (
+            <>
+              <p className="profile-settings-sub">
+                اختر علمك ليظهر بجانب اسمك في البروفايل ونتائج البحث بعد حفظ التعديل.
+              </p>
+              <div className="profile-country-picker">
+                <div className="profile-country-preview">
+                  <span className="profile-country-flag">{selectedCountryOption?.flag || '🏳️'}</span>
+                  <span className="profile-country-name">{selectedCountryOption?.label || 'بدون علم'}</span>
+                </div>
+                <select
+                  className="field-input"
+                  value={country}
+                  onChange={(e) => setCountry(String(e.target.value || '').trim().toUpperCase())}
+                >
+                  <option value="">بدون علم</option>
+                  {COUNTRY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.flag} {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           )}
         </section>
