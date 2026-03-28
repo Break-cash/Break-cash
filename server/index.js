@@ -27,6 +27,7 @@ import { createRewardsRouter } from './routes/rewards.js'
 import { createAdsRouter } from './routes/ads.js'
 import { createSupportRouter } from './routes/support.js'
 import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-assets.js'
+import { cleanupOldNotifications } from './services/notifications.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -42,6 +43,7 @@ if (SENTRY_DSN) {
 
 let dbRef = null
 let strategyTradeSweepRunning = false
+let notificationsCleanupRunning = false
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
@@ -148,6 +150,11 @@ async function bootstrap() {
   await ensureBaseSeed(db)
 
   const strategyTradeSweepIntervalMs = Math.max(15000, Number(process.env.STRATEGY_TRADE_SWEEP_INTERVAL_MS || 30000))
+  const notificationsCleanupIntervalMs = Math.max(
+    60 * 60 * 1000,
+    Number(process.env.NOTIFICATIONS_CLEANUP_INTERVAL_MS || 6 * 60 * 60 * 1000),
+  )
+  const notificationsRetentionDays = Math.max(7, Number(process.env.NOTIFICATIONS_RETENTION_DAYS || 30))
   setInterval(async () => {
     if (!dbRef || strategyTradeSweepRunning) return
     strategyTradeSweepRunning = true
@@ -160,6 +167,21 @@ async function bootstrap() {
       strategyTradeSweepRunning = false
     }
   }, strategyTradeSweepIntervalMs)
+  setInterval(async () => {
+    if (!dbRef || notificationsCleanupRunning) return
+    notificationsCleanupRunning = true
+    try {
+      const deletedCount = await cleanupOldNotifications(dbRef, notificationsRetentionDays)
+      if (deletedCount > 0) {
+        console.log(`[notifications] deleted ${deletedCount} old read notifications`)
+      }
+    } catch (error) {
+      if (SENTRY_DSN) Sentry.captureException(error)
+      console.warn('[notifications] cleanup failed', error instanceof Error ? error.message : String(error))
+    } finally {
+      notificationsCleanupRunning = false
+    }
+  }, notificationsCleanupIntervalMs)
 
   app.use('/api/auth', createAuthRouter(db))
   app.use('/api/invites', createInvitesRouter(db))

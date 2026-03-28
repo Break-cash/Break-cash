@@ -197,6 +197,31 @@ async function getUserNotificationLanguage(db, userId) {
   return normalizeLanguage(row?.preferred_language)
 }
 
+export async function cleanupOldNotifications(db, retentionDays = 30) {
+  const normalizedRetentionDays = Math.max(7, Math.floor(Number(retentionDays) || 30))
+  const pgThreshold = `${normalizedRetentionDays} days`
+  const sqliteThreshold = `-${normalizedRetentionDays} days`
+  const dialect = String(db?.client?.constructor?.name || '').toLowerCase()
+  if (dialect.includes('postgres')) {
+    const result = await db.query(
+      `DELETE FROM notifications
+       WHERE is_read = 1
+         AND created_at < NOW() - ($1::interval)`,
+      [pgThreshold],
+    )
+    return Number(result?.rowCount || 0)
+  }
+
+  const result = await run(
+    db,
+    `DELETE FROM notifications
+     WHERE is_read = 1
+       AND datetime(COALESCE(created_at, CURRENT_TIMESTAMP)) < datetime('now', ?)`,
+    [sqliteThreshold],
+  )
+  return Number(result?.changes || 0)
+}
+
 export async function createLocalizedNotification(db, userId, key, variables = {}) {
   const template = notificationTemplates[key]
   if (!template) throw new Error(`UNKNOWN_NOTIFICATION_TEMPLATE:${key}`)
