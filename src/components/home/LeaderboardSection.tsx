@@ -58,7 +58,7 @@ const podiumStyles = [
   {
     place: 1,
     orderClass: 'order-1 lg:order-2',
-    height: 'lg:min-h-[23rem]',
+    height: 'min-h-[18rem] lg:min-h-[22rem]',
     wrapper: 'lg:-translate-y-5 lg:scale-[1.04]',
     panel:
       'border-yellow-300/35 bg-[linear-gradient(180deg,rgba(250,204,21,0.24),rgba(30,41,59,0.94)_30%,rgba(15,23,42,0.96))] shadow-[0_0_45px_rgba(250,204,21,0.22)]',
@@ -71,7 +71,7 @@ const podiumStyles = [
   {
     place: 2,
     orderClass: 'order-2 lg:order-1',
-    height: 'lg:min-h-[19rem]',
+    height: 'min-h-[16.25rem] lg:min-h-[18.5rem]',
     wrapper: 'lg:translate-y-7',
     panel:
       'border-slate-300/25 bg-[linear-gradient(180deg,rgba(226,232,240,0.18),rgba(30,41,59,0.94)_26%,rgba(15,23,42,0.96))] shadow-[0_0_24px_rgba(148,163,184,0.16)]',
@@ -84,7 +84,7 @@ const podiumStyles = [
   {
     place: 3,
     orderClass: 'order-3 lg:order-3',
-    height: 'lg:min-h-[17.5rem]',
+    height: 'min-h-[15.5rem] lg:min-h-[17rem]',
     wrapper: 'lg:translate-y-10',
     panel:
       'border-orange-400/25 bg-[linear-gradient(180deg,rgba(251,146,60,0.18),rgba(30,41,59,0.94)_26%,rgba(15,23,42,0.96))] shadow-[0_0_24px_rgba(251,146,60,0.14)]',
@@ -202,19 +202,19 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                     <div className={`absolute -top-5 inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-white/15 bg-slate-950/80 px-3 font-black text-white ring-4 ${style.ring}`}>
                       #{style.place}
                     </div>
-                    <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white/80">
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white/80 lg:mt-6">
                       <Icon size={14} className={style.iconClass} />
                       {leaderboard.podiumLabels[style.place - 1]}
                     </div>
-                    <div className="mt-5">
+                    <div className="mt-4 lg:mt-5">
                       <Avatar name={competitor.name} avatar={competitor.avatar} size="lg" />
                     </div>
-                    <div className="mt-4 text-base font-bold text-white lg:text-lg">{competitor.name}</div>
+                    <div className="mt-3 text-base font-bold text-white lg:mt-4 lg:text-lg">{competitor.name}</div>
                     <div className="mt-1 text-sm text-slate-300">{competitor.username}</div>
-                    <div className={`mt-5 inline-flex max-w-full items-center rounded-full border px-4 py-2 text-sm font-semibold ${style.points}`}>
+                    <div className={`mt-4 inline-flex max-w-full items-center rounded-full border px-4 py-2 text-sm font-semibold lg:mt-5 ${style.points}`}>
                       {formatDeposits(competitor.totalDeposits)} USDT
                     </div>
-                    <div className="mt-4 h-1 w-20 rounded-full bg-white/10">
+                    <div className="mt-3 h-1 w-20 rounded-full bg-white/10 lg:mt-4">
                       <div className={`h-full rounded-full bg-gradient-to-r ${style.accent}`} />
                     </div>
                   </div>
