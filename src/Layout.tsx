@@ -74,7 +74,7 @@ export function Layout({
     { id: 'profile', visible: true },
   ])
   const [notifications, setNotifications] = useState<
-    { id: number; title: string; body: string; is_read: number }[]
+    { id: number; title: string; body: string; is_read: number; created_at?: string | null }[]
   >([])
   const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
@@ -165,8 +165,22 @@ export function Layout({
     return `${String(item.title || '').trim()}|${String(item.body || '').trim()}`
   }
 
-  function mergeNotifications(items: { id: number; title: string; body: string; is_read: number }[]) {
-    const byKey = new Map<string, { id: number; title: string; body: string; is_read: number }>()
+  function formatNotificationTimestamp(value?: string | null) {
+    if (!value) return '--'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '--'
+    const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US'
+    return date.toLocaleString(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  function mergeNotifications(items: { id: number; title: string; body: string; is_read: number; created_at?: string | null }[]) {
+    const byKey = new Map<string, { id: number; title: string; body: string; is_read: number; created_at?: string | null }>()
     for (const item of items) {
       const key = getNotificationKey(item)
       const existing = byKey.get(key)
@@ -181,11 +195,20 @@ export function Layout({
         byKey.set(key, item)
         continue
       }
-      if (Number(existing.id || 0) < Number(item.id || 0)) {
-        byKey.set(key, item)
+      const existingTime = Date.parse(String(existing.created_at || '')) || 0
+      const nextTime = Date.parse(String(item.created_at || '')) || 0
+      if (nextTime > existingTime || Number(existing.id || 0) < Number(item.id || 0)) {
+        byKey.set(key, {
+          ...item,
+          is_read: Number(existing.is_read || 0) === 1 || Number(item.is_read || 0) === 1 ? 1 : 0,
+        })
       }
     }
-    return Array.from(byKey.values()).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+    return Array.from(byKey.values()).sort((a, b) => {
+      const timeDiff = (Date.parse(String(b.created_at || '')) || 0) - (Date.parse(String(a.created_at || '')) || 0)
+      if (timeDiff !== 0) return timeDiff
+      return Number(b.id || 0) - Number(a.id || 0)
+    })
   }
 
   function isStrategyNotification(item: { title?: string; body?: string }) {
@@ -236,6 +259,7 @@ export function Layout({
         title,
         body,
         is_read: 0,
+        created_at: new Date(Number(event.ts || Date.now())).toISOString(),
       }
       setNotifications((prev) => {
         return mergeNotifications([nextNotification, ...prev]).slice(0, 100)
@@ -406,7 +430,7 @@ export function Layout({
     setNotificationsOpen(next)
     if (!next) return
     const res = (await apiFetch('/api/notifications/list')) as {
-      notifications: { id: number; title: string; body: string; is_read: number }[]
+      notifications: { id: number; title: string; body: string; is_read: number; created_at?: string | null }[]
     }
     const merged = mergeNotifications(res.notifications || [])
     readNotificationKeysRef.current = new Set(
@@ -819,6 +843,7 @@ export function Layout({
                               ) : null}
                             </div>
                             <div className="text-xs text-white/60">{item.body}</div>
+                            <div className="mt-1 text-[11px] text-white/40">{formatNotificationTimestamp(item.created_at)}</div>
                             {isStrategyNotification(item) ? (
                               <div className="mt-1 text-[11px] text-amber-200/85">اضغط لفتح لوحة الصفقات الاستراتيجية</div>
                             ) : null}

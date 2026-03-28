@@ -11,6 +11,52 @@ import {
   sendPushToUser,
 } from '../services/push-notifications.js'
 
+function getNotificationKey(row) {
+  return `${String(row?.title || '').trim()}|${String(row?.body || '').trim()}`
+}
+
+function parseNotificationTime(value) {
+  const ts = Date.parse(String(value || ''))
+  return Number.isFinite(ts) ? ts : 0
+}
+
+function mergeNotificationRows(rows) {
+  const byKey = new Map()
+  for (const row of rows || []) {
+    const key = getNotificationKey(row)
+    const normalized = {
+      id: Number(row?.id || 0),
+      title: String(row?.title || ''),
+      body: String(row?.body || ''),
+      is_read: Number(row?.is_read || 0),
+      created_at: row?.created_at || null,
+    }
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, normalized)
+      continue
+    }
+    const nextRead = Number(existing.is_read || 0) === 1 || Number(normalized.is_read || 0) === 1 ? 1 : 0
+    const nextCreatedAt =
+      parseNotificationTime(normalized.created_at) >= parseNotificationTime(existing.created_at)
+        ? normalized.created_at
+        : existing.created_at
+    const nextId = Math.max(Number(existing.id || 0), Number(normalized.id || 0))
+    byKey.set(key, {
+      id: nextId,
+      title: existing.title,
+      body: existing.body,
+      is_read: nextRead,
+      created_at: nextCreatedAt,
+    })
+  }
+  return Array.from(byKey.values()).sort((a, b) => {
+    const timeDiff = parseNotificationTime(b.created_at) - parseNotificationTime(a.created_at)
+    if (timeDiff !== 0) return timeDiff
+    return Number(b.id || 0) - Number(a.id || 0)
+  })
+}
+
 export function createNotificationsRouter(db) {
   const router = Router()
   router.use(requireAuth(db), requireApproved())
@@ -23,10 +69,10 @@ export function createNotificationsRouter(db) {
        FROM notifications
        WHERE user_id = ?
        ORDER BY id DESC
-       LIMIT ?`,
+      LIMIT ?`,
       [req.user.id, limit],
     )
-    return res.json({ notifications: rows })
+    return res.json({ notifications: mergeNotificationRows(rows) })
   })
 
   router.get('/unreadCount', async (req, res) => {
