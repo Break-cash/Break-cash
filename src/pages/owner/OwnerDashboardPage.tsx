@@ -118,7 +118,7 @@ import {
   updateUserVipLevel,
 } from '../../api'
 import { AD_DESCRIPTION_MAX, AD_PLACEMENTS, AD_TITLE_MAX, validateAdForm } from '../../components/ads/adConstants'
-import { defaultHomeLeaderboardConfig } from '../../components/home/LeaderboardSection'
+import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../../components/home/LeaderboardSection'
 import { useI18n } from '../../i18nCore'
 
 type OwnerDashboardProps = {
@@ -290,6 +290,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [registrationSaving, setRegistrationSaving] = useState(false)
   const [homeLeaderboardDraft, setHomeLeaderboardDraft] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const [homeLeaderboardSaving, setHomeLeaderboardSaving] = useState(false)
+  const [homeLeaderboardPreviewOpen, setHomeLeaderboardPreviewOpen] = useState(false)
   const [attractionKeys, setAttractionKeys] = useState<Array<'hot' | 'new' | 'most_requested'>>([])
   const [attractionTargets, setAttractionTargets] = useState<IconAttractionTarget[]>([])
   const [attractionAssignments, setAttractionAssignments] = useState<IconAttractionAssignments>({})
@@ -2559,6 +2560,13 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   <div className="owner-buttons">
                     <button
                       type="button"
+                      className="wallet-action-btn owner-set-btn"
+                      onClick={() => setHomeLeaderboardPreviewOpen((prev) => !prev)}
+                    >
+                      {homeLeaderboardPreviewOpen ? 'إخفاء المعاينة المباشرة' : 'معاينة مباشرة قبل التفعيل'}
+                    </button>
+                    <button
+                      type="button"
                       className="wallet-action-btn wallet-action-deposit"
                       onClick={handleSaveHomeLeaderboard}
                       disabled={homeLeaderboardSaving}
@@ -2567,6 +2575,22 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     </button>
                   </div>
                 </div>
+
+                {homeLeaderboardPreviewOpen ? (
+                  <div className="rounded-[1.45rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] p-3 shadow-[0_20px_50px_rgba(2,6,23,0.32)]">
+                    <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="text-sm font-bold text-white">المعاينة المباشرة</div>
+                        <div className="mt-1 text-xs text-slate-400">هذه هي نفس البطاقة التي ستظهر في الرئيسية عند التفعيل.</div>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200">
+                        <Eye size={13} />
+                        معاينة خاصة بالمالك
+                      </div>
+                    </div>
+                    <LeaderboardSection config={{ ...homeLeaderboardDraft, enabled: true }} previewMode />
+                  </div>
+                ) : null}
               </div>
             </div>
 
