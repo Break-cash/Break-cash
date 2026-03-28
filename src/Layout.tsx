@@ -38,6 +38,84 @@ import { getPremiumProfileColorClass } from './premiumIdentity'
 
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
 
+const COUNTRY_FLAG_ALIASES: Record<string, string> = {
+  tr: 'TR',
+  turkey: 'TR',
+  turkiye: 'TR',
+  'türkiye': 'TR',
+  تركيا: 'TR',
+  sa: 'SA',
+  saudi: 'SA',
+  'saudi arabia': 'SA',
+  السعودية: 'SA',
+  eg: 'EG',
+  egypt: 'EG',
+  مصر: 'EG',
+  ae: 'AE',
+  uae: 'AE',
+  'united arab emirates': 'AE',
+  الامارات: 'AE',
+  'الإمارات': 'AE',
+  iq: 'IQ',
+  iraq: 'IQ',
+  العراق: 'IQ',
+  sy: 'SY',
+  syria: 'SY',
+  سوريا: 'SY',
+  jo: 'JO',
+  jordan: 'JO',
+  الاردن: 'JO',
+  'الأردن': 'JO',
+  lb: 'LB',
+  lebanon: 'LB',
+  لبنان: 'LB',
+  kw: 'KW',
+  kuwait: 'KW',
+  الكويت: 'KW',
+  qa: 'QA',
+  qatar: 'QA',
+  قطر: 'QA',
+  bh: 'BH',
+  bahrain: 'BH',
+  البحرين: 'BH',
+  om: 'OM',
+  oman: 'OM',
+  عمان: 'OM',
+  ye: 'YE',
+  yemen: 'YE',
+  اليمن: 'YE',
+  ma: 'MA',
+  morocco: 'MA',
+  المغرب: 'MA',
+  dz: 'DZ',
+  algeria: 'DZ',
+  الجزائر: 'DZ',
+  tn: 'TN',
+  tunisia: 'TN',
+  تونس: 'TN',
+  ly: 'LY',
+  libya: 'LY',
+  ليبيا: 'LY',
+  us: 'US',
+  usa: 'US',
+  'united states': 'US',
+  america: 'US',
+  امريكا: 'US',
+  'أمريكا': 'US',
+  gb: 'GB',
+  uk: 'GB',
+  britain: 'GB',
+  england: 'GB',
+  بريطانيا: 'GB',
+  fr: 'FR',
+  france: 'FR',
+  فرنسا: 'FR',
+  de: 'DE',
+  germany: 'DE',
+  ألمانيا: 'DE',
+  المانيا: 'DE',
+}
+
 type LayoutProps = {
   children: ReactNode
   user: AuthUser
@@ -163,6 +241,49 @@ export function Layout({
 
   function getNotificationKey(item: { title?: string; body?: string }) {
     return `${String(item.title || '').trim()}|${String(item.body || '').trim()}`
+  }
+
+  function normalizeCountryCode(value?: string | null) {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    const lower = raw.toLowerCase()
+    if (/^[a-z]{2}$/i.test(raw)) return raw.toUpperCase()
+    return COUNTRY_FLAG_ALIASES[lower] || COUNTRY_FLAG_ALIASES[raw] || ''
+  }
+
+  function getCountryFlagEmoji(value?: string | null) {
+    const code = normalizeCountryCode(value)
+    if (!code) return ''
+    return String.fromCodePoint(...code.split('').map((char) => 127397 + char.charCodeAt(0)))
+  }
+
+  function renderProfileIdentity(compact = false) {
+    const countryFlag = getCountryFlagEmoji(user.country)
+    return (
+      <>
+        <div className="flex items-center gap-1.5">
+          <div className="truncate text-sm font-semibold text-white">{user.display_name || `#${user.id}`}</div>
+          {countryFlag ? (
+            <span
+              className={`inline-flex items-center justify-center rounded-full border border-white/10 bg-white/8 px-1.5 ${
+                compact ? 'text-sm leading-5' : 'text-base leading-5'
+              }`}
+              title={String(user.country || '').trim()}
+              aria-label={String(user.country || '').trim()}
+            >
+              {countryFlag}
+            </span>
+          ) : null}
+        </div>
+        <UserIdentityBadges
+          badgeColor={computedBadgeColor}
+          vipLevel={user.vip_level || 0}
+          premiumBadge={user.profile_badge}
+          mode="verified"
+          className="mt-1"
+        />
+      </>
+    )
   }
 
   function formatNotificationTimestamp(value?: string | null) {
@@ -534,14 +655,7 @@ export function Layout({
                         className="glass-panel absolute start-0 top-14 z-50 min-w-44 rounded-xl p-2 shadow-[0_16px_32px_rgba(0,0,0,0.45)]"
                       >
                         <div className="mb-1 rounded-lg border border-app-border bg-app-elevated px-3 py-2">
-                          <div className="truncate text-sm font-semibold text-white">{user.display_name || `#${user.id}`}</div>
-                          <UserIdentityBadges
-                            badgeColor={computedBadgeColor}
-                            vipLevel={user.vip_level || 0}
-                            premiumBadge={user.profile_badge}
-                            mode="verified"
-                            className="mt-1"
-                          />
+                          {renderProfileIdentity(true)}
                         </div>
                         {utilityLinks.length > 0 ? (
                           <div className="mb-1 space-y-1">
@@ -933,16 +1047,7 @@ export function Layout({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-white">
-                      {user.display_name || `#${user.id}`}
-                    </div>
-                    <UserIdentityBadges
-                      badgeColor={computedBadgeColor}
-                      vipLevel={user.vip_level || 0}
-                      premiumBadge={user.profile_badge}
-                      mode="verified"
-                      className="mt-1"
-                    />
+                    {renderProfileIdentity()}
                   </div>
                 </div>
               </div>

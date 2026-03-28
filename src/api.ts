@@ -27,6 +27,7 @@ export type AuthUser = {
   points?: number
   referred_by?: number | null
   is_owner?: number
+  country?: string | null
   preferred_language?: 'ar' | 'en' | 'tr' | string | null
   deposit_privacy_enabled?: number
   created_at?: string
