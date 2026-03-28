@@ -6,6 +6,7 @@ import {
   apiFetch,
   getMyProfile,
   getAds,
+  getHomeLeaderboardConfig,
   getPushPublicKey,
   getPushSubscriptionStatus,
   removePushSubscription,
@@ -14,8 +15,10 @@ import {
   subscribeToLiveUpdates,
   type AuthUser,
   type AdItem,
+  type HomeLeaderboardConfig,
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
+import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../components/home/LeaderboardSection'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { WalletSummaryPanel } from '../components/wallet/WalletSummaryPanel'
@@ -33,6 +36,7 @@ export function Profile() {
   const [loading, setLoading] = useState(true)
   const [liveQuotes, setLiveQuotes] = useState<Record<string, { price: number; change24h: number }>>({})
   const [profileAds, setProfileAds] = useState<AdItem[]>([])
+  const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const [isPullRefreshing, setIsPullRefreshing] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
   const [pushSupported, setPushSupported] = useState(false)
@@ -108,6 +112,9 @@ export function Profile() {
       .finally(() => setLoading(false))
     loadAdsData().catch(() => {})
     loadQuotes().catch(() => {})
+    getHomeLeaderboardConfig()
+      .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+      .catch(() => setLeaderboardConfig(defaultHomeLeaderboardConfig))
   }, [loadCoreDashboardData, loadAdsData, loadQuotes])
 
   useEffect(() => {
@@ -141,6 +148,17 @@ export function Profile() {
       liveRefreshTimerRef.current = window.setTimeout(() => {
         if (event.type === 'home_content_updated' || event.type === 'announcement_updated') {
           loadAdsData().catch(() => {})
+          if (event.key === 'home_leaderboard' || event.type === 'home_content_updated') {
+            getHomeLeaderboardConfig()
+              .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+              .catch(() => {})
+          }
+          return
+        }
+        if (event.type === 'settings_updated' && event.key === 'home_leaderboard') {
+          getHomeLeaderboardConfig()
+            .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+            .catch(() => {})
           return
         }
         if (event.type === 'balance_updated') {
@@ -340,6 +358,7 @@ export function Profile() {
           ) : null}
         </div>
       </motion.section>
+      <LeaderboardSection config={leaderboardConfig} />
       <section className="glass-panel elite-enter rounded-3xl p-3">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_announcement_board')}</p>
