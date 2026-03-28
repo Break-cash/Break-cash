@@ -934,6 +934,44 @@ export async function createStrategyTradeProfitReward(db, opts) {
 }
 
 /**
+ * Create a manual compensation reward that stays locked like task/strategy profits for one week.
+ */
+export async function createLockedCompensationReward(db, opts) {
+  const { userId, amount, referenceId, currency = 'USDT', sourceType = 'tasks', referenceType = 'admin_compensation' } = opts
+  if (!userId || !Number.isFinite(amount) || amount <= 0 || !referenceId) throw new Error('INVALID_INPUT')
+  const earningResult = await createEarningEntry(db, {
+    userId,
+    sourceType,
+    referenceType,
+    referenceId,
+    currency,
+    amount,
+  })
+  const entryId =
+    earningResult?.id ??
+    (await get(
+      db,
+      `SELECT id
+       FROM earning_entries
+       WHERE source_type = ?
+         AND reference_type = ?
+         AND reference_id = ?
+       LIMIT 1`,
+      [sourceType, referenceType, referenceId],
+    ))?.id
+  if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
+  const lockedUntil = buildLockedUntilIso(TASK_REWARD_WITHDRAW_LOCK_HOURS)
+  await updatePendingEarningPolicy(db, entryId, { payoutMode: 'withdrawable', lockedUntil })
+  return {
+    earningEntryId: entryId,
+    payoutMode: 'withdrawable',
+    lockHours: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+    lockedUntil,
+    balanceAfter: await getTotalMainBalance(db, userId, currency),
+  }
+}
+
+/**
  * Create first deposit bonus reward through the unified earning pipeline.
  */
 export async function createFirstDepositBonusReward(db, opts) {

@@ -3,7 +3,7 @@ import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { hashPassword } from '../auth.js'
 import { markReferralAsVerifiedIfDeposited } from '../services/verification.js'
-import { getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
+import { createLockedCompensationReward, getMainBalance, adjustBalance, normalizeRewardSourceType } from '../services/wallet-service.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { sendPushToUser } from '../services/push-notifications.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
@@ -443,6 +443,51 @@ export function createUsersRouter(db) {
     const next = await getMainBalance(db, userId, currency)
     await logAdminAction(db, req.user.id, 'finance', 'bonus_adjust', userId, { type, currency, amount })
     return res.json({ ok: true, balance: { userId, currency, amount: next } })
+  })
+
+  router.post('/compensation', requirePermission(db, 'manage_users'), async (req, res) => {
+    const userId = Number(req.body?.userId)
+    const currency = String(req.body?.currency || 'USDT').trim().toUpperCase()
+    const amount = Number(req.body?.amount)
+    const reason = String(req.body?.reason || '').trim().slice(0, 260)
+    const campaignKey = Number(req.body?.campaignKey || 0)
+    if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(amount) || amount <= 0 || !campaignKey) {
+      return res.status(400).json({ error: 'INVALID_INPUT' })
+    }
+    if (await blockProtectedOwnerAction(db, res, userId)) return
+
+    try {
+      const payload = await withTransaction(db, async (tx) => {
+        const referenceId = Number(campaignKey * 100000 + userId)
+        const result = await createLockedCompensationReward(tx, {
+          userId,
+          currency,
+          amount,
+          referenceId,
+          referenceType: 'admin_compensation',
+          sourceType: 'tasks',
+        })
+        await logAdminAction(tx, req.user.id, 'finance', 'grant_locked_compensation', userId, {
+          currency,
+          amount,
+          campaignKey,
+          earningEntryId: result.earningEntryId,
+          lockedUntil: result.lockedUntil,
+          reason,
+        })
+        return { ...result, referenceId }
+      })
+      return res.json({ ok: true, ...payload })
+    } catch (error) {
+      const message = String(error?.message || '')
+      if (message.includes('duplicate key') || message.includes('unique')) {
+        return res.status(409).json({ error: 'ALREADY_EXISTS' })
+      }
+      if (error instanceof Error && (error.message === 'INVALID_INPUT' || error.message === 'EARNING_ENTRY_FAILED')) {
+        return res.status(400).json({ error: error.message })
+      }
+      throw error
+    }
   })
 
   router.post('/profit-adjust', requirePermission(db, 'manage_users'), async (req, res) => {
