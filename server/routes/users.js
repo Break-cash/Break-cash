@@ -458,7 +458,8 @@ export function createUsersRouter(db) {
 
     try {
       const payload = await withTransaction(db, async (tx) => {
-        const referenceId = Number(campaignKey * 100000 + userId)
+        const compactCampaignKey = Math.max(1, Number(String(campaignKey).slice(-4) || 0))
+        const referenceId = Number(compactCampaignKey * 100000 + userId)
         const result = await createLockedCompensationReward(tx, {
           userId,
           currency,
