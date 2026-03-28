@@ -291,6 +291,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [homeLeaderboardDraft, setHomeLeaderboardDraft] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const [homeLeaderboardSaving, setHomeLeaderboardSaving] = useState(false)
   const [homeLeaderboardPreviewOpen, setHomeLeaderboardPreviewOpen] = useState(false)
+  const [homeLeaderboardPreviewMode, setHomeLeaderboardPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [attractionKeys, setAttractionKeys] = useState<Array<'hot' | 'new' | 'most_requested'>>([])
   const [attractionTargets, setAttractionTargets] = useState<IconAttractionTarget[]>([])
   const [attractionAssignments, setAttractionAssignments] = useState<IconAttractionAssignments>({})
@@ -2581,14 +2582,51 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <div className="text-sm font-bold text-white">المعاينة المباشرة</div>
-                        <div className="mt-1 text-xs text-slate-400">هذه هي نفس البطاقة التي ستظهر في الرئيسية عند التفعيل.</div>
+                        <div className="mt-1 text-xs text-slate-400">هذه هي نفس البطاقة التي ستظهر في الرئيسية عند التفعيل، مع إمكانية مشاهدة شكل الجوال أو سطح المكتب.</div>
                       </div>
-                      <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200">
-                        <Eye size={13} />
-                        معاينة خاصة بالمالك
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200">
+                          <Eye size={13} />
+                          معاينة خاصة بالمالك
+                        </div>
+                        <button
+                          type="button"
+                          className={`wallet-action-btn ${homeLeaderboardPreviewMode === 'desktop' ? 'wallet-action-deposit' : 'owner-set-btn'}`}
+                          onClick={() => setHomeLeaderboardPreviewMode('desktop')}
+                        >
+                          سطح المكتب
+                        </button>
+                        <button
+                          type="button"
+                          className={`wallet-action-btn ${homeLeaderboardPreviewMode === 'mobile' ? 'wallet-action-deposit' : 'owner-set-btn'}`}
+                          onClick={() => setHomeLeaderboardPreviewMode('mobile')}
+                        >
+                          الجوال
+                        </button>
                       </div>
                     </div>
-                    <LeaderboardSection config={{ ...homeLeaderboardDraft, enabled: true }} previewMode />
+                    {homeLeaderboardPreviewMode === 'desktop' ? (
+                      <div className="rounded-[1.35rem] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,rgba(2,6,23,0.82),rgba(15,23,42,0.96))] p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <div className="text-xs font-semibold tracking-[0.18em] text-slate-400">DESKTOP PREVIEW</div>
+                          <div className="text-xs text-slate-500">1440px</div>
+                        </div>
+                        <LeaderboardSection config={{ ...homeLeaderboardDraft, enabled: true }} previewMode />
+                      </div>
+                    ) : (
+                      <div className="flex justify-center">
+                        <div className="w-full max-w-[430px] rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-3 shadow-[0_18px_40px_rgba(2,6,23,0.36)]">
+                          <div className="mx-auto mb-3 h-1.5 w-24 rounded-full bg-white/12" />
+                          <div className="mb-3 flex items-center justify-between px-1">
+                            <div className="text-xs font-semibold tracking-[0.18em] text-slate-400">MOBILE PREVIEW</div>
+                            <div className="text-xs text-slate-500">390px</div>
+                          </div>
+                          <div className="max-h-[75vh] overflow-y-auto rounded-[1.4rem] bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,rgba(2,6,23,0.82),rgba(15,23,42,0.96))] p-2">
+                            <LeaderboardSection config={{ ...homeLeaderboardDraft, enabled: true }} previewMode />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </div>
