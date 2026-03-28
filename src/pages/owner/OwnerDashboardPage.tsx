@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Crown, Eye, EyeOff, Medal, Sparkles } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import {
   apiFetch,
@@ -221,6 +222,30 @@ function getOwnerFinancialActionLabel(value: OwnerFinancialApprovalItem['actionT
 function getPrincipalWithdrawPercent(rules: BalanceRules) {
   return Math.round(Number(rules.principalWithdrawalRule?.withdrawableRatio ?? rules.defaultUnlockRatio ?? 0.5) * 100)
 }
+
+const ownerLeaderboardPlaceMeta = [
+  {
+    badge: 'الأول',
+    icon: Crown,
+    iconClass: 'text-yellow-200',
+    chipClass: 'border-yellow-400/30 bg-yellow-400/12 text-yellow-100',
+    cardClass: 'border-yellow-400/16 bg-[linear-gradient(180deg,rgba(250,204,21,0.12),rgba(15,23,42,0.92))]',
+  },
+  {
+    badge: 'الثاني',
+    icon: Medal,
+    iconClass: 'text-slate-200',
+    chipClass: 'border-slate-300/30 bg-slate-300/10 text-slate-100',
+    cardClass: 'border-slate-300/14 bg-[linear-gradient(180deg,rgba(226,232,240,0.08),rgba(15,23,42,0.92))]',
+  },
+  {
+    badge: 'الثالث',
+    icon: Medal,
+    iconClass: 'text-orange-200',
+    chipClass: 'border-orange-400/30 bg-orange-400/10 text-orange-100',
+    cardClass: 'border-orange-400/16 bg-[linear-gradient(180deg,rgba(251,146,60,0.09),rgba(15,23,42,0.92))]',
+  },
+]
 
 function formatRewardApplyResult(result?: RewardPayoutApplyResult | null) {
   const releasedEntries = Number(result?.releasedEntries || 0)
@@ -2326,147 +2351,223 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
 
             <div className="owner-section-divider" />
 
-            <h2 className="owner-section-title">أعلى 3 مودعين</h2>
-            <p className="owner-hint">القسم مخفي افتراضيًا. عبّئ بيانات المتصدرين هنا ثم فعّله عند الجاهزية.</p>
-            <div className="owner-reg-control">
-              <span className={`owner-reg-badge ${homeLeaderboardDraft.enabled ? 'enabled' : 'disabled'}`}>
-                {homeLeaderboardDraft.enabled ? 'القسم ظاهر في الرئيسية' : 'القسم مخفي حاليًا'}
-              </span>
-              <button
-                type="button"
-                className="wallet-action-btn owner-set-btn"
-                onClick={() => handleHomeLeaderboardFieldChange('enabled', !homeLeaderboardDraft.enabled)}
-              >
-                {homeLeaderboardDraft.enabled ? 'إخفاء القسم' : 'تفعيل القسم عند الجاهزية'}
-              </button>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                <span className="owner-hint">شارة القسم</span>
-                <input
-                  value={homeLeaderboardDraft.badge}
-                  onChange={(e) => handleHomeLeaderboardFieldChange('badge', e.target.value)}
-                  placeholder="أعلى المودعين"
-                />
-              </label>
-              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                <span className="owner-hint">عنوان القسم</span>
-                <input
-                  value={homeLeaderboardDraft.title}
-                  onChange={(e) => handleHomeLeaderboardFieldChange('title', e.target.value)}
-                  placeholder="أعلى 3 مودعين لهذا الشهر"
-                />
-              </label>
-              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                <span className="owner-hint">وصف القسم</span>
-                <textarea
-                  rows={3}
-                  value={homeLeaderboardDraft.description}
-                  onChange={(e) => handleHomeLeaderboardFieldChange('description', e.target.value)}
-                  placeholder="وصف قصير يظهر أعلى القسم"
-                />
-              </label>
-              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                <span className="owner-hint">قيمة الملخص</span>
-                <input
-                  value={homeLeaderboardDraft.summaryValue}
-                  onChange={(e) => handleHomeLeaderboardFieldChange('summaryValue', e.target.value)}
-                  placeholder="184,520 USDT"
-                />
-              </label>
-            </div>
-
-            <div className="space-y-4 mt-4">
-              {homeLeaderboardDraft.competitors.map((item, index) => (
-                <div key={item.id || index} className="card small-card bg-app-card/70 border border-app-border">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="text-sm font-bold text-white">المركز {index + 1}</div>
-                    <div className="text-xs text-app-muted">يظهر ضمن منصة المتصدرين</div>
+            <div className="rounded-[1.6rem] border border-sky-400/12 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.14),transparent_28%),linear-gradient(180deg,rgba(8,15,30,0.98),rgba(6,10,22,0.98))] p-4 shadow-[0_20px_55px_rgba(2,6,23,0.35)]">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3 rounded-[1.3rem] border border-white/8 bg-white/[0.03] p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-sky-200">
+                        <Sparkles size={13} />
+                        لوحة أعلى المودعين
+                      </div>
+                      <h2 className="mt-3 text-xl font-black text-white">أعلى 3 مودعين</h2>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        القسم مخفي افتراضيًا. عبّئ بيانات المتصدرين هنا ثم فعّله عند الجاهزية ليظهر في الصفحة الرئيسية.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`owner-reg-badge ${homeLeaderboardDraft.enabled ? 'enabled' : 'disabled'}`}>
+                        <span className="inline-flex items-center gap-2">
+                          {homeLeaderboardDraft.enabled ? <Eye size={14} /> : <EyeOff size={14} />}
+                          {homeLeaderboardDraft.enabled ? 'القسم ظاهر في الرئيسية' : 'القسم مخفي حاليًا'}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className={`wallet-action-btn ${homeLeaderboardDraft.enabled ? 'wallet-action-withdraw' : 'owner-set-btn'}`}
+                        onClick={() => handleHomeLeaderboardFieldChange('enabled', !homeLeaderboardDraft.enabled)}
+                      >
+                        {homeLeaderboardDraft.enabled ? 'إخفاء القسم' : 'تفعيل القسم عند الجاهزية'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="grid gap-3">
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">الاسم</span>
-                      <input
-                        value={item.name}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'name', e.target.value)}
-                        placeholder="اسم المتصدر"
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">المعرف</span>
-                      <input
-                        value={item.username}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'username', e.target.value)}
-                        placeholder="@username"
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">رابط الصورة</span>
-                      <input
-                        value={item.avatar || ''}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'avatar', e.target.value)}
-                        placeholder="https://..."
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">إجمالي الإيداعات</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.totalDeposits}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'totalDeposits', e.target.value)}
-                        placeholder="0"
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">نمو الشهر</span>
-                      <input
-                        value={item.monthlyGrowth}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'monthlyGrowth', e.target.value)}
-                        placeholder="+12.5%"
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">اللقب</span>
-                      <input
-                        value={item.tierLabel}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'tierLabel', e.target.value)}
-                        placeholder="حوت النخبة"
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">النص السفلي</span>
-                      <input
-                        value={item.ctaLabel}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'ctaLabel', e.target.value)}
-                        placeholder="عرض ملف المتصدر"
-                      />
-                    </label>
-                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                      <span className="owner-hint">الوصف التعريفي</span>
-                      <textarea
-                        rows={3}
-                        value={item.spotlight}
-                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'spotlight', e.target.value)}
-                        placeholder="وصف مختصر للمركز"
-                      />
-                    </label>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
+                      <div className="text-[11px] text-slate-500">الحالة الحالية</div>
+                      <div className="mt-2 text-sm font-bold text-white">{homeLeaderboardDraft.enabled ? 'معروض للعامة' : 'مخفي حتى الإذن'}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
+                      <div className="text-[11px] text-slate-500">عدد البطاقات</div>
+                      <div className="mt-2 text-sm font-bold text-white">{homeLeaderboardDraft.competitors.length} متصدرين</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
+                      <div className="text-[11px] text-slate-500">ملخص الشهر</div>
+                      <div className="mt-2 text-sm font-bold text-white">{homeLeaderboardDraft.summaryValue || 'غير محدد بعد'}</div>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="owner-buttons mt-4">
-              <button
-                type="button"
-                className="wallet-action-btn wallet-action-deposit"
-                onClick={handleSaveHomeLeaderboard}
-                disabled={homeLeaderboardSaving}
-              >
-                {homeLeaderboardSaving ? '...' : 'حفظ بيانات أعلى المودعين'}
-              </button>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                    <span className="owner-hint">شارة القسم</span>
+                    <input
+                      value={homeLeaderboardDraft.badge}
+                      onChange={(e) => handleHomeLeaderboardFieldChange('badge', e.target.value)}
+                      placeholder="أعلى المودعين"
+                    />
+                  </label>
+                  <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                    <span className="owner-hint">عنوان القسم</span>
+                    <input
+                      value={homeLeaderboardDraft.title}
+                      onChange={(e) => handleHomeLeaderboardFieldChange('title', e.target.value)}
+                      placeholder="أعلى 3 مودعين لهذا الشهر"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[1.3fr_0.7fr]">
+                  <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                    <span className="owner-hint">وصف القسم</span>
+                    <textarea
+                      rows={4}
+                      value={homeLeaderboardDraft.description}
+                      onChange={(e) => handleHomeLeaderboardFieldChange('description', e.target.value)}
+                      placeholder="وصف قصير يظهر أعلى القسم"
+                    />
+                  </label>
+                  <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                    <span className="owner-hint">قيمة الملخص</span>
+                    <input
+                      value={homeLeaderboardDraft.summaryValue}
+                      onChange={(e) => handleHomeLeaderboardFieldChange('summaryValue', e.target.value)}
+                      placeholder="184,520 USDT"
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-4">
+                  {homeLeaderboardDraft.competitors.map((item, index) => {
+                    const meta = ownerLeaderboardPlaceMeta[index] || ownerLeaderboardPlaceMeta[0]
+                    const PlaceIcon = meta.icon
+                    return (
+                      <div
+                        key={item.id || index}
+                        className={`rounded-[1.45rem] border p-4 shadow-[0_18px_40px_rgba(2,6,23,0.22)] ${meta.cardClass}`}
+                      >
+                        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border ${meta.chipClass}`}>
+                              <PlaceIcon size={18} className={meta.iconClass} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-white">المركز {index + 1}</div>
+                              <div className="text-xs text-slate-400">بطاقة تحرير خاصة بصاحب المرتبة {meta.badge}</div>
+                            </div>
+                          </div>
+                          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${meta.chipClass}`}>
+                            {meta.badge}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">الاسم</span>
+                            <input
+                              value={item.name}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'name', e.target.value)}
+                              placeholder="اسم المتصدر"
+                            />
+                          </label>
+                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">المعرف</span>
+                            <input
+                              value={item.username}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'username', e.target.value)}
+                              placeholder="@username"
+                            />
+                          </label>
+                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">رابط الصورة</span>
+                            <input
+                              value={item.avatar || ''}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'avatar', e.target.value)}
+                              placeholder="https://..."
+                            />
+                          </label>
+                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">إجمالي الإيداعات</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.totalDeposits}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'totalDeposits', e.target.value)}
+                              placeholder="0"
+                            />
+                          </label>
+                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">نمو الشهر</span>
+                            <input
+                              value={item.monthlyGrowth}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'monthlyGrowth', e.target.value)}
+                              placeholder="+12.5%"
+                            />
+                          </label>
+                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">اللقب</span>
+                            <input
+                              value={item.tierLabel}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'tierLabel', e.target.value)}
+                              placeholder="حوت النخبة"
+                            />
+                          </label>
+                          <label className="wallet-inline-input lg:col-span-2" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">النص السفلي</span>
+                            <input
+                              value={item.ctaLabel}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'ctaLabel', e.target.value)}
+                              placeholder="عرض ملف المتصدر"
+                            />
+                          </label>
+                          <label className="wallet-inline-input lg:col-span-2" style={{ display: 'grid', gap: 6 }}>
+                            <span className="owner-hint">الوصف التعريفي</span>
+                            <textarea
+                              rows={4}
+                              value={item.spotlight}
+                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'spotlight', e.target.value)}
+                              placeholder="وصف مختصر للمركز"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                          <div>
+                            <div className="text-[11px] text-slate-500">معاينة سريعة</div>
+                            <div className="mt-1 text-sm font-semibold text-white">
+                              {item.name || `المركز ${index + 1}`} • {Number(item.totalDeposits || 0).toLocaleString('en-US')} USDT
+                            </div>
+                          </div>
+                          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${meta.chipClass}`}>
+                            <Sparkles size={12} />
+                            جاهز للعرض بعد الحفظ
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-[1.3rem] border border-white/8 bg-white/[0.03] p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="text-sm font-bold text-white">حفظ ونشر الحالة</div>
+                    <div className="mt-1 text-sm text-slate-400">
+                      يمكنك حفظ البيانات مع إبقاء القسم مخفيًا، أو تفعيله ليظهر مباشرة في الرئيسية.
+                    </div>
+                  </div>
+                  <div className="owner-buttons">
+                    <button
+                      type="button"
+                      className="wallet-action-btn wallet-action-deposit"
+                      onClick={handleSaveHomeLeaderboard}
+                      disabled={homeLeaderboardSaving}
+                    >
+                      {homeLeaderboardSaving ? '...' : 'حفظ بيانات أعلى المودعين'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="owner-section-divider" />
