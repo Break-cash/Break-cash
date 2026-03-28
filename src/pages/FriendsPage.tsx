@@ -157,7 +157,21 @@ export function FriendsPage() {
                   )}
                 </div>
                 <div className="friends-item-info">
-                  <span className="friends-item-name">{user.displayName}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="friends-item-name">{user.displayName}</span>
+                    <UserIdentityBadges
+                      badgeColor={
+                        Number(user.blueBadge || 0) === 1
+                          ? 'blue'
+                          : user.verificationStatus === 'verified'
+                            ? 'gold'
+                            : 'none'
+                      }
+                      vipLevel={user.vipLevel || 0}
+                      premiumBadge={user.premiumBadge}
+                      mode="verified"
+                    />
+                  </div>
                   <span className="friends-item-id">ID: {user.id}</span>
                 </div>
                 <button
@@ -292,6 +306,7 @@ export function FriendsPage() {
                   <UserIdentityBadges
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
+                    premiumBadge={selectedUser.premiumBadge}
                     mode="verified"
                   />
                 </div>

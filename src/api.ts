@@ -694,6 +694,7 @@ export type FriendUser = {
   verificationStatus?: 'unverified' | 'pending' | 'verified' | string
   blueBadge?: number
   vipLevel?: number
+  premiumBadge?: PremiumProfileBadge | string | null
   tradingBalance?: number | null
   depositPrivacyEnabled?: boolean
 }

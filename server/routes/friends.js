@@ -30,7 +30,7 @@ export function createFriendsRouter(db) {
     const me = req.user.id
     const rows = await all(
       db,
-      `SELECT u.id, u.display_name, u.bio, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.deposit_privacy_enabled,
+      `SELECT u.id, u.display_name, u.bio, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.profile_badge, u.deposit_privacy_enabled,
               COALESCE(bal.total_balance, 0) AS trading_balance
        FROM users u
        LEFT JOIN (
@@ -52,6 +52,7 @@ export function createFriendsRouter(db) {
       verificationStatus: String(r.verification_status || 'unverified'),
       blueBadge: Number(r.blue_badge || 0),
       vipLevel: Number(r.vip_level || 0),
+      premiumBadge: String(r.profile_badge || '').trim() || null,
       depositPrivacyEnabled: Number(r.deposit_privacy_enabled ?? 1) === 1,
       tradingBalance: Number(r.deposit_privacy_enabled ?? 1) === 1 ? null : Number(r.trading_balance || 0),
     }))
