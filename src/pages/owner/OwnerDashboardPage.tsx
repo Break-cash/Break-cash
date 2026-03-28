@@ -26,6 +26,7 @@ import {
   getOwnerFinancialGuard,
   getOwnerMonthlyFinanceReport,
   getPartnerProfiles,
+  getHomeLeaderboardConfig,
   deleteRewardPayoutOverrideOwner,
   getRewardPayoutRulesOwner,
   getRegistrationStatus,
@@ -60,6 +61,7 @@ import {
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
   updateBalanceRules,
+  updateHomeLeaderboardConfig,
   updateOwnerFinancialGuardConfig,
   updateRewardPayoutRulesOwner,
   updateStrategyTradeDisplayConfig,
@@ -80,6 +82,7 @@ import {
   type ContentCampaign,
   type DailyTradeCampaign,
   type EarningEntry,
+  type HomeLeaderboardConfig,
   type IconAttractionAssignments,
   type IconAttractionTarget,
   type KycWatchlistItem,
@@ -114,6 +117,7 @@ import {
   updateUserVipLevel,
 } from '../../api'
 import { AD_DESCRIPTION_MAX, AD_PLACEMENTS, AD_TITLE_MAX, validateAdForm } from '../../components/ads/adConstants'
+import { defaultHomeLeaderboardConfig } from '../../components/home/LeaderboardSection'
 import { useI18n } from '../../i18nCore'
 
 type OwnerDashboardProps = {
@@ -259,6 +263,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [assetImages, setAssetImages] = useState<{ key: string; url: string }[]>([])
   const [registrationEnabled, setRegistrationEnabled] = useState(true)
   const [registrationSaving, setRegistrationSaving] = useState(false)
+  const [homeLeaderboardDraft, setHomeLeaderboardDraft] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
+  const [homeLeaderboardSaving, setHomeLeaderboardSaving] = useState(false)
   const [attractionKeys, setAttractionKeys] = useState<Array<'hot' | 'new' | 'most_requested'>>([])
   const [attractionTargets, setAttractionTargets] = useState<IconAttractionTarget[]>([])
   const [attractionAssignments, setAttractionAssignments] = useState<IconAttractionAssignments>({})
@@ -497,6 +503,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   }, [])
 
   useEffect(() => {
+    getHomeLeaderboardConfig()
+      .then((res) => setHomeLeaderboardDraft(res.config || defaultHomeLeaderboardConfig))
+      .catch(() => setHomeLeaderboardDraft(defaultHomeLeaderboardConfig))
+  }, [])
+
+  useEffect(() => {
     getBalanceRules()
       .then((res) => setBalanceRules(res.rules || createDefaultBalanceRules()))
       .catch(() => setBalanceRules(createDefaultBalanceRules()))
@@ -697,6 +709,43 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث الحالة.' })
     } finally {
       setRegistrationSaving(false)
+    }
+  }
+
+  function handleHomeLeaderboardFieldChange<K extends keyof HomeLeaderboardConfig>(key: K, value: HomeLeaderboardConfig[K]) {
+    setHomeLeaderboardDraft((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function handleHomeLeaderboardCompetitorChange(index: number, field: keyof HomeLeaderboardConfig['competitors'][number], value: string) {
+    setHomeLeaderboardDraft((prev) => ({
+      ...prev,
+      competitors: prev.competitors.map((item, itemIndex) => {
+        if (itemIndex !== index) return item
+        if (field === 'totalDeposits') {
+          const numeric = Number(value)
+          return { ...item, totalDeposits: Number.isFinite(numeric) ? numeric : 0 }
+        }
+        return { ...item, [field]: value }
+      }),
+    }))
+  }
+
+  async function handleSaveHomeLeaderboard() {
+    setHomeLeaderboardSaving(true)
+    setMessage(null)
+    try {
+      const res = await updateHomeLeaderboardConfig(homeLeaderboardDraft)
+      setHomeLeaderboardDraft(res.config)
+      setMessage({
+        type: 'success',
+        text: res.config.enabled
+          ? 'تم حفظ قسم أعلى المودعين وتفعيله في الرئيسية.'
+          : 'تم حفظ قسم أعلى المودعين وهو ما يزال مخفيًا حتى تقوم بتفعيله.',
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ إعدادات أعلى المودعين.' })
+    } finally {
+      setHomeLeaderboardSaving(false)
     }
   }
 
@@ -2272,6 +2321,151 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   : registrationEnabled
                     ? 'تعليق إنشاء الحسابات'
                     : 'تفعيل إنشاء الحسابات'}
+              </button>
+            </div>
+
+            <div className="owner-section-divider" />
+
+            <h2 className="owner-section-title">أعلى 3 مودعين</h2>
+            <p className="owner-hint">القسم مخفي افتراضيًا. عبّئ بيانات المتصدرين هنا ثم فعّله عند الجاهزية.</p>
+            <div className="owner-reg-control">
+              <span className={`owner-reg-badge ${homeLeaderboardDraft.enabled ? 'enabled' : 'disabled'}`}>
+                {homeLeaderboardDraft.enabled ? 'القسم ظاهر في الرئيسية' : 'القسم مخفي حاليًا'}
+              </span>
+              <button
+                type="button"
+                className="wallet-action-btn owner-set-btn"
+                onClick={() => handleHomeLeaderboardFieldChange('enabled', !homeLeaderboardDraft.enabled)}
+              >
+                {homeLeaderboardDraft.enabled ? 'إخفاء القسم' : 'تفعيل القسم عند الجاهزية'}
+              </button>
+            </div>
+
+            <div className="space-y-3 mt-4">
+              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                <span className="owner-hint">شارة القسم</span>
+                <input
+                  value={homeLeaderboardDraft.badge}
+                  onChange={(e) => handleHomeLeaderboardFieldChange('badge', e.target.value)}
+                  placeholder="أعلى المودعين"
+                />
+              </label>
+              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                <span className="owner-hint">عنوان القسم</span>
+                <input
+                  value={homeLeaderboardDraft.title}
+                  onChange={(e) => handleHomeLeaderboardFieldChange('title', e.target.value)}
+                  placeholder="أعلى 3 مودعين لهذا الشهر"
+                />
+              </label>
+              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                <span className="owner-hint">وصف القسم</span>
+                <textarea
+                  rows={3}
+                  value={homeLeaderboardDraft.description}
+                  onChange={(e) => handleHomeLeaderboardFieldChange('description', e.target.value)}
+                  placeholder="وصف قصير يظهر أعلى القسم"
+                />
+              </label>
+              <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                <span className="owner-hint">قيمة الملخص</span>
+                <input
+                  value={homeLeaderboardDraft.summaryValue}
+                  onChange={(e) => handleHomeLeaderboardFieldChange('summaryValue', e.target.value)}
+                  placeholder="184,520 USDT"
+                />
+              </label>
+            </div>
+
+            <div className="space-y-4 mt-4">
+              {homeLeaderboardDraft.competitors.map((item, index) => (
+                <div key={item.id || index} className="card small-card bg-app-card/70 border border-app-border">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-white">المركز {index + 1}</div>
+                    <div className="text-xs text-app-muted">يظهر ضمن منصة المتصدرين</div>
+                  </div>
+                  <div className="grid gap-3">
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">الاسم</span>
+                      <input
+                        value={item.name}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'name', e.target.value)}
+                        placeholder="اسم المتصدر"
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">المعرف</span>
+                      <input
+                        value={item.username}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'username', e.target.value)}
+                        placeholder="@username"
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">رابط الصورة</span>
+                      <input
+                        value={item.avatar || ''}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'avatar', e.target.value)}
+                        placeholder="https://..."
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">إجمالي الإيداعات</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.totalDeposits}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'totalDeposits', e.target.value)}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">نمو الشهر</span>
+                      <input
+                        value={item.monthlyGrowth}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'monthlyGrowth', e.target.value)}
+                        placeholder="+12.5%"
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">اللقب</span>
+                      <input
+                        value={item.tierLabel}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'tierLabel', e.target.value)}
+                        placeholder="حوت النخبة"
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">النص السفلي</span>
+                      <input
+                        value={item.ctaLabel}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'ctaLabel', e.target.value)}
+                        placeholder="عرض ملف المتصدر"
+                      />
+                    </label>
+                    <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                      <span className="owner-hint">الوصف التعريفي</span>
+                      <textarea
+                        rows={3}
+                        value={item.spotlight}
+                        onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'spotlight', e.target.value)}
+                        placeholder="وصف مختصر للمركز"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="owner-buttons mt-4">
+              <button
+                type="button"
+                className="wallet-action-btn wallet-action-deposit"
+                onClick={handleSaveHomeLeaderboard}
+                disabled={homeLeaderboardSaving}
+              >
+                {homeLeaderboardSaving ? '...' : 'حفظ بيانات أعلى المودعين'}
               </button>
             </div>
 

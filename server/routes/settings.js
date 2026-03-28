@@ -245,12 +245,103 @@ export function createSettingsRouter(db) {
     settled_notice: 'تمت تسوية الصفقة الاستراتيجية وإرجاع الأصل مع الربح.',
   }
 
+  const DEFAULT_HOME_LEADERBOARD = {
+    enabled: false,
+    badge: 'أعلى المودعين',
+    title: 'أعلى 3 مودعين لهذا الشهر',
+    description: 'معاينة فاخرة لأعلى المستخدمين في إجمالي الإيداعات الشهرية. يمكنك تعبئة هذه البيانات من لوحة المالك ثم تفعيل القسم عند الجاهزية.',
+    summaryLabel: 'إجمالي إيداعات الشهر',
+    summaryValue: '184,520 USDT',
+    podiumLabels: ['الأول هذا الشهر', 'الثاني هذا الشهر', 'الثالث هذا الشهر'],
+    detailsTitle: 'تفاصيل المتصدرين',
+    detailsSubtitle: 'بطاقات تعريف قابلة للتعديل تخص أصحاب المراكز الثلاثة فقط',
+    detailsHint: 'يمكن تعديل هذه البيانات من لوحة المالك قبل إظهار القسم للعامة',
+    noteLabel: 'الوصف التعريفي',
+    tierLabel: 'التصنيف',
+    growthLabel: 'نمو الشهر',
+    depositsLabel: 'الإيداعات',
+    competitors: [
+      {
+        id: 1,
+        name: 'زيوس ألماس',
+        username: '@zeus',
+        avatar: '',
+        totalDeposits: 24850,
+        monthlyGrowth: '+18.4%',
+        tierLabel: 'حوت النخبة',
+        spotlight: 'حقق أعلى حجم إيداع شهري مع نشاط تمويل قوي ومستمر على مدار الشهر بالكامل.',
+        ctaLabel: 'عرض ملف المتصدر',
+      },
+      {
+        id: 2,
+        name: 'لينا كراون',
+        username: '@lina',
+        avatar: '',
+        totalDeposits: 22410,
+        monthlyGrowth: '+14.9%',
+        tierLabel: 'جامع مميز',
+        spotlight: 'حافظت على مركز قوي في المرتبة الثانية عبر إيداعات ثابتة ونمط احتفاظ مرتفع طوال دورة الترتيب.',
+        ctaLabel: 'عرض ملف الوصيف',
+      },
+      {
+        id: 3,
+        name: 'مازن فلوكس',
+        username: '@mazen',
+        avatar: '',
+        totalDeposits: 21790,
+        monthlyGrowth: '+12.7%',
+        tierLabel: 'صاعد سريع',
+        spotlight: 'أنهى الشهر بإيداعات متسارعة في الأيام الأخيرة وحسم المركز الثالث قبل الإغلاق.',
+        ctaLabel: 'عرض ملف المركز الثالث',
+      },
+    ],
+  }
+
   function normalizeStrategyTradeDisplay(raw) {
     const obj = typeof raw === 'object' && raw ? raw : {}
     return {
       preview_notice: String(obj.preview_notice || '').trim().slice(0, 220) || DEFAULT_STRATEGY_TRADE_DISPLAY.preview_notice,
       active_notice: String(obj.active_notice || '').trim().slice(0, 220) || DEFAULT_STRATEGY_TRADE_DISPLAY.active_notice,
       settled_notice: String(obj.settled_notice || '').trim().slice(0, 220) || DEFAULT_STRATEGY_TRADE_DISPLAY.settled_notice,
+    }
+  }
+
+  function normalizeHomeLeaderboard(raw) {
+    const obj = typeof raw === 'object' && raw ? raw : {}
+    const competitorsRaw = Array.isArray(obj.competitors) ? obj.competitors : []
+    return {
+      enabled: Boolean(obj.enabled),
+      badge: String(obj.badge || '').trim().slice(0, 48) || DEFAULT_HOME_LEADERBOARD.badge,
+      title: String(obj.title || '').trim().slice(0, 120) || DEFAULT_HOME_LEADERBOARD.title,
+      description: String(obj.description || '').trim().slice(0, 280) || DEFAULT_HOME_LEADERBOARD.description,
+      summaryLabel: String(obj.summaryLabel || '').trim().slice(0, 80) || DEFAULT_HOME_LEADERBOARD.summaryLabel,
+      summaryValue: String(obj.summaryValue || '').trim().slice(0, 48) || DEFAULT_HOME_LEADERBOARD.summaryValue,
+      podiumLabels:
+        Array.isArray(obj.podiumLabels) && obj.podiumLabels.length >= 3
+          ? obj.podiumLabels.slice(0, 3).map((value, index) => String(value || '').trim().slice(0, 60) || DEFAULT_HOME_LEADERBOARD.podiumLabels[index])
+          : DEFAULT_HOME_LEADERBOARD.podiumLabels,
+      detailsTitle: String(obj.detailsTitle || '').trim().slice(0, 80) || DEFAULT_HOME_LEADERBOARD.detailsTitle,
+      detailsSubtitle: String(obj.detailsSubtitle || '').trim().slice(0, 180) || DEFAULT_HOME_LEADERBOARD.detailsSubtitle,
+      detailsHint: String(obj.detailsHint || '').trim().slice(0, 180) || DEFAULT_HOME_LEADERBOARD.detailsHint,
+      noteLabel: String(obj.noteLabel || '').trim().slice(0, 48) || DEFAULT_HOME_LEADERBOARD.noteLabel,
+      tierLabel: String(obj.tierLabel || '').trim().slice(0, 48) || DEFAULT_HOME_LEADERBOARD.tierLabel,
+      growthLabel: String(obj.growthLabel || '').trim().slice(0, 48) || DEFAULT_HOME_LEADERBOARD.growthLabel,
+      depositsLabel: String(obj.depositsLabel || '').trim().slice(0, 48) || DEFAULT_HOME_LEADERBOARD.depositsLabel,
+      competitors: DEFAULT_HOME_LEADERBOARD.competitors.map((fallback, index) => {
+        const item = typeof competitorsRaw[index] === 'object' && competitorsRaw[index] ? competitorsRaw[index] : {}
+        const totalDeposits = Number(item.totalDeposits)
+        return {
+          id: Number(item.id || fallback.id),
+          name: String(item.name || '').trim().slice(0, 80) || fallback.name,
+          username: String(item.username || '').trim().slice(0, 48) || fallback.username,
+          avatar: String(item.avatar || '').trim().slice(0, 300),
+          totalDeposits: Number.isFinite(totalDeposits) ? totalDeposits : fallback.totalDeposits,
+          monthlyGrowth: String(item.monthlyGrowth || '').trim().slice(0, 32) || fallback.monthlyGrowth,
+          tierLabel: String(item.tierLabel || '').trim().slice(0, 48) || fallback.tierLabel,
+          spotlight: String(item.spotlight || '').trim().slice(0, 280) || fallback.spotlight,
+          ctaLabel: String(item.ctaLabel || '').trim().slice(0, 60) || fallback.ctaLabel,
+        }
+      }),
     }
   }
 
@@ -302,6 +393,30 @@ export function createSettingsRouter(db) {
       [JSON.stringify(config)],
     )
     publishLiveUpdate({ type: 'settings_updated', source: 'settings', key: 'strategy_trade_display' })
+    return res.json({ ok: true, config })
+  }))
+
+  router.get('/home-leaderboard', asyncRoute(async (_req, res) => {
+    const row = await get(db, `SELECT value FROM settings WHERE key='home_leaderboard' LIMIT 1`)
+    let parsed = null
+    try {
+      parsed = JSON.parse(String(row?.value || 'null'))
+    } catch {
+      parsed = null
+    }
+    return res.json({ config: normalizeHomeLeaderboard(parsed) })
+  }))
+
+  router.post('/home-leaderboard', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
+    const config = normalizeHomeLeaderboard(req.body || {})
+    await run(
+      db,
+      `INSERT INTO settings (key, value) VALUES ('home_leaderboard', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      [JSON.stringify(config)],
+    )
+    publishLiveUpdate({ type: 'settings_updated', source: 'settings', key: 'home_leaderboard' })
+    publishLiveUpdate({ type: 'home_content_updated', source: 'settings', key: 'home_leaderboard' })
     return res.json({ ok: true, config })
   }))
 

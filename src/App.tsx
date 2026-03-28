@@ -42,6 +42,9 @@ const FriendsPage = lazy(() => import('./pages/FriendsPage').then((m) => ({ defa
 const VipPage = lazy(() => import('./pages/VipPage').then((m) => ({ default: m.VipPage })))
 const ReferralPage = lazy(() => import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })))
 const SupportPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportPage })))
+const LeaderboardPreviewPage = lazy(() =>
+  import('./pages/LeaderboardPreviewPage').then((m) => ({ default: m.LeaderboardPreviewPage })),
+)
 const AdminUsersPage = lazy(() =>
   import('./pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
 )
@@ -460,6 +463,7 @@ function App() {
   if (loading) return <div className="login-wrapper">Loading...</div>
 
   const dict = translations[resolveUiLanguage()]
+  const isLocalPreviewEnabled = import.meta.env.DEV
 
   return (
     <I18nProvider>
@@ -494,6 +498,16 @@ function App() {
           )
         }
       />
+      {isLocalPreviewEnabled ? (
+        <Route
+          path="/preview/leaderboard"
+          element={
+            <Suspense fallback={<div className="login-wrapper">Loading...</div>}>
+              <LeaderboardPreviewPage />
+            </Suspense>
+          }
+        />
+      ) : null}
 
       <Route
         path="*"

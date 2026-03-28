@@ -1251,6 +1251,47 @@ export async function updateRegistrationStatus(enabled: boolean) {
   }) as Promise<{ ok: boolean; enabled: boolean }>
 }
 
+export type HomeLeaderboardCompetitor = {
+  id: number
+  name: string
+  username: string
+  avatar?: string | null
+  totalDeposits: number
+  monthlyGrowth: string
+  tierLabel: string
+  spotlight: string
+  ctaLabel: string
+}
+
+export type HomeLeaderboardConfig = {
+  enabled: boolean
+  badge: string
+  title: string
+  description: string
+  summaryLabel: string
+  summaryValue: string
+  podiumLabels: string[]
+  detailsTitle: string
+  detailsSubtitle: string
+  detailsHint: string
+  noteLabel: string
+  tierLabel: string
+  growthLabel: string
+  depositsLabel: string
+  competitors: HomeLeaderboardCompetitor[]
+}
+
+export async function getHomeLeaderboardConfig() {
+  return apiFetch('/api/settings/home-leaderboard') as Promise<{ config: HomeLeaderboardConfig }>
+}
+
+export async function updateHomeLeaderboardConfig(config: HomeLeaderboardConfig) {
+  return apiFetch('/api/settings/home-leaderboard', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  }) as Promise<{ ok: boolean; config: HomeLeaderboardConfig }>
+}
+
 export type StrategyTradeDisplayConfig = {
   preview_notice: string
   active_notice: string
