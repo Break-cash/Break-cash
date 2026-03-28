@@ -1368,6 +1368,7 @@ export type AdminUserRow = {
   banned_until?: string | null
   created_at?: string
   display_name?: string | null
+  avatar_path?: string | null
   verification_status?: 'unverified' | 'pending' | 'verified'
   blue_badge?: number
   vip_level?: number

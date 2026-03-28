@@ -796,6 +796,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
               ...item,
               name: displayName,
               username: `#${userItem.id}`,
+              avatar: String(userItem.avatar_path || '').trim() || null,
               totalDeposits: Number.isFinite(depositsTotal) ? depositsTotal : item.totalDeposits,
               spotlight:
                 item.spotlight && item.spotlight !== defaultHomeLeaderboardConfig.competitors[index]?.spotlight

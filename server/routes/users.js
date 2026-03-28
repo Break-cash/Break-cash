@@ -169,7 +169,7 @@ export function createUsersRouter(db) {
 
     const rows = await all(db, `SELECT
       u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
-      u.display_name, u.verification_status, u.blue_badge, u.vip_level, u.profile_color, u.profile_badge,
+      u.display_name, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.profile_color, u.profile_badge,
       u.phone_verified, u.identity_submitted, u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled,
       u.referral_code, u.invited_by, u.referred_by, u.total_deposit, u.points, u.is_owner, u.last_login_at, u.last_ip, u.last_user_agent,
       COALESCE(bal.total_balance, 0) AS wallet_balance,
