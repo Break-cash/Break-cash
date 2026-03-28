@@ -57,6 +57,7 @@ export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
 const podiumStyles = [
   {
     place: 1,
+    orderClass: 'order-1 lg:order-2',
     height: 'lg:min-h-[23rem]',
     wrapper: 'lg:-translate-y-5 lg:scale-[1.04]',
     panel:
@@ -69,6 +70,7 @@ const podiumStyles = [
   },
   {
     place: 2,
+    orderClass: 'order-2 lg:order-1',
     height: 'lg:min-h-[19rem]',
     wrapper: 'lg:translate-y-7',
     panel:
@@ -81,6 +83,7 @@ const podiumStyles = [
   },
   {
     place: 3,
+    orderClass: 'order-3 lg:order-3',
     height: 'lg:min-h-[17.5rem]',
     wrapper: 'lg:translate-y-10',
     panel:
@@ -173,7 +176,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
             <h2 className="mt-3 text-2xl font-black tracking-tight text-white lg:text-3xl">{leaderboard.title}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{leaderboard.description}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200 backdrop-blur">
+          <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200 backdrop-blur lg:w-auto">
             <div className="text-xs tracking-[0.2em] text-slate-400">{leaderboard.summaryLabel}</div>
             <div className="mt-1 text-xl font-bold text-white">{leaderboard.summaryValue}</div>
           </div>
@@ -189,11 +192,11 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                   initial={{ opacity: 0, y: 24 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45, delay: 0.08 * index, ease: 'easeOut' }}
-                  className={`${style.wrapper} ${style.height}`}
+                  className={`${style.orderClass} ${style.wrapper} ${style.height} mx-auto w-full max-w-sm lg:max-w-none`}
                   whileHover={{ scale: 1.03 }}
                 >
                   <div
-                    className={`group relative flex h-full flex-col items-center rounded-[1.6rem] border p-5 text-center transition-transform duration-300 ${style.panel}`}
+                    className={`group relative flex h-full flex-col items-center rounded-[1.6rem] border px-4 py-5 text-center transition-transform duration-300 lg:p-5 ${style.panel}`}
                   >
                     <div className={`absolute inset-x-6 top-0 h-px bg-gradient-to-r ${style.accent} opacity-80`} />
                     <div className={`absolute -top-5 inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-white/15 bg-slate-950/80 px-3 font-black text-white ring-4 ${style.ring}`}>
@@ -206,9 +209,9 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                     <div className="mt-5">
                       <Avatar name={competitor.name} avatar={competitor.avatar} size="lg" />
                     </div>
-                    <div className="mt-4 text-lg font-bold text-white">{competitor.name}</div>
+                    <div className="mt-4 text-base font-bold text-white lg:text-lg">{competitor.name}</div>
                     <div className="mt-1 text-sm text-slate-300">{competitor.username}</div>
-                    <div className={`mt-5 inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold ${style.points}`}>
+                    <div className={`mt-5 inline-flex max-w-full items-center rounded-full border px-4 py-2 text-sm font-semibold ${style.points}`}>
                       {formatDeposits(competitor.totalDeposits)} USDT
                     </div>
                     <div className="mt-4 h-1 w-20 rounded-full bg-white/10">
@@ -227,7 +230,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
           transition={{ duration: 0.45, delay: 0.24, ease: 'easeOut' }}
           className="mt-5 rounded-[1.75rem] border border-white/8 bg-white/[0.035] p-3 lg:p-5"
         >
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-lg font-bold text-white">{leaderboard.detailsTitle}</h3>
               <p className="text-sm text-slate-400">{leaderboard.detailsSubtitle}</p>
@@ -249,7 +252,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                 className="rounded-[1.6rem] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.76))] p-4 text-left shadow-[0_14px_34px_rgba(2,6,23,0.34)] transition-all hover:border-sky-400/25 hover:bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.84))] lg:p-5"
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="inline-flex h-10 min-w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-sm font-black text-slate-200">
                       #{index + 1}
                     </div>
