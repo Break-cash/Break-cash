@@ -170,6 +170,28 @@ export function Layout({
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return '--'
     const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US'
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfTarget = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const diffDays = Math.round((startOfToday.getTime() - startOfTarget.getTime()) / (24 * 60 * 60 * 1000))
+    const timeOnly = date.toLocaleTimeString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    if (diffDays === 0) {
+      return language === 'ar'
+        ? `اليوم، ${timeOnly}`
+        : language === 'tr'
+          ? `Bugun, ${timeOnly}`
+          : `Today, ${timeOnly}`
+    }
+    if (diffDays === 1) {
+      return language === 'ar'
+        ? `أمس، ${timeOnly}`
+        : language === 'tr'
+          ? `Dun, ${timeOnly}`
+          : `Yesterday, ${timeOnly}`
+    }
     return date.toLocaleString(locale, {
       year: 'numeric',
       month: 'short',
@@ -821,7 +843,11 @@ export function Layout({
                       {notifications.map((item) => (
                         <div
                           key={item.id}
-                          className={`glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2 ${
+                          className={`glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2 transition ${
+                            Number(item.is_read || 0) === 0
+                              ? 'border border-brand-blue/30 bg-brand-blue/10 shadow-[0_0_0_1px_rgba(0,123,255,0.12)]'
+                              : 'opacity-80'
+                          } ${
                             isStrategyNotification(item) ? 'border border-amber-400/25 bg-amber-500/10' : ''
                           }`}
                         >
@@ -836,6 +862,11 @@ export function Layout({
                           >
                             <div className="flex items-center gap-2">
                               <div className="text-sm font-medium">{item.title}</div>
+                              {Number(item.is_read || 0) === 0 ? (
+                                <span className="rounded-full border border-brand-blue/30 bg-brand-blue/15 px-2 py-0.5 text-[10px] font-bold text-brand-blue">
+                                  جديد
+                                </span>
+                              ) : null}
                               {isStrategyNotification(item) ? (
                                 <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">
                                   مهم
@@ -848,23 +879,27 @@ export function Layout({
                               <div className="mt-1 text-[11px] text-amber-200/85">اضغط لفتح لوحة الصفقات الاستراتيجية</div>
                             ) : null}
                           </button>
-                          <button
-                            className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
-                            type="button"
-                            onClick={async () => {
-                              await apiFetch('/api/notifications/markAsRead', {
-                                method: 'POST',
-                                body: JSON.stringify({ id: item.id, title: item.title, body: item.body }),
-                              })
-                              readNotificationKeysRef.current.add(getNotificationKey(item))
-                              setNotifications((rows) =>
-                                rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
-                              )
-                              setUnreadCount((value) => (value > 0 ? value - 1 : 0))
-                            }}
-                          >
-                            {t('mark_read')}
-                          </button>
+                          {Number(item.is_read || 0) === 0 ? (
+                            <button
+                              className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
+                              type="button"
+                              onClick={async () => {
+                                await apiFetch('/api/notifications/markAsRead', {
+                                  method: 'POST',
+                                  body: JSON.stringify({ id: item.id, title: item.title, body: item.body }),
+                                })
+                                readNotificationKeysRef.current.add(getNotificationKey(item))
+                                setNotifications((rows) =>
+                                  rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
+                                )
+                                setUnreadCount((value) => (value > 0 ? value - 1 : 0))
+                              }}
+                            >
+                              {t('mark_read')}
+                            </button>
+                          ) : (
+                            <div className="px-2 py-1 text-[11px] text-white/35">مقروء</div>
+                          )}
                         </div>
                       ))}
                     </div>
