@@ -12,6 +12,7 @@ import {
   getBalanceRules,
   getAdminUnlockOverride,
   getAdminStaffList,
+  getAdminUsersList,
   getAdminUserWallet,
   deleteBonusRule,
   deleteDailyTradeCampaign,
@@ -77,6 +78,7 @@ import {
   type AdItem,
   type AdminAccountHealthScan,
   type AdminStaffItem,
+  type AdminUserRow,
   type AuthUser,
   type BalanceRules,
   type BonusRule,
@@ -292,6 +294,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [homeLeaderboardSaving, setHomeLeaderboardSaving] = useState(false)
   const [homeLeaderboardPreviewOpen, setHomeLeaderboardPreviewOpen] = useState(false)
   const [homeLeaderboardPreviewMode, setHomeLeaderboardPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  const [homeLeaderboardSearchDrafts, setHomeLeaderboardSearchDrafts] = useState<string[]>(['', '', ''])
+  const [homeLeaderboardSearchResults, setHomeLeaderboardSearchResults] = useState<AdminUserRow[][]>([[], [], []])
+  const [homeLeaderboardSearchLoadingIndex, setHomeLeaderboardSearchLoadingIndex] = useState<number | null>(null)
   const [attractionKeys, setAttractionKeys] = useState<Array<'hot' | 'new' | 'most_requested'>>([])
   const [attractionTargets, setAttractionTargets] = useState<IconAttractionTarget[]>([])
   const [attractionAssignments, setAttractionAssignments] = useState<IconAttractionAssignments>({})
@@ -755,6 +760,54 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         return { ...item, [field]: value }
       }),
     }))
+  }
+
+  function handleHomeLeaderboardSearchDraftChange(index: number, value: string) {
+    setHomeLeaderboardSearchDrafts((prev) => prev.map((item, itemIndex) => (itemIndex === index ? value : item)))
+  }
+
+  async function handleSearchHomeLeaderboardUser(index: number) {
+    const q = String(homeLeaderboardSearchDrafts[index] || '').trim()
+    if (!q) {
+      setMessage({ type: 'error', text: 'اكتب اسم المستخدم أو رقمه أو بريده قبل البحث.' })
+      return
+    }
+    setHomeLeaderboardSearchLoadingIndex(index)
+    setMessage(null)
+    try {
+      const res = await getAdminUsersList({ q, limit: 8, sortBy: 'deposits_total', sortDir: 'desc' })
+      setHomeLeaderboardSearchResults((prev) => prev.map((item, itemIndex) => (itemIndex === index ? res.users || [] : item)))
+    } catch (e) {
+      setHomeLeaderboardSearchResults((prev) => prev.map((item, itemIndex) => (itemIndex === index ? [] : item)))
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل البحث عن المستخدم.' })
+    } finally {
+      setHomeLeaderboardSearchLoadingIndex(null)
+    }
+  }
+
+  function handleApplyHomeLeaderboardUser(index: number, userItem: AdminUserRow) {
+    const displayName = String(userItem.display_name || '').trim() || `#${userItem.id}`
+    const depositsTotal = Number(userItem.deposits_total ?? userItem.total_deposit ?? 0)
+    setHomeLeaderboardDraft((prev) => ({
+      ...prev,
+      competitors: prev.competitors.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              name: displayName,
+              username: `#${userItem.id}`,
+              totalDeposits: Number.isFinite(depositsTotal) ? depositsTotal : item.totalDeposits,
+              spotlight:
+                item.spotlight && item.spotlight !== defaultHomeLeaderboardConfig.competitors[index]?.spotlight
+                  ? item.spotlight
+                  : `تمت تعبئة هذه البطاقة من حساب المستخدم ${displayName} مباشرة من لوحة المالك.`,
+            }
+          : item,
+      ),
+    }))
+    setHomeLeaderboardSearchDrafts((prev) => prev.map((item, itemIndex) => (itemIndex === index ? displayName : item)))
+    setHomeLeaderboardSearchResults((prev) => prev.map((item, itemIndex) => (itemIndex === index ? [] : item)))
+    setMessage({ type: 'success', text: `تمت إضافة المستخدم ${displayName} إلى المركز ${index + 1}.` })
   }
 
   async function handleSaveHomeLeaderboard() {
@@ -2461,6 +2514,60 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${meta.chipClass}`}>
                             {meta.badge}
                           </div>
+                        </div>
+
+                        <div className="mb-4 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
+                          <div className="mb-2 text-xs font-semibold tracking-[0.18em] text-slate-400">بحث وإضافة مستخدم</div>
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                            <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
+                              <span className="owner-hint">ابحث بالاسم أو رقم المستخدم أو البريد أو الهاتف</span>
+                              <input
+                                value={homeLeaderboardSearchDrafts[index] || ''}
+                                onChange={(e) => handleHomeLeaderboardSearchDraftChange(index, e.target.value)}
+                                placeholder="مثال: 3038 أو Zeus"
+                              />
+                            </label>
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                className="wallet-action-btn owner-set-btn"
+                                onClick={() => handleSearchHomeLeaderboardUser(index)}
+                                disabled={homeLeaderboardSearchLoadingIndex === index}
+                              >
+                                {homeLeaderboardSearchLoadingIndex === index ? '...' : 'بحث'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {homeLeaderboardSearchResults[index]?.length ? (
+                            <div className="mt-3 space-y-2">
+                              {homeLeaderboardSearchResults[index].map((userItem) => (
+                                <div
+                                  key={userItem.id}
+                                  className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-3 lg:flex-row lg:items-center lg:justify-between"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-white">
+                                      {userItem.display_name || `#${userItem.id}`} <span className="text-slate-500">#{userItem.id}</span>
+                                    </div>
+                                    <div className="mt-1 text-xs text-slate-400">
+                                      {userItem.email || userItem.phone || 'لا يوجد بريد أو هاتف ظاهر'}
+                                    </div>
+                                    <div className="mt-2 text-xs text-sky-200">
+                                      إجمالي الإيداعات: {Number(userItem.deposits_total ?? userItem.total_deposit ?? 0).toLocaleString('en-US')} USDT
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="wallet-action-btn wallet-action-deposit"
+                                    onClick={() => handleApplyHomeLeaderboardUser(index, userItem)}
+                                  >
+                                    إضافة إلى هذا المركز
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="grid gap-3 lg:grid-cols-2">
