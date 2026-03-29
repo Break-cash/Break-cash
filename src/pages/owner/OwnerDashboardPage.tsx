@@ -189,6 +189,7 @@ function createDefaultPrincipalWithdrawalRule() {
     withdrawableRatio: 0.5,
     clearProfitRestriction: true,
     applyToAllVipLevels: true,
+    ownerApprovalRequired: false,
   }
 }
 
@@ -1614,6 +1615,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           withdrawableRatio: Number(nextRatio.toFixed(4)),
           clearProfitRestriction: currentRule?.clearProfitRestriction !== false,
           applyToAllVipLevels: currentRule?.applyToAllVipLevels !== false,
+          ownerApprovalRequired: currentRule?.ownerApprovalRequired === true,
         },
       }
       await updateBalanceRules(nextRules, {
@@ -1621,9 +1623,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
       })
       const refreshed = await refreshBalanceRules()
       const effectiveRatio = Number((refreshed.principalWithdrawalRule?.withdrawableRatio ?? refreshed.defaultUnlockRatio ?? 0.5) * 100)
+      const ownerApprovalRequired = refreshed.principalWithdrawalRule?.ownerApprovalRequired === true
       setMessage({
         type: 'success',
-        text: `تم حفظ قاعدة سحب أصل الإيداع وتطبيقها على المستخدمين الحاليين والجدد. المسموح الآن هو ${effectiveRatio.toFixed(0)}% من أصل الإيداع، وتم فك قيود الربح المطلوبة عنها.${principalRuleResetOverrides ? ' كما تمت إزالة أي استثناءات قديمة كانت تغيّر هذه القاعدة.' : ''}`,
+        text: ownerApprovalRequired
+          ? `تم حفظ قاعدة أصل الإيداع بنجاح. المسموح بالسحب الآن هو ${effectiveRatio.toFixed(0)}% من أصل الإيداع، بينما يبقى الجزء المحجوز تحت مراجعة إدارة المخاطر حتى يتم فتحه إداريًا.${principalRuleResetOverrides ? ' كما تمت إزالة أي استثناءات قديمة كانت تغيّر هذه القاعدة.' : ''}`
+          : `تم حفظ قاعدة سحب أصل الإيداع وتطبيقها على المستخدمين الحاليين والجدد. المسموح الآن هو ${effectiveRatio.toFixed(0)}% من أصل الإيداع، ${refreshed.principalWithdrawalRule?.clearProfitRestriction !== false ? 'ولا يوجد شرط ربح إضافي على الجزء المحجوز.' : 'ويظل فتح الجزء المحجوز مرتبطًا بشرط الربح المحدد.'}${principalRuleResetOverrides ? ' كما تمت إزالة أي استثناءات قديمة كانت تغيّر هذه القاعدة.' : ''}`,
       })
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ قاعدة سحب أصل الإيداع.' })
@@ -4083,6 +4088,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                             withdrawableRatio: principalRule.withdrawableRatio,
                             clearProfitRestriction: principalRule.clearProfitRestriction,
                             applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                            ownerApprovalRequired: principalRule.ownerApprovalRequired,
                           },
                         }
                       })
@@ -4103,12 +4109,13 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                       const principalRule = prev.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
                       return {
                         ...prev,
-                        principalWithdrawalRule: {
-                          enabled: principalRule.enabled,
-                          withdrawableRatio: Math.max(0, Math.min(1, Number(e.target.value || 0) / 100)),
-                          clearProfitRestriction: principalRule.clearProfitRestriction,
-                          applyToAllVipLevels: principalRule.applyToAllVipLevels,
-                        },
+                          principalWithdrawalRule: {
+                            enabled: principalRule.enabled,
+                            withdrawableRatio: Math.max(0, Math.min(1, Number(e.target.value || 0) / 100)),
+                            clearProfitRestriction: principalRule.clearProfitRestriction,
+                            applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                            ownerApprovalRequired: principalRule.ownerApprovalRequired,
+                          },
                       }
                     })
                   }
@@ -4129,12 +4136,35 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                             withdrawableRatio: principalRule.withdrawableRatio,
                             clearProfitRestriction: e.target.checked,
                             applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                            ownerApprovalRequired: principalRule.ownerApprovalRequired,
                           },
                         }
                       })
                     }
                   />
                   <span>فك جميع قيود الربح المطلوبة عن أصل الإيداع</span>
+                </label>
+                <label className="owner-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={balanceRules.principalWithdrawalRule?.ownerApprovalRequired === true}
+                    onChange={(e) =>
+                      setBalanceRules((prev) => {
+                        const principalRule = prev.principalWithdrawalRule || createDefaultPrincipalWithdrawalRule()
+                        return {
+                          ...prev,
+                          principalWithdrawalRule: {
+                            enabled: principalRule.enabled,
+                            withdrawableRatio: principalRule.withdrawableRatio,
+                            clearProfitRestriction: principalRule.clearProfitRestriction,
+                            applyToAllVipLevels: principalRule.applyToAllVipLevels,
+                            ownerApprovalRequired: e.target.checked,
+                          },
+                        }
+                      })
+                    }
+                  />
+                  <span>إخضاع الجزء المحجوز من أصل الإيداع لمراجعة إدارة المخاطر</span>
                 </label>
                 <label className="owner-checkbox">
                   <input
@@ -4150,6 +4180,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                             withdrawableRatio: principalRule.withdrawableRatio,
                             clearProfitRestriction: principalRule.clearProfitRestriction,
                             applyToAllVipLevels: e.target.checked,
+                            ownerApprovalRequired: principalRule.ownerApprovalRequired,
                           },
                         }
                       })
@@ -4166,7 +4197,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 />
                 <span>طبّق القاعدة الآن على جميع المستخدمين الحاليين، وأزل أي استثناءات قديمة كانت تغيّر نسبة فك أصل الإيداع أو تعيد تقييده.</span>
               </label>
-              <div className="owner-hint">{`الوضع الحالي: ${getPrincipalWithdrawPercent(balanceRules)}% من أصل الإيداع قابل للسحب.${balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false ? ' لا يوجد شرط ربح إضافي لهذه القاعدة.' : ' ما زال شرط الربح مفعّلًا.'}`}</div>
+              <div className="owner-hint">{`الوضع الحالي: ${getPrincipalWithdrawPercent(balanceRules)}% من أصل الإيداع قابل للسحب.${balanceRules.principalWithdrawalRule?.ownerApprovalRequired === true ? ' الجزء المحجوز يبقى تحت مراجعة إدارة المخاطر حتى يتم فتحه إداريًا.' : balanceRules.principalWithdrawalRule?.clearProfitRestriction !== false ? ' لا يوجد شرط ربح إضافي لهذه القاعدة.' : ' ما زال شرط الربح مفعّلًا.'}`}</div>
               <div className="owner-hint">هذا الإعداد يخص أصل الإيداع نفسه في السحب، وليس قواعد أرباح الإحالات أو مكافآت الإيداع أو بقية المكتسبات.</div>
               <div className="owner-buttons">
                 <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSavePrincipalWithdrawalRule} disabled={balanceRulesSaving}>

@@ -913,6 +913,7 @@ export type BalanceRules = {
     withdrawableRatio: number
     clearProfitRestriction: boolean
     applyToAllVipLevels: boolean
+    ownerApprovalRequired?: boolean
   }
 }
 
@@ -970,6 +971,7 @@ export type WithdrawalSummary = {
   remaining_profit_to_unlock: number
   unlock_progress_pct: number
   is_principal_unlocked: boolean
+  requires_owner_approval?: boolean
   unlock_ratio: number
   minimum_profit_to_unlock: number
   vip_level: number
@@ -982,6 +984,7 @@ export type PublicWithdrawalSummary = {
   locked_balance: number
   withdrawable_balance: number
   is_principal_unlocked: boolean
+  requires_owner_approval?: boolean
   withdrawal_fee_percent: number
   daily_withdrawal_limit: number
   daily_withdrawal_remaining: number
@@ -997,6 +1000,7 @@ export type PublicPrincipalLockItem = {
   display_title: string
   display_message: string
   lock_status: string
+  requires_owner_approval?: boolean
   created_at: string
   updated_at: string
   unlocked_at?: string | null
@@ -1013,6 +1017,7 @@ export type PrincipalLockItem = {
   unlock_ratio: number
   lock_status: string
   progress_pct: number
+  requires_owner_approval?: boolean
   unlocked_at?: string | null
   created_at: string
   updated_at: string

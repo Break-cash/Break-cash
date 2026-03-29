@@ -539,7 +539,7 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         </p>
         {isWithdrawPage ? (
           <p className="deposit-welcome" style={{ marginTop: -4, fontSize: '0.92rem', opacity: 0.88 }}>
-            المتاح للسحب يساوي 50% من الرصيد الرئيسي الحالي، ويتحدث تلقائيًا مع أي تغير في الرصيد.
+            المتاح للسحب يُحتسب تلقائيًا وفق سياسة السحب الحالية وحالة أصل الإيداع في حسابك.
           </p>
         ) : null}
         {withdrawSummary ? (
@@ -553,7 +553,11 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
               <span className="owner-hint">هذا هو المبلغ المتاح للسحب فعليًا من حسابك حاليًا.</span>
             </div>
             <div className="owner-form-row" style={{ marginBottom: 0 }}>
-              <span className="owner-hint">إذا بقي جزء غير متاح الآن، فسيظهر تلقائيًا ضمن المتاح للسحب عند تحقق الأهلية.</span>
+              <span className="owner-hint">
+                {withdrawSummary.requires_owner_approval
+                  ? 'إذا بقي جزء غير متاح الآن، فذلك لأنه ما يزال تحت مراجعة إدارة المخاطر حتى يتم فتحه إداريًا.'
+                  : 'إذا بقي جزء غير متاح الآن، فسيظهر تلقائيًا ضمن المتاح للسحب عند تحقق الأهلية.'}
+              </span>
               <span className={`request-status-badge ${withdrawSummary.is_principal_unlocked ? 'status-approved' : 'status-pending'}`}>
                 {withdrawSummary.is_principal_unlocked ? t('wallet_lock_unlocked') : t('wallet_lock_locked')}
               </span>

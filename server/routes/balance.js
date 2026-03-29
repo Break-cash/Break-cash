@@ -47,6 +47,7 @@ const DEFAULT_BALANCE_RULES = {
     withdrawableRatio: PRINCIPAL_UNLOCK_RATIO,
     clearProfitRestriction: true,
     applyToAllVipLevels: true,
+    ownerApprovalRequired: false,
   },
 }
 
@@ -127,6 +128,7 @@ function normalizeRules(raw) {
     ),
     clearProfitRestriction: principalRuleBase.clearProfitRestriction !== false,
     applyToAllVipLevels: principalRuleBase.applyToAllVipLevels !== false,
+    ownerApprovalRequired: principalRuleBase.ownerApprovalRequired === true,
   }
   const map = base.unlockRatioByLevel && typeof base.unlockRatioByLevel === 'object' ? base.unlockRatioByLevel : {}
   const unlockRatioByLevel = { ...DEFAULT_BALANCE_RULES.unlockRatioByLevel }
@@ -281,6 +283,7 @@ function getPrincipalWithdrawalRuleConfig(rules) {
     lockedRatio: Number(Math.max(0, 1 - withdrawableRatio).toFixed(4)),
     clearProfitRestriction: enabled && raw?.clearProfitRestriction !== false,
     applyToAllVipLevels: raw?.applyToAllVipLevels !== false,
+    ownerApprovalRequired: enabled && raw?.ownerApprovalRequired === true,
   }
 }
 
@@ -317,6 +320,7 @@ async function getEffectiveUnlockProfile(db, userId, currency, rules) {
     principalWithdrawableRatio: principalRule.withdrawableRatio,
     principalLockedRatio: principalRule.lockedRatio,
     clearProfitRestriction: principalRule.clearProfitRestriction,
+    ownerApprovalRequired: principalRule.ownerApprovalRequired,
     overrideNote: String(override?.note || ''),
   }
 }
@@ -327,7 +331,7 @@ async function createPrincipalLock(db, payload) {
     (Number(payload.principalAmount || 0) * Number(payload.principalLockedRatio ?? 1)).toFixed(8),
   )
   if (lockedPrincipalAmount <= 0) return
-  const requiredProfitByRatio = payload.clearProfitRestriction
+  const requiredProfitByRatio = payload.ownerApprovalRequired === true || payload.clearProfitRestriction
     ? 0
     : Number((lockedPrincipalAmount * Number(payload.unlockRatio || 0)).toFixed(8))
   const requiredProfitAmount = Number(Math.max(requiredProfitByRatio, Number(payload.minimumProfitToUnlock || 0)).toFixed(8))
@@ -984,10 +988,11 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const principalLocked = Number(lockRows.reduce((acc, row) => acc + Number(row.principal_amount || 0), 0).toFixed(8))
   const unlockTargetProfit = Number(lockRows.reduce((acc, row) => acc + Number(row.required_profit_amount || 0), 0).toFixed(8))
   const earnedProfit = Number((Math.max(0, systemMainBalance - principalLocked) + nonSystemMainBalance).toFixed(8))
+  const requiresOwnerApproval = profile.ownerApprovalRequired === true && principalLocked > 0
   const isPrincipalUnlocked =
     profile.forceUnlockPrincipal ||
     principalLocked <= 0 ||
-    (unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
+    (!requiresOwnerApproval && unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
   const withdrawableMainRatio = principalRule.enabled ? principalRule.withdrawableRatio : 1
   const withdrawableSystemBalance = Number((Math.max(0, systemMainBalance) * withdrawableMainRatio).toFixed(8))
   const withdrawableMainBalance = Number(Math.min(balance, withdrawableSystemBalance + nonSystemMainBalance).toFixed(8))
@@ -1003,6 +1008,8 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     (
       isPrincipalUnlocked
         ? 100
+        : requiresOwnerApproval
+          ? 0
         : unlockTargetProfit <= 0
           ? 100
           : Math.min(100, (earnedProfit / unlockTargetProfit) * 100)
@@ -1023,6 +1030,7 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     minimum_profit_to_unlock: Number(profile.minimumProfitToUnlock.toFixed(8)),
     vip_level: withdrawalPolicy.vipLevel,
     force_unlock_principal: profile.forceUnlockPrincipal,
+    requires_owner_approval: requiresOwnerApproval,
     withdrawal_fee_percent: Number(withdrawalPolicy.feePercent.toFixed(4)),
     daily_withdrawal_limit: Number(withdrawalPolicy.dailyLimit || 0),
     daily_withdrawal_requested: Number(todayRequestedAmount.toFixed(8)),
@@ -1052,14 +1060,15 @@ async function unlockAllPrincipalLocksIfEligible(db, userId, currency, rules = n
   }
 }
 
-function buildLockBreakdown(locks, earnedProfitPool) {
+function buildLockBreakdown(locks, earnedProfitPool, options = {}) {
+  const requiresOwnerApproval = options.requiresOwnerApproval === true
   let remainingPool = Number(earnedProfitPool || 0)
   return (locks || []).map((row) => {
     const required = Number(row.required_profit_amount || 0)
-    const consumed = required > 0 ? Math.min(required, Math.max(0, remainingPool)) : 0
+    const consumed = !requiresOwnerApproval && required > 0 ? Math.min(required, Math.max(0, remainingPool)) : 0
     remainingPool = Number((remainingPool - consumed).toFixed(8))
     const remaining = Number(Math.max(0, required - consumed).toFixed(8))
-    const progress = required <= 0 ? 100 : Number(Math.min(100, (consumed / required) * 100).toFixed(2))
+    const progress = requiresOwnerApproval ? 0 : required <= 0 ? 100 : Number(Math.min(100, (consumed / required) * 100).toFixed(2))
     const unlockedByProgress = required <= 0 || remaining <= 0
     return {
       id: Number(row.id),
@@ -1071,22 +1080,25 @@ function buildLockBreakdown(locks, earnedProfitPool) {
       remaining_profit_to_unlock: remaining,
       unlock_ratio: Number(row.unlock_ratio || 0),
       lock_status: String(row.lock_status || 'locked'),
-      progress_pct: unlockedByProgress ? 100 : progress,
+      progress_pct: requiresOwnerApproval ? 0 : unlockedByProgress ? 100 : progress,
       unlocked_at: row.unlocked_at || null,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      requires_owner_approval: requiresOwnerApproval,
     }
   })
 }
 
 function buildUserWithdrawalSummary(summary) {
   const isUnlocked = summary?.is_principal_unlocked === true
+  const requiresOwnerApproval = summary?.requires_owner_approval === true
   return {
     currency: String(summary?.currency || 'USDT'),
     current_balance: Number(summary?.current_balance || 0),
     locked_balance: Number(summary?.locked_balance || 0),
     withdrawable_balance: Number(summary?.withdrawable_balance || 0),
     is_principal_unlocked: isUnlocked,
+    requires_owner_approval: requiresOwnerApproval,
     withdrawal_fee_percent: Number(summary?.withdrawal_fee_percent || 0),
     daily_withdrawal_limit: Number(summary?.daily_withdrawal_limit || 0),
     daily_withdrawal_remaining: Number(summary?.daily_withdrawal_remaining || 0),
@@ -1095,11 +1107,14 @@ function buildUserWithdrawalSummary(summary) {
     status_label: isUnlocked ? 'available' : 'partially_restricted',
     status_message: isUnlocked
       ? 'السحب متاح وفق الرصيد القابل للسحب الظاهر في حسابك.'
-      : 'قد يبقى جزء من أصل الإيداع محميًا مؤقتًا حسب سياسة الحساب، ويتم تحديث المتاح للسحب تلقائيًا.',
+      : requiresOwnerApproval
+        ? 'جزء من أصل الإيداع مقيد بمراجعة إدارة المخاطر ويتطلب اعتمادًا إداريًا لفكه.'
+        : 'قد يبقى جزء من أصل الإيداع محميًا مؤقتًا حسب سياسة الحساب، ويتم تحديث المتاح للسحب تلقائيًا.',
   }
 }
 
-function buildUserPrincipalLockItems(items) {
+function buildUserPrincipalLockItems(items, options = {}) {
+  const requiresOwnerApproval = options.requiresOwnerApproval === true
   return (items || []).map((row) => ({
     id: Number(row.id || 0),
     status_label: String(row.lock_status || '') === 'unlocked' ? 'available' : 'protected',
@@ -1107,11 +1122,14 @@ function buildUserPrincipalLockItems(items) {
     display_message:
       String(row.lock_status || '') === 'unlocked'
         ? 'هذا الجزء أصبح متاحًا ضمن الرصيد القابل للسحب.'
-        : 'هذا الجزء يخضع لسياسة السحب الحالية وسيُفتح تلقائيًا عند تحقق الأهلية.',
+        : requiresOwnerApproval
+          ? 'هذا الجزء مقيد بمراجعة إدارة المخاطر ويتطلب اعتمادًا إداريًا لفكه.'
+          : 'هذا الجزء يخضع لسياسة السحب الحالية وسيفتح تلقائيًا عند تحقق الأهلية.',
     lock_status: String(row.lock_status || ''),
     created_at: row.created_at,
     updated_at: row.updated_at,
     unlocked_at: row.unlocked_at,
+    requires_owner_approval: requiresOwnerApproval,
   }))
 }
 
@@ -1411,11 +1429,15 @@ export function createBalanceRouter(db) {
       [req.user.id, currency],
     )
     const orderedForProgress = [...rows].sort((a, b) => Number(a.id) - Number(b.id))
-    const breakdownForward = buildLockBreakdown(orderedForProgress, summary.earned_profit)
+    const breakdownForward = buildLockBreakdown(orderedForProgress, summary.earned_profit, {
+      requiresOwnerApproval: summary.requires_owner_approval === true,
+    })
     const mapById = new Map(breakdownForward.map((x) => [x.id, x]))
     const items = rows.map((row) => mapById.get(Number(row.id)) || row)
     return res.json({
-      items: buildUserPrincipalLockItems(items),
+      items: buildUserPrincipalLockItems(items, {
+        requiresOwnerApproval: summary.requires_owner_approval === true,
+      }),
       summary: buildUserWithdrawalSummary(summary),
     })
   })
@@ -1578,6 +1600,7 @@ export function createBalanceRouter(db) {
             minimumProfitToUnlock: unlockProfile.minimumProfitToUnlock,
             principalLockedRatio: unlockProfile.principalLockedRatio,
             clearProfitRestriction: unlockProfile.clearProfitRestriction,
+            ownerApprovalRequired: unlockProfile.ownerApprovalRequired,
             forceUnlockPrincipal: unlockProfile.forceUnlockPrincipal,
           })
           const vipResult = await applyVipAndReferralAfterDeposit(tx, {
@@ -1933,6 +1956,7 @@ export function createBalanceRouter(db) {
           minimumProfitToUnlock: unlockProfile.minimumProfitToUnlock,
           principalLockedRatio: unlockProfile.principalLockedRatio,
           clearProfitRestriction: unlockProfile.clearProfitRestriction,
+          ownerApprovalRequired: unlockProfile.ownerApprovalRequired,
           forceUnlockPrincipal: unlockProfile.forceUnlockPrincipal,
         })
         const updateRes = await run(
