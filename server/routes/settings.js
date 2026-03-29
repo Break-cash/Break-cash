@@ -140,6 +140,12 @@ export function createSettingsRouter(db) {
     }
   }
 
+  async function toDataUrl(filePath, mimeType) {
+    const fileBuffer = await fs.promises.readFile(filePath)
+    const normalizedMime = String(mimeType || 'application/octet-stream').trim() || 'application/octet-stream'
+    return `data:${normalizedMime};base64,${fileBuffer.toString('base64')}`
+  }
+
   /** الأسواق والمهام هما الأساسيات في الشريط السفلي - يأتيان أولاً */
   const DEFAULT_MOBILE_NAV_CONFIG = [
     { id: 'markets', to: '/market', label: 'Markets', icon: 'candlestick', isFab: false },
@@ -680,14 +686,16 @@ export function createSettingsRouter(db) {
     }
 
     const publicUrl = toPublicPath(req.file.path)
+    const leaderboardAvatarIndex = HOME_LEADERBOARD_AVATAR_KEYS.indexOf(key)
+    const shouldInlineLeaderboardAvatar = leaderboardAvatarIndex >= 0
     await persistUploadedAsset(db, {
       publicUrl,
       absolutePath: req.file.path,
       mimeType: req.file.mimetype,
       originalName: req.file.originalname,
     })
-    await upsertSettingValue(key, publicUrl)
-    const leaderboardAvatarIndex = HOME_LEADERBOARD_AVATAR_KEYS.indexOf(key)
+    const storedValue = shouldInlineLeaderboardAvatar ? await toDataUrl(req.file.path, req.file.mimetype) : publicUrl
+    await upsertSettingValue(key, storedValue)
     if (leaderboardAvatarIndex >= 0) {
       const row = await get(db, `SELECT value FROM settings WHERE key='home_leaderboard' LIMIT 1`)
       let parsed = null
@@ -701,7 +709,7 @@ export function createSettingsRouter(db) {
         index === leaderboardAvatarIndex
           ? {
               ...item,
-              avatar: publicUrl,
+              avatar: storedValue,
             }
           : item,
       )
@@ -717,7 +725,11 @@ export function createSettingsRouter(db) {
     if (key === 'logo_url') {
       await syncBrandLogos(publicUrl)
     }
-    return res.json({ ok: true, key, url: toUploadPublicUrl(publicUrl) || publicUrl })
+    return res.json({
+      ok: true,
+      key,
+      url: shouldInlineLeaderboardAvatar ? storedValue : toUploadPublicUrl(publicUrl) || publicUrl,
+    })
   }))
 
   router.get('/registration-status', asyncRoute(async (_req, res) => {
