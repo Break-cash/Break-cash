@@ -285,7 +285,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                   initial={{ opacity: 0, y: 24 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45, delay: 0.08 * index, ease: 'easeOut' }}
-                  className={`${style.orderClass} ${style.wrapper} mx-auto w-full max-w-[7.5rem] sm:max-w-[10.5rem] lg:max-w-none`}
+                  className={`${style.orderClass} ${style.wrapper} mx-auto w-full min-w-0 max-w-none`}
                   whileHover={{ scale: 1.03 }}
                 >
                   <button
