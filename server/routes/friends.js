@@ -2,6 +2,7 @@ import path from 'node:path'
 import { Router } from 'express'
 import { get, run, all } from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
+import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -13,9 +14,7 @@ const asyncRoute = (handler) => async (req, res) => {
 }
 
 function toPublicPath(absPath) {
-  if (!absPath) return null
-  const rel = path.relative(path.join(process.cwd(), 'server'), absPath).replaceAll('\\', '/')
-  return `/uploads/${rel.replace(/^uploads[/\\]/, '')}`
+  return absPath ? toUploadPublicUrl(absPath) : null
 }
 
 function toFriendUserPayload(row) {

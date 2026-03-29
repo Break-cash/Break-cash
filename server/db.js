@@ -368,6 +368,17 @@ async function ensureSchema(db) {
       value TEXT NOT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS uploaded_assets (
+      id SERIAL PRIMARY KEY,
+      storage_key TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      original_name TEXT,
+      content_base64 TEXT NOT NULL,
+      byte_size INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_uploaded_assets_storage_key ON uploaded_assets(storage_key);
     CREATE TABLE IF NOT EXISTS user_push_subscriptions (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

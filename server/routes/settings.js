@@ -88,8 +88,7 @@ export function createSettingsRouter(db) {
   }
 
   function toPublicPath(absPath) {
-    const rel = path.relative(path.join(process.cwd(), 'server'), absPath).replaceAll('\\', '/')
-    return `/uploads/${rel.replace(/^uploads\//, '')}`
+    return absPath ? toUploadPublicUrl(absPath) : null
   }
 
   function normalizeImageKey(rawKey) {
