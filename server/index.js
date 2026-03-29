@@ -152,9 +152,14 @@ async function bootstrap() {
   await ensureBaseSeed(db)
   try {
     const migration = await migrateUploadReferences(db)
-    if (migration.avatarsUpdated > 0 || migration.kycUpdated > 0 || migration.depositProofsUpdated > 0) {
+    if (
+      migration.avatarsUpdated > 0 ||
+      migration.avatarsCleared > 0 ||
+      migration.kycUpdated > 0 ||
+      migration.depositProofsUpdated > 0
+    ) {
       console.log(
-        `[uploads] normalized references avatars=${migration.avatarsUpdated} kyc=${migration.kycUpdated} depositProofs=${migration.depositProofsUpdated}`,
+        `[uploads] normalized references avatars=${migration.avatarsUpdated} cleared=${migration.avatarsCleared} kyc=${migration.kycUpdated} depositProofs=${migration.depositProofsUpdated}`,
       )
     }
   } catch (error) {
