@@ -9,8 +9,20 @@ import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-as
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
 const GLOBAL_PROMOTED_AD_ITEMS = [
-  { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
-  { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
+  {
+    type: 'image',
+    mediaUrl: '/uploads/ads/ad_4_1774756829349.jpeg?v=ad_4_1774756829349.jpeg',
+    title: 'mani',
+    description: 'Open the deposit page',
+    linkUrl: '/deposit',
+  },
+  {
+    type: 'image',
+    mediaUrl: '/uploads/ads/ad_4_1774756829519.jpeg?v=ad_4_1774756829519.jpeg',
+    title: 'frnd',
+    description: 'Open referral center',
+    linkUrl: '/referral',
+  },
 ]
 const SEEDED_PROMOTED_ASSETS = [
   {
