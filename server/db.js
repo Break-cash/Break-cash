@@ -318,6 +318,8 @@ async function ensureSchema(db) {
       wallet_debit_txn_id INTEGER,
       wallet_credit_txn_id INTEGER,
       metadata_json TEXT,
+      admin_hidden_at TIMESTAMP,
+      admin_hidden_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       confirmed_at TIMESTAMP,
       settled_at TIMESTAMP,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -724,6 +726,8 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_badge TEXT`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_for_admin_actions INTEGER NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS admin_hidden_at TIMESTAMP`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS admin_hidden_by INTEGER REFERENCES users(id) ON DELETE SET NULL`)
   await db.query(`ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS proof_image_path TEXT`)
   await db.query(`ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS request_status TEXT NOT NULL DEFAULT 'pending'`)
   await db.query(`ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS admin_note TEXT`)

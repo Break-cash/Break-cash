@@ -58,6 +58,7 @@ import {
   updateAdminStaffRole,
   toggleStrategyCodeAdmin,
   deleteStrategyCodeAdmin,
+  deleteStrategyUsageAdmin,
   getMiningAdminConfig,
   getOwnerKycSubmissions,
   getRecoveryCodeReviewRequests,
@@ -324,6 +325,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     isActive: true,
   })
   const [strategySaving, setStrategySaving] = useState(false)
+  const [strategyUsageDeletingId, setStrategyUsageDeletingId] = useState<number | null>(null)
   const [strategyDisplaySaving, setStrategyDisplaySaving] = useState(false)
   const [strategyTradeDisplayDraft, setStrategyTradeDisplayDraft] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
@@ -939,6 +941,29 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     const refreshed = await getStrategyCodesAdmin()
     setStrategyCodes(refreshed.items || [])
     setStrategyUsages(refreshed.usages || [])
+  }
+
+  async function handleDeleteStrategyUsage(usage: StrategyCodeUsageAdminItem) {
+    if (String(usage.status || '') !== 'trade_settled') {
+      setMessage({ type: 'error', text: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط.' })
+      return
+    }
+    const confirmed = window.confirm(
+      `هل تريد حذف الصفقة المكتملة #${usage.id} من السجل الظاهر فقط؟ سيبقى الربح اليومي المقفل أسبوعًا كما هو دون تغيير.`,
+    )
+    if (!confirmed) return
+
+    setStrategyUsageDeletingId(usage.id)
+    setMessage(null)
+    try {
+      await deleteStrategyUsageAdmin(usage.id)
+      await refreshStrategyCodes()
+      setMessage({ type: 'success', text: 'تم حذف الصفقة المكتملة من السجل دون المساس بالأصل أو الربح المقفل.' })
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف الصفقة المكتملة.' })
+    } finally {
+      setStrategyUsageDeletingId(null)
+    }
   }
 
   async function refreshBonusRules() {
@@ -3137,6 +3162,18 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                       <span>{usage.expertName || 'بدون خبير'}</span>
                       <span>{Number(usage.stakeAmount || 0).toFixed(2)} USDT</span>
                       <span>{usage.usedAt || usage.confirmedAt || '-'}</span>
+                      {usage.status === 'trade_settled' ? (
+                        <button
+                          type="button"
+                          className="wallet-action-btn wallet-action-withdraw"
+                          onClick={() => handleDeleteStrategyUsage(usage)}
+                          disabled={strategyUsageDeletingId === usage.id}
+                        >
+                          {strategyUsageDeletingId === usage.id ? '...' : 'حذف من السجل'}
+                        </button>
+                      ) : (
+                        <span>{usage.settledAt || '-'}</span>
+                      )}
                     </li>
                   ))
                 )}

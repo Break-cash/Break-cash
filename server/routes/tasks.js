@@ -751,7 +751,8 @@ export function createTasksRouter(db) {
        LEFT JOIN strategy_code_usages scu
          ON scu.code_id = sc.id
         AND scu.user_id = ?
-       ORDER BY sc.id DESC`,
+        AND scu.admin_hidden_at IS NULL
+        ORDER BY sc.id DESC`,
       [req.user.id],
     )
     const items = codeRows.map((row) => ({
@@ -1102,15 +1103,16 @@ export function createTasksRouter(db) {
     )
     const usages = await all(
       db,
-      `SELECT scu.id, scu.code_id, scu.user_id, scu.status, scu.selected_symbol, scu.balance_snapshot,
-              scu.stake_amount, scu.reward_value, scu.trade_return_percent, scu.entry_price, scu.exit_price,
-              scu.confirmed_at, scu.settled_at, scu.created_at, sc.expert_name,
-              u.display_name, u.email, u.phone
-       FROM strategy_code_usages scu
-       LEFT JOIN strategy_codes sc ON sc.id = scu.code_id
-       LEFT JOIN users u ON u.id = scu.user_id
-       ORDER BY scu.id DESC
-       LIMIT 400`,
+       `SELECT scu.id, scu.code_id, scu.user_id, scu.status, scu.selected_symbol, scu.balance_snapshot,
+               scu.stake_amount, scu.reward_value, scu.trade_return_percent, scu.entry_price, scu.exit_price,
+               scu.confirmed_at, scu.settled_at, scu.created_at, sc.expert_name,
+               u.display_name, u.email, u.phone
+        FROM strategy_code_usages scu
+        LEFT JOIN strategy_codes sc ON sc.id = scu.code_id
+        LEFT JOIN users u ON u.id = scu.user_id
+        WHERE scu.admin_hidden_at IS NULL
+        ORDER BY scu.id DESC
+        LIMIT 400`,
     )
     return res.json({
       items: rows.map(buildStrategyCodeRow),
@@ -1207,6 +1209,39 @@ export function createTasksRouter(db) {
       })
     }
     await run(db, `DELETE FROM strategy_codes WHERE id = ?`, [id])
+    return res.json({ ok: true })
+  })
+
+  router.delete('/admin/strategy-usages/:id', requireStrategyCodeManager, async (req, res) => {
+    const id = Number(req.params.id || 0)
+    if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const usage = await get(
+      db,
+      `SELECT id, status, admin_hidden_at
+       FROM strategy_code_usages
+       WHERE id = ?
+       LIMIT 1`,
+      [id],
+    )
+    if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
+    if (usage.admin_hidden_at) return res.json({ ok: true })
+    if (String(usage.status || '') !== 'trade_settled') {
+      return res.status(400).json({
+        error: 'ONLY_SETTLED_TRADES_CAN_BE_REMOVED',
+        message: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط دون المساس بمنطق الأصل والربح.',
+      })
+    }
+
+    await run(
+      db,
+      `UPDATE strategy_code_usages
+       SET admin_hidden_at = CURRENT_TIMESTAMP,
+           admin_hidden_by = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [req.user.id, id],
+    )
     return res.json({ ok: true })
   })
 

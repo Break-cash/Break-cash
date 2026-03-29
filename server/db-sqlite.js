@@ -349,6 +349,8 @@ CREATE TABLE IF NOT EXISTS strategy_code_usages (
   wallet_debit_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
   wallet_credit_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
   metadata_json TEXT,
+  admin_hidden_at TEXT,
+  admin_hidden_by INTEGER REFERENCES users(id),
   confirmed_at TEXT,
   settled_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

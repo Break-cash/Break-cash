@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   broadcastAdminNotification,
   createAdminNotification,
-  deleteStrategyCodeAdmin,
+  deleteStrategyUsageAdmin,
   getAdminDepositRequests,
   getAdminUsersList,
   getAdminWithdrawalRequests,
@@ -12,6 +12,7 @@ import {
   getStrategyTradeDisplayConfig,
   upsertStrategyCodeAdmin,
   type StrategyCodeAdminItem,
+  type StrategyCodeUsageAdminItem,
   type StrategyTradeDisplayConfig,
   updateStrategyTradeDisplayConfig,
 } from '../../api'
@@ -53,6 +54,7 @@ export function AdminDashboardPage() {
   const [grantedPermissions, setGrantedPermissions] = useState<string[]>([])
   const [displayConfig, setDisplayConfig] = useState<StrategyTradeDisplayConfig>(DEFAULT_DISPLAY_CONFIG)
   const [strategyCodes, setStrategyCodes] = useState<StrategyCodeAdminItem[]>([])
+  const [strategyUsages, setStrategyUsages] = useState<StrategyCodeUsageAdminItem[]>([])
   const [expertDrafts, setExpertDrafts] = useState<Record<number, string>>({})
   const [strategyDraft, setStrategyDraft] = useState(DEFAULT_STRATEGY_DRAFT)
   const [notificationDraft, setNotificationDraft] = useState({
@@ -64,7 +66,7 @@ export function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [savingDisplay, setSavingDisplay] = useState(false)
   const [savingExpertId, setSavingExpertId] = useState<number | null>(null)
-  const [deletingStrategyId, setDeletingStrategyId] = useState<number | null>(null)
+  const [deletingStrategyUsageId, setDeletingStrategyUsageId] = useState<number | null>(null)
   const [savingStrategy, setSavingStrategy] = useState(false)
   const [sendingNotification, setSendingNotification] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -98,6 +100,7 @@ export function AdminDashboardPage() {
 
         const users = usersRes.users || []
         const strategyItems = (strategyRes.items || []).filter((item) => item.featureType === 'trial_trade')
+        const strategyUsageItems = (strategyRes.usages || []).filter((item) => item.status === 'trade_settled')
         setSnapshot({
           usersCount: users.length,
           pendingDeposits: Number(depositsRes.items?.length || 0),
@@ -106,6 +109,7 @@ export function AdminDashboardPage() {
         })
         setDisplayConfig(displayRes.config || DEFAULT_DISPLAY_CONFIG)
         setStrategyCodes(strategyItems)
+        setStrategyUsages(strategyUsageItems)
         setExpertDrafts(Object.fromEntries(strategyItems.map((item) => [item.id, String(item.expertName || '')])))
       } catch (error) {
         if (!active) return
@@ -124,7 +128,9 @@ export function AdminDashboardPage() {
   async function reloadStrategyCodes() {
     const strategyRes = await getStrategyCodesAdmin()
     const strategyItems = (strategyRes.items || []).filter((item) => item.featureType === 'trial_trade')
+    const strategyUsageItems = (strategyRes.usages || []).filter((item) => item.status === 'trade_settled')
     setStrategyCodes(strategyItems)
+    setStrategyUsages(strategyUsageItems)
     setExpertDrafts(Object.fromEntries(strategyItems.map((item) => [item.id, String(item.expertName || '')])))
   }
 
@@ -196,20 +202,22 @@ export function AdminDashboardPage() {
     }
   }
 
-  async function handleDeleteStrategyCode(item: StrategyCodeAdminItem) {
-    const confirmed = window.confirm(`هل تريد حذف الصفقة "${item.title || item.code}" نهائيا؟`)
+  async function handleDeleteStrategyUsage(item: StrategyCodeUsageAdminItem) {
+    const confirmed = window.confirm(
+      `هل تريد حذف الصفقة المكتملة #${item.id} من السجل الظاهر فقط؟ سيبقى الربح اليومي المقفل أسبوعًا كما هو دون تغيير.`,
+    )
     if (!confirmed) return
 
-    setDeletingStrategyId(item.id)
+    setDeletingStrategyUsageId(item.id)
     setMessage(null)
     try {
-      await deleteStrategyCodeAdmin(item.id)
+      await deleteStrategyUsageAdmin(item.id)
       await reloadStrategyCodes()
-      setMessage({ type: 'success', text: 'تم حذف الصفقة السابقة بنجاح.' })
+      setMessage({ type: 'success', text: 'تم حذف الصفقة المكتملة من السجل دون المساس بالربح المقفل.' })
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف الصفقة السابقة.' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف الصفقة المكتملة.' })
     } finally {
-      setDeletingStrategyId(null)
+      setDeletingStrategyUsageId(null)
     }
   }
 
@@ -450,19 +458,21 @@ export function AdminDashboardPage() {
             <h2 className="text-sm font-semibold text-white">حذف الصفقات السابقة</h2>
             <p className="mt-1 text-xs text-app-muted">يمكن للمشرف حذف أي صفقة استراتيجية قديمة من هنا بشكل نهائي.</p>
             <div className="mt-3 space-y-2">
-              {strategyCodes.length > 0 ? strategyCodes.map((item) => (
-                <div key={`delete-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-app-border bg-app-elevated px-3 py-3">
+              {strategyUsages.length > 0 ? strategyUsages.map((item) => (
+                <div key={`delete-usage-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-app-border bg-app-elevated px-3 py-3">
                   <div className="text-sm text-white">
-                    {item.title || item.code}
-                    <span className="ml-2 text-xs text-app-muted">{item.code}</span>
+                    <div>#{item.id} · #{item.codeId}</div>
+                    <div className="text-xs text-app-muted">
+                      {item.userDisplayName || item.userEmail || item.userPhone || `#${item.userId}`} · {item.selectedSymbol || '--'} · {Number(item.rewardValue || 0).toFixed(2)} USDT
+                    </div>
                   </div>
                   <button
                     type="button"
                     className="wallet-action-btn whitespace-nowrap border border-red-500/30 bg-red-500/10 text-red-200"
-                    onClick={() => handleDeleteStrategyCode(item)}
-                    disabled={deletingStrategyId === item.id}
+                    onClick={() => handleDeleteStrategyUsage(item)}
+                    disabled={deletingStrategyUsageId === item.id}
                   >
-                    {deletingStrategyId === item.id ? '...' : 'حذف'}
+                    {deletingStrategyUsageId === item.id ? '...' : 'حذف من السجل'}
                   </button>
                 </div>
               )) : (
@@ -521,3 +531,4 @@ export function AdminDashboardPage() {
     </div>
   )
 }
+

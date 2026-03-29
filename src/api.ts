@@ -2609,6 +2609,10 @@ export async function deleteStrategyCodeAdmin(id: number) {
   return apiFetch(`/api/tasks/admin/strategy-codes/${id}`, { method: 'DELETE' }) as Promise<{ ok: boolean }>
 }
 
+export async function deleteStrategyUsageAdmin(id: number) {
+  return apiFetch(`/api/tasks/admin/strategy-usages/${id}`, { method: 'DELETE' }) as Promise<{ ok: boolean }>
+}
+
 export type MiningMediaItem = {
   id: string
   type: 'image' | 'video'

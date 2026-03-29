@@ -108,6 +108,7 @@ function earningEntryLabel(entry: EarningEntry): string {
   if (refType === 'mining_daily_claim') return 'ربح تعدين يومي'
   if (refType === 'task_redemption') return 'مكافأة مهمة'
   if (refType === 'strategy_code_bonus') return 'مكافأة استراتيجية'
+  if (refType === 'strategy_trade_profit') return 'ربح يومي استراتيجي'
   if (refType === 'first_deposit_bonus') return 'بونص أول إيداع'
   if (refType === 'referral_reward') return 'مكافأة إحالة'
   if (refType === 'daily_trade_reward') return 'ربح يومي'
