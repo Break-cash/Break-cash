@@ -9,6 +9,7 @@ import { hasPermission } from '../services/permissions.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const DEFAULT_BRAND_LOGO_URL = '/break-cash-logo-premium.png'
+const HOME_LEADERBOARD_AVATAR_KEYS = ['leaderboard_first_avatar', 'leaderboard_second_avatar', 'leaderboard_third_avatar']
 const LOCKED_PLATFORM_SETTING_KEYS = new Set([
   'wallet_link',
   'logo_url',
@@ -97,6 +98,46 @@ export function createSettingsRouter(db) {
     if (key === 'logo' || key === 'logo_url') return 'logo_url'
     if (!/^[a-z0-9_]{3,48}$/.test(key)) return null
     return key
+  }
+
+  function getHomeLeaderboardAvatarSettingKey(index) {
+    return HOME_LEADERBOARD_AVATAR_KEYS[index] || null
+  }
+
+  async function getSettingsMap(keys) {
+    const normalizedKeys = Array.isArray(keys) ? keys.map((key) => String(key || '').trim()).filter(Boolean) : []
+    if (!normalizedKeys.length) return {}
+    const placeholders = normalizedKeys.map(() => '?').join(', ')
+    const rows = await all(
+      db,
+      `SELECT key, value
+       FROM settings
+       WHERE key IN (${placeholders})`,
+      normalizedKeys,
+    )
+    const result = {}
+    for (const row of rows) {
+      const key = String(row?.key || '').trim()
+      if (!key) continue
+      result[key] = String(row?.value || '').trim()
+    }
+    return result
+  }
+
+  async function hydrateHomeLeaderboardAvatarSettings(config) {
+    const normalizedConfig = normalizeHomeLeaderboard(config)
+    const avatarSettings = await getSettingsMap(HOME_LEADERBOARD_AVATAR_KEYS)
+    return {
+      ...normalizedConfig,
+      competitors: normalizedConfig.competitors.map((item, index) => {
+        const avatarKey = getHomeLeaderboardAvatarSettingKey(index)
+        const persistedAvatar = avatarKey ? String(avatarSettings[avatarKey] || '').trim() : ''
+        return {
+          ...item,
+          avatar: toUploadPublicUrl(persistedAvatar || item.avatar) || persistedAvatar || item.avatar,
+        }
+      }),
+    }
   }
 
   /** الأسواق والمهام هما الأساسيات في الشريط السفلي - يأتيان أولاً */
@@ -405,11 +446,11 @@ export function createSettingsRouter(db) {
     } catch {
       parsed = null
     }
-    return res.json({ config: normalizeHomeLeaderboard(parsed) })
+    return res.json({ config: await hydrateHomeLeaderboardAvatarSettings(parsed) })
   }))
 
   router.post('/home-leaderboard', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
-    const config = normalizeHomeLeaderboard(req.body || {})
+    const config = await hydrateHomeLeaderboardAvatarSettings(req.body || {})
     await run(
       db,
       `INSERT INTO settings (key, value) VALUES ('home_leaderboard', ?)
@@ -646,6 +687,33 @@ export function createSettingsRouter(db) {
       originalName: req.file.originalname,
     })
     await upsertSettingValue(key, publicUrl)
+    const leaderboardAvatarIndex = HOME_LEADERBOARD_AVATAR_KEYS.indexOf(key)
+    if (leaderboardAvatarIndex >= 0) {
+      const row = await get(db, `SELECT value FROM settings WHERE key='home_leaderboard' LIMIT 1`)
+      let parsed = null
+      try {
+        parsed = JSON.parse(String(row?.value || 'null'))
+      } catch {
+        parsed = null
+      }
+      const nextConfig = normalizeHomeLeaderboard(parsed)
+      nextConfig.competitors = nextConfig.competitors.map((item, index) =>
+        index === leaderboardAvatarIndex
+          ? {
+              ...item,
+              avatar: publicUrl,
+            }
+          : item,
+      )
+      await run(
+        db,
+        `INSERT INTO settings (key, value) VALUES ('home_leaderboard', ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+        [JSON.stringify(nextConfig)],
+      )
+      publishLiveUpdate({ type: 'settings_updated', source: 'settings', key: 'home_leaderboard' })
+      publishLiveUpdate({ type: 'home_content_updated', source: 'settings', key: 'home_leaderboard' })
+    }
     if (key === 'logo_url') {
       await syncBrandLogos(publicUrl)
     }
