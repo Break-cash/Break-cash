@@ -474,7 +474,17 @@ export type AdItem = {
 }
 
 const CURATED_ADS_BY_PLACEMENT: Record<string, AdItem[]> = Object.fromEntries(
-  ['home', 'deposit', 'mining', 'profile'].map((placement) => [placement, []]),
+  ['home', 'deposit', 'mining', 'profile'].map((placement, placementIndex) => [
+    placement,
+    [
+      { id: 991000 + placementIndex * 10 + 1, type: 'image', mediaUrl: '/ads/break-logo-promo.jpeg', title: 'اعلان بريك', description: 'واجهة بريك كاش', linkUrl: '/portfolio', placement, sortOrder: 0, isActive: true },
+      { id: 991000 + placementIndex * 10 + 2, type: 'image', mediaUrl: '/ads/mining-main-banner.jpg', title: 'اعلان تعدين', description: 'اذهب إلى التعدين', linkUrl: '/mining', placement, sortOrder: 1, isActive: true },
+      { id: 991000 + placementIndex * 10 + 3, type: 'video', mediaUrl: '/ads/mining-feed.mp4', title: 'اعلان تعدين فيد', description: 'تفاصيل التعدين', linkUrl: '/mining', placement, sortOrder: 2, isActive: true },
+      { id: 991000 + placementIndex * 10 + 4, type: 'image', mediaUrl: '/ads/breakcash-best.jpeg', title: 'بريك كاش الافضل', description: 'عرض بريك كاش الافضل', linkUrl: '/portfolio', placement, sortOrder: 3, isActive: true },
+      { id: 991000 + placementIndex * 10 + 5, type: 'image', mediaUrl: '/ads/mani.jpeg', title: 'mani', description: 'Open the deposit page', linkUrl: '/deposit', placement, sortOrder: 4, isActive: true },
+      { id: 991000 + placementIndex * 10 + 6, type: 'image', mediaUrl: '/ads/frnd.jpeg', title: 'frnd', description: 'Open referral center', linkUrl: '/referral', placement, sortOrder: 5, isActive: true },
+    ],
+  ]),
 )
 
 function shouldUseCuratedAds(items: AdItem[]) {
