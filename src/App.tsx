@@ -22,6 +22,7 @@ import { AppModalPortal } from './components/ui/AppModalPortal'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
 import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
+import { ProductionRefreshScreen, resetProductionRefreshAttempts } from './components/splash/ProductionRefreshScreen'
 
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.Home })))
 const Market = lazy(() => import('./pages/Market').then((m) => ({ default: m.Market })))
@@ -280,12 +281,51 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [grantedPermissions, setGrantedPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(() => !!getToken())
+  const [productionRefreshRequired, setProductionRefreshRequired] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
   const [recoveryCountdown, setRecoveryCountdown] = useState(5)
   const [recoveryCopyDone, setRecoveryCopyDone] = useState(false)
   const [recoverySaving, setRecoverySaving] = useState(false)
+
+  useEffect(() => {
+    if (productionRefreshRequired) return
+    const markRefreshRequired = (reason?: unknown) => {
+      const message = String(
+        (reason as { message?: string } | null)?.message ||
+        (reason as { reason?: { message?: string } } | null)?.reason?.message ||
+        reason ||
+        '',
+      ).toLowerCase()
+      if (
+        message.includes('failed to fetch dynamically imported module') ||
+        message.includes('importing a module script failed') ||
+        message.includes('loading chunk') ||
+        message.includes('chunkloaderror') ||
+        message.includes('dynamically imported')
+      ) {
+        setProductionRefreshRequired(true)
+      }
+    }
+
+    const onError = (event: ErrorEvent) => markRefreshRequired(event.error || event.message)
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => markRefreshRequired(event.reason)
+    const onVitePreloadError = (event: Event) => {
+      event.preventDefault()
+      setProductionRefreshRequired(true)
+    }
+
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+    window.addEventListener('vite:preloadError', onVitePreloadError as EventListener)
+
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onUnhandledRejection)
+      window.removeEventListener('vite:preloadError', onVitePreloadError as EventListener)
+    }
+  }, [productionRefreshRequired])
 
   useEffect(() => {
     const token = getToken()
@@ -302,6 +342,12 @@ function App() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (user || !loading) {
+      resetProductionRefreshAttempts()
+    }
+  }, [loading, user])
 
   useEffect(() => {
     getFaviconUrl()
@@ -459,6 +505,10 @@ function App() {
   async function refreshCurrentUser() {
     const res = await getCurrentUser()
     setUser(res.user)
+  }
+
+  if (productionRefreshRequired) {
+    return <ProductionRefreshScreen />
   }
 
   if (loading) return <div className="login-wrapper">Loading...</div>

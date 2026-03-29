@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/react'
 import './tailwind.css'
 import './index.css'
 import App from './App.tsx'
+import { ProductionRefreshScreen } from './components/splash/ProductionRefreshScreen'
 
 const sentryDsn = (import.meta.env.VITE_SENTRY_DSN || '').trim()
 if (sentryDsn) {
@@ -18,7 +19,7 @@ if (sentryDsn) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <Sentry.ErrorBoundary fallback={<div>Unexpected error occurred.</div>}>
+      <Sentry.ErrorBoundary fallback={<ProductionRefreshScreen />}>
         <App />
       </Sentry.ErrorBoundary>
     </BrowserRouter>
