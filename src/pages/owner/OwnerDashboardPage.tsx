@@ -794,6 +794,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         itemIndex === index
           ? {
               ...item,
+              id: Number(userItem.id) || item.id,
               name: displayName,
               username: `#${userItem.id}`,
               avatar: String(userItem.avatar_path || '').trim() || null,
