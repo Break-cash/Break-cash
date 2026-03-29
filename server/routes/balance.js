@@ -398,6 +398,34 @@ async function syncMissingPrincipalLocksForUser(db, userId, currency, rules = nu
   return created
 }
 
+async function relockApprovedDepositPrincipalLocksForUser(db, userId, currency, unlockProfile = null) {
+  const normalizedCurrency = normalizeCurrency(currency || 'USDT')
+  const profile = unlockProfile || null
+  if (profile?.forceUnlockPrincipal || profile?.ownerApprovalRequired !== true) return 0
+  const result = await run(
+    db,
+    `UPDATE user_principal_locks upl
+     SET lock_status = 'locked',
+         unlocked_at = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE upl.user_id = ?
+       AND upl.currency = ?
+       AND upl.source_type = 'deposit_request'
+       AND upl.lock_status = 'unlocked'
+       AND EXISTS (
+         SELECT 1
+         FROM deposit_requests dr
+         WHERE dr.id = upl.source_id
+           AND dr.user_id = upl.user_id
+           AND dr.currency = upl.currency
+           AND dr.request_status IN ('approved', 'completed')
+           AND COALESCE(dr.wallet_transaction_id, 0) > 0
+       )`,
+    [userId, normalizedCurrency],
+  )
+  return Number(result?.changes || result?.rowCount || 0)
+}
+
 function calculateRequiredProfitAmount(principalAmount, unlockRatio, minimumProfitToUnlock) {
   const principal = Number(principalAmount || 0)
   const ratio = Number(unlockRatio || 0)
@@ -410,6 +438,7 @@ async function reapplyPrincipalLocksForUser(db, userId, currency, rules = null) 
   const safeRules = rules || (await getRules(db))
   const normalizedCurrency = normalizeCurrency(currency || 'USDT')
   const profile = await getEffectiveUnlockProfile(db, userId, normalizedCurrency, safeRules)
+  await relockApprovedDepositPrincipalLocksForUser(db, userId, normalizedCurrency, profile)
   await syncMissingPrincipalLocksForUser(db, userId, normalizedCurrency, safeRules, profile)
   const lockedRows = await all(
     db,
