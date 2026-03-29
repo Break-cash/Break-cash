@@ -1098,6 +1098,7 @@ export function createTasksRouter(db) {
        FROM strategy_codes sc
        LEFT JOIN users creator ON creator.id = sc.created_by
        LEFT JOIN strategy_code_usages scu ON scu.code_id = sc.id
+        AND scu.admin_hidden_at IS NULL
        GROUP BY sc.id, creator.display_name
        ORDER BY sc.id DESC`,
     )
