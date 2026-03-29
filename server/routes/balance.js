@@ -975,7 +975,6 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const balance = await getBalanceAmount(db, userId, currency)
   const nonSystemMainBalance = Number(Math.max(0, balance - systemMainBalance).toFixed(8))
   const profile = await getEffectiveUnlockProfile(db, userId, currency, safeRules)
-  const principalRule = getPrincipalWithdrawalRuleConfig(safeRules)
   const withdrawalPolicy = await getEffectiveWithdrawalPolicy(db, userId)
   const lockRows = await all(
     db,
@@ -993,10 +992,16 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     profile.forceUnlockPrincipal ||
     principalLocked <= 0 ||
     (!requiresOwnerApproval && unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
-  const withdrawableMainRatio = principalRule.enabled ? principalRule.withdrawableRatio : 1
-  const withdrawableSystemBalance = Number((Math.max(0, systemMainBalance) * withdrawableMainRatio).toFixed(8))
+  const lockedSystemBalance = Number(
+    (
+      isPrincipalUnlocked
+        ? 0
+        : Math.min(Math.max(0, systemMainBalance), Math.max(0, principalLocked))
+    ).toFixed(8),
+  )
+  const withdrawableSystemBalance = Number(Math.max(0, systemMainBalance - lockedSystemBalance).toFixed(8))
   const withdrawableMainBalance = Number(Math.min(balance, withdrawableSystemBalance + nonSystemMainBalance).toFixed(8))
-  const lockedMainBalance = Number(Math.max(0, balance - withdrawableMainBalance).toFixed(8))
+  const lockedMainBalance = Number(Math.min(balance, lockedSystemBalance).toFixed(8))
   const todayRequestedAmount = await getDailyWithdrawalRequestedAmount(db, userId, currency)
   const dailyRemaining =
     withdrawalPolicy.dailyLimit > 0
@@ -1053,6 +1058,8 @@ async function unlockAllPrincipalLocksIfEligible(db, userId, currency, rules = n
   return {
     ...summary,
     deposited_principal: 0,
+    locked_balance: 0,
+    withdrawable_balance: Number(summary.current_balance || 0),
     unlock_target_profit: 0,
     remaining_profit_to_unlock: 0,
     unlock_progress_pct: 100,
