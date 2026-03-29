@@ -1290,9 +1290,24 @@ export async function getHomeLeaderboardConfig() {
 }
 
 export async function updateHomeLeaderboardConfig(config: HomeLeaderboardConfig) {
+  const payload: HomeLeaderboardConfig = {
+    ...config,
+    competitors: (config.competitors || []).map((item) => {
+      const avatar = String(item.avatar || '').trim()
+      const { avatar: _avatar, ...rest } = item
+      return {
+        ...rest,
+        ...(avatar.startsWith('data:image/')
+          ? {}
+          : avatar
+            ? { avatar }
+            : {}),
+      }
+    }),
+  }
   return apiFetch('/api/settings/home-leaderboard', {
     method: 'POST',
-    body: JSON.stringify(config),
+    body: JSON.stringify(payload),
   }) as Promise<{ ok: boolean; config: HomeLeaderboardConfig }>
 }
 
