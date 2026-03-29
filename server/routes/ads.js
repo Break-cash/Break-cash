@@ -8,36 +8,8 @@ import { publishLiveUpdate } from '../services/live-updates.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
-const GLOBAL_PROMOTED_AD_ITEMS = [
-  {
-    type: 'image',
-    mediaUrl: '/uploads/ads/ad_4_1774756829349.jpeg?v=ad_4_1774756829349.jpeg',
-    title: 'mani',
-    description: 'Open the deposit page',
-    linkUrl: '/deposit',
-  },
-  {
-    type: 'image',
-    mediaUrl: '/uploads/ads/ad_4_1774756829519.jpeg?v=ad_4_1774756829519.jpeg',
-    title: 'frnd',
-    description: 'Open referral center',
-    linkUrl: '/referral',
-  },
-]
-const SEEDED_PROMOTED_ASSETS = [
-  {
-    mediaUrl: '/uploads/ads/mani.jpeg',
-    sourcePath: path.join(process.cwd(), 'server', 'seed-assets', 'ads', 'mani.jpeg'),
-    mimeType: 'image/jpeg',
-    originalName: 'mani.jpeg',
-  },
-  {
-    mediaUrl: '/uploads/ads/frnd.jpeg',
-    sourcePath: path.join(process.cwd(), 'server', 'seed-assets', 'ads', 'frnd.jpeg'),
-    mimeType: 'image/jpeg',
-    originalName: 'frnd.jpeg',
-  },
-]
+const GLOBAL_PROMOTED_AD_ITEMS = []
+const SEEDED_PROMOTED_ASSETS = []
 
 const DEFAULT_ADS = Object.fromEntries(
   ['home', 'deposit', 'mining', 'profile'].map((placement) => [
@@ -108,62 +80,7 @@ async function ensureSeededPromotedAssetsPersisted(db) {
 
 async function ensurePromotedAdsPersisted(db) {
   await ensureSeededPromotedAssetsPersisted(db)
-  const allowedMediaUrls = GLOBAL_PROMOTED_AD_ITEMS.map((item) => item.mediaUrl)
-  const allowedPlaceholders = allowedMediaUrls.map(() => '?').join(', ')
-  await run(
-    db,
-    `DELETE FROM ads
-     WHERE media_url NOT IN (${allowedPlaceholders})`,
-    allowedMediaUrls,
-  )
-  await run(
-    db,
-    `DELETE FROM ads
-     WHERE placement <> 'all' AND media_url IN (${allowedPlaceholders})`,
-    allowedMediaUrls,
-  )
-
-  for (let index = 0; index < GLOBAL_PROMOTED_AD_ITEMS.length; index += 1) {
-    const item = GLOBAL_PROMOTED_AD_ITEMS[index]
-    const rows = await all(
-      db,
-      `SELECT id
-       FROM ads
-       WHERE placement = 'all' AND media_url = ?
-       ORDER BY id ASC`,
-      [item.mediaUrl],
-    )
-
-    const primary = rows[0]
-    if (!primary?.id) {
-      await run(
-        db,
-        `INSERT INTO ads (type, media_url, title, description, link_url, placement, sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?, 'all', ?, 1)`,
-        [item.type, item.mediaUrl, item.title || '', item.description || '', item.linkUrl || null, index],
-      )
-      continue
-    }
-
-    await run(
-      db,
-      `UPDATE ads
-       SET type = ?,
-           title = ?,
-           description = ?,
-           link_url = ?,
-           placement = 'all',
-           sort_order = ?,
-           is_active = 1,
-           updated_at = datetime('now')
-       WHERE id = ?`,
-      [item.type, item.title || '', item.description || '', item.linkUrl || null, index, primary.id],
-    )
-
-    for (const duplicate of rows.slice(1)) {
-      await run(db, `DELETE FROM ads WHERE id = ?`, [duplicate.id])
-    }
-  }
+  await run(db, `DELETE FROM ads`)
 }
 
 export function createAdsRouter(db) {

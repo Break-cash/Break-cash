@@ -474,13 +474,7 @@ export type AdItem = {
 }
 
 const CURATED_ADS_BY_PLACEMENT: Record<string, AdItem[]> = Object.fromEntries(
-  ['home', 'deposit', 'mining', 'profile'].map((placement, placementIndex) => [
-    placement,
-    [
-      { id: 991000 + placementIndex * 10 + 1, type: 'image', mediaUrl: '/uploads/ads/ad_4_1774756829349.jpeg?v=ad_4_1774756829349.jpeg', title: 'mani', description: 'Open the deposit page', linkUrl: '/deposit', placement, sortOrder: 0, isActive: true },
-      { id: 991000 + placementIndex * 10 + 2, type: 'image', mediaUrl: '/uploads/ads/ad_4_1774756829519.jpeg?v=ad_4_1774756829519.jpeg', title: 'frnd', description: 'Open referral center', linkUrl: '/referral', placement, sortOrder: 1, isActive: true },
-    ],
-  ]),
+  ['home', 'deposit', 'mining', 'profile'].map((placement) => [placement, []]),
 )
 
 function shouldUseCuratedAds(items: AdItem[]) {
