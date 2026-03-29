@@ -9,6 +9,7 @@ import {
   type FriendUser,
 } from '../api'
 import { AppModalPortal } from '../components/ui/AppModalPortal'
+import { SafeAvatar } from '../components/ui/SafeAvatar'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
 
@@ -217,11 +218,14 @@ export function FriendsPage() {
             {searchResults.map((user) => (
               <li key={user.id} className="friends-list-item">
                 <div className="friends-item-avatar">
-                  {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt="" />
-                  ) : (
-                    <span className="friends-item-initial">#{user.id}</span>
-                  )}
+                  <SafeAvatar
+                    src={user.avatarUrl}
+                    name={user.displayName}
+                    fallbackText={`#${user.id}`}
+                    className="h-full w-full border-0"
+                    textClassName="text-sm"
+                    alt={user.displayName}
+                  />
                 </div>
                 <div className="friends-item-info">
                   <div className="flex flex-wrap items-center gap-2">
@@ -304,11 +308,14 @@ export function FriendsPage() {
                 {pendingReceived.map((item) => (
                   <li key={item.id} className="friends-list-item">
                     <div className="friends-item-avatar">
-                      {item.avatarUrl ? (
-                        <img src={item.avatarUrl} alt="" />
-                      ) : (
-                        <span className="friends-item-initial">#{item.userId}</span>
-                      )}
+                      <SafeAvatar
+                        src={item.avatarUrl}
+                        name={item.displayName}
+                        fallbackText={`#${item.userId}`}
+                        className="h-full w-full border-0"
+                        textClassName="text-sm"
+                        alt={item.displayName}
+                      />
                     </div>
                     <div className="friends-item-info">
                       <span className="friends-item-name">{item.displayName}</span>
@@ -345,11 +352,14 @@ export function FriendsPage() {
                 {friends.map((item) => (
                   <li key={item.id} className="friends-list-item">
                     <div className="friends-item-avatar">
-                      {item.avatarUrl ? (
-                        <img src={item.avatarUrl} alt="" />
-                      ) : (
-                        <span className="friends-item-initial">#{item.userId}</span>
-                      )}
+                      <SafeAvatar
+                        src={item.avatarUrl}
+                        name={item.displayName}
+                        fallbackText={`#${item.userId}`}
+                        className="h-full w-full border-0"
+                        textClassName="text-sm"
+                        alt={item.displayName}
+                      />
                     </div>
                     <div className="friends-item-info">
                       <span className="friends-item-name">{item.displayName}</span>
@@ -384,11 +394,14 @@ export function FriendsPage() {
             </button>
             <div className="friends-profile-header">
               <div className="friends-profile-avatar">
-                {selectedUser.avatarUrl ? (
-                  <img src={selectedUser.avatarUrl} alt={selectedUser.displayName} />
-                ) : (
-                  <span>{String(selectedUser.id).slice(-2)}</span>
-                )}
+                <SafeAvatar
+                  src={selectedUser.avatarUrl}
+                  name={selectedUser.displayName}
+                  fallbackText={String(selectedUser.id).slice(-2)}
+                  className="h-full w-full border-0"
+                  textClassName="text-xl"
+                  alt={selectedUser.displayName}
+                />
               </div>
               <div className="friends-profile-title-wrap">
                 <div className="friends-profile-title-row">

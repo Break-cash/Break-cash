@@ -3,6 +3,7 @@ import { ChevronDown, Crown, Medal, Trophy } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { getPublicFriendProfile, type FriendUser, type HomeLeaderboardCompetitor, type HomeLeaderboardConfig } from '../../api'
 import { AppModalPortal } from '../ui/AppModalPortal'
+import { SafeAvatar } from '../ui/SafeAvatar'
 import { UserIdentityBadges } from '../user/UserIdentityBadges'
 
 export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
@@ -183,13 +184,7 @@ function Avatar({
   className?: string
 }) {
   return (
-    <div className={`inline-flex items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/5 font-semibold text-white/90 ${className}`}>
-      {avatar ? (
-        <img src={avatar} alt={name} className="h-full w-full object-cover" />
-      ) : (
-        <span>{name.slice(0, 2).toUpperCase()}</span>
-      )}
-    </div>
+    <SafeAvatar src={avatar} name={name} className={className} textClassName="font-semibold" alt={name} />
   )
 }
 
@@ -410,11 +405,14 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
             </button>
             <div className="friends-profile-header">
               <div className="friends-profile-avatar">
-                {selectedUser.avatarUrl ? (
-                  <img src={selectedUser.avatarUrl} alt={selectedUser.displayName} />
-                ) : (
-                  <span>{String(selectedUser.id).slice(-2)}</span>
-                )}
+                <SafeAvatar
+                  src={selectedUser.avatarUrl}
+                  name={selectedUser.displayName}
+                  fallbackText={String(selectedUser.id).slice(-2)}
+                  className="h-full w-full border-0"
+                  textClassName="text-xl"
+                  alt={selectedUser.displayName}
+                />
               </div>
               <div className="friends-profile-title-wrap">
                 <div className="friends-profile-title-row">
