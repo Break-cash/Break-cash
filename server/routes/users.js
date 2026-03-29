@@ -7,7 +7,7 @@ import { createLockedCompensationReward, getMainBalance, adjustBalance, normaliz
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { sendPushToUser } from '../services/push-notifications.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
-import { toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { buildUserAvatarUrl } from '../services/user-avatars.js'
 
 async function withTransaction(db, fn) {
   if (typeof db.connect === 'function') {
@@ -54,11 +54,6 @@ async function logAdminAction(db, actorUserId, section, action, targetUserId = n
      VALUES (?, ?, ?, ?, ?)`,
     [actorUserId, targetUserId, section, action, JSON.stringify(metadata || {})],
   )
-}
-
-function toPublicAvatarPath(avatarPath) {
-  if (!avatarPath) return null
-  return toUploadPublicUrl(avatarPath)
 }
 
 async function getPendingProfitTotal(db, userId, sourceType = 'all') {
@@ -221,7 +216,7 @@ export function createUsersRouter(db) {
 
     const normalizedRows = rows.map((row) => ({
       ...row,
-      avatar_path: row.avatar_path ? toPublicAvatarPath(row.avatar_path) : null,
+        avatar_path: buildUserAvatarUrl(row.id, row.avatar_path),
     }))
     const isOwner = req.user.role === 'owner'
     const users = isOwner ? normalizedRows : normalizedRows.map((u) => ({ ...u, email: null, phone: null }))

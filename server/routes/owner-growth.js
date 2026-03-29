@@ -27,6 +27,7 @@ import {
   saveOwnerFinancialGuardConfig,
 } from '../services/owner-financial-approvals.js'
 import { toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { buildUserAvatarUrl } from '../services/user-avatars.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -1866,7 +1867,7 @@ export function createOwnerGrowthRouter(db) {
       ...row,
       id_document_url: toPublicUploadUrl(row.id_document_path),
       selfie_url: toPublicUploadUrl(row.selfie_path),
-      avatar_url: toPublicUploadUrl(row.avatar_path),
+        avatar_url: buildUserAvatarUrl(row.id, row.avatar_path),
     }))
     return res.json({ items })
   })

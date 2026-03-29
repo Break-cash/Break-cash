@@ -30,6 +30,7 @@ import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-
 import { backfillUploadedAssets } from './services/upload-backfill.js'
 import { migrateUploadReferences } from './services/upload-reference-migration.js'
 import { cleanupOldNotifications } from './services/notifications.js'
+import { backfillUserAvatarBlobs } from './services/user-avatars.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -176,6 +177,15 @@ async function bootstrap() {
   } catch (error) {
     if (SENTRY_DSN) Sentry.captureException(error)
     console.warn('[uploads] backfill failed', error instanceof Error ? error.message : String(error))
+  }
+  try {
+    const avatarBackfill = await backfillUserAvatarBlobs(db)
+    if (avatarBackfill.backfilled > 0 || avatarBackfill.missing > 0) {
+      console.log(`[avatars] backfill users=${avatarBackfill.backfilled} missing=${avatarBackfill.missing}`)
+    }
+  } catch (error) {
+    if (SENTRY_DSN) Sentry.captureException(error)
+    console.warn('[avatars] backfill failed', error instanceof Error ? error.message : String(error))
   }
 
   const strategyTradeSweepIntervalMs = Math.max(15000, Number(process.env.STRATEGY_TRADE_SWEEP_INTERVAL_MS || 30000))

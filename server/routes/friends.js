@@ -2,7 +2,7 @@ import path from 'node:path'
 import { Router } from 'express'
 import { get, run, all } from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
-import { toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { buildUserAvatarUrl } from '../services/user-avatars.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -13,16 +13,12 @@ const asyncRoute = (handler) => async (req, res) => {
   }
 }
 
-function toPublicPath(absPath) {
-  return absPath ? toUploadPublicUrl(absPath) : null
-}
-
 function toFriendUserPayload(row) {
   return {
     id: row.id,
     displayName: row.display_name || `#${row.id}`,
     bio: String(row.bio || '').slice(0, 120),
-    avatarUrl: row.avatar_path ? toPublicPath(row.avatar_path) : null,
+    avatarUrl: buildUserAvatarUrl(row.id, row.avatar_path),
     verificationStatus: String(row.verification_status || 'unverified'),
     blueBadge: Number(row.blue_badge || 0),
     vipLevel: Number(row.vip_level || 0),
@@ -145,7 +141,7 @@ export function createFriendsRouter(db) {
         id: r.id,
         userId: otherId,
         displayName: displayName || `#${otherId}`,
-        avatarUrl: avatarPath ? toPublicPath(avatarPath) : null,
+        avatarUrl: buildUserAvatarUrl(otherId, avatarPath),
         status: r.status,
         createdAt: r.created_at,
       }

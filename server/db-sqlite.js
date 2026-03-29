@@ -110,6 +110,8 @@ CREATE TABLE IF NOT EXISTS users (
   display_name TEXT,
   bio TEXT,
   avatar_path TEXT,
+  avatar_blob_base64 TEXT,
+  avatar_blob_mime_type TEXT,
   verification_status TEXT NOT NULL DEFAULT 'unverified',
   phone_verified INTEGER NOT NULL DEFAULT 0,
   identity_submitted INTEGER NOT NULL DEFAULT 0,

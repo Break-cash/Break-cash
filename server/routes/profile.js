@@ -13,8 +13,9 @@ import {
 } from '../services/premium-identity.js'
 import { sendPhoneCodeSms } from '../services/sms.js'
 import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../services/verification.js'
-import { persistUploadedAsset, toStoredUploadReference, toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { persistUploadedAsset, toStoredUploadReference } from '../services/uploaded-assets.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
+import { buildUserAvatarUrl, persistUserAvatarUpload, resolveUserAvatarAsset } from '../services/user-avatars.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -64,16 +65,11 @@ async function handleSingleUpload(req, res, fieldName) {
   })
 }
 
-function toPublicAvatarUrl(absPath) {
-  if (!absPath) return null
-  return toUploadPublicUrl(absPath)
-}
-
 function normalizeProfile(row) {
   if (!row) return null
   return {
     ...row,
-    avatar_url: row.avatar_path ? toPublicAvatarUrl(row.avatar_path) : null,
+    avatar_url: buildUserAvatarUrl(row.id, row.avatar_path),
     badge_color: Number(row.blue_badge) === 1 ? 'blue' : row.verification_status === 'verified' ? 'gold' : 'none',
   }
 }
@@ -100,6 +96,21 @@ async function fetchProfile(db, userId) {
 
 export function createProfileRouter(db) {
   const router = Router()
+
+  router.get('/avatar-file/:userId', asyncRoute(async (req, res) => {
+    const userId = Number(req.params?.userId || 0)
+    if (!Number.isFinite(userId) || userId <= 0) return res.status(400).send('INVALID_USER')
+    const avatar = await resolveUserAvatarAsset(db, userId)
+    if (!avatar?.contentBase64) return res.status(404).send('UPLOAD_NOT_FOUND')
+    const buffer = Buffer.from(String(avatar.contentBase64), 'base64')
+    res.setHeader('Content-Type', String(avatar.mimeType || 'image/jpeg'))
+    res.setHeader('Content-Length', String(buffer.length))
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    return res.end(buffer)
+  }))
+
   router.use(requireAuth(db))
 
   router.get('/', asyncRoute(async (req, res) => {
@@ -161,13 +172,12 @@ export function createProfileRouter(db) {
     if (!mime.startsWith('image/')) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
-    await persistUploadedAsset(db, {
-      publicUrl: toStoredUploadReference(req.file.path),
-      absolutePath: req.file.path,
+    await persistUserAvatarUpload(db, {
+      userId: req.user.id,
+      filePath: req.file.path,
       mimeType: req.file.mimetype,
       originalName: req.file.originalname,
     })
-    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [toStoredUploadReference(req.file.path), req.user.id])
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ ok: true, profile })
   }))
@@ -185,14 +195,12 @@ export function createProfileRouter(db) {
     if (!mime.startsWith('image/')) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
-    await persistUploadedAsset(db, {
-      publicUrl: toStoredUploadReference(req.file.path),
-      absolutePath: req.file.path,
+    await persistUserAvatarUpload(db, {
+      userId,
+      filePath: req.file.path,
       mimeType: req.file.mimetype,
       originalName: req.file.originalname,
     })
-
-    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [toStoredUploadReference(req.file.path), userId])
     const user = await fetchProfile(db, userId)
     if (!user) return res.status(404).json({ error: 'NOT_FOUND' })
     return res.json({ ok: true, user })

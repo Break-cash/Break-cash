@@ -6,8 +6,8 @@ import { get, run } from '../db.js'
 import { requireApproved, requireAuth } from '../middleware/auth.js'
 import { sendPasswordResetEmail } from '../services/email.js'
 import { sendPasswordResetSms } from '../services/sms.js'
-import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 import { refreshVerificationStatus } from '../services/verification.js'
+import { buildUserAvatarUrl } from '../services/user-avatars.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -19,17 +19,12 @@ const asyncRoute = (handler) => async (req, res) => {
   }
 }
 
-function toPublicAvatarPath(avatarPath) {
-  if (!avatarPath) return null
-  return toUploadPublicUrl(avatarPath)
-}
-
 function toSafeUser(user) {
   const isOwner = user.role === 'owner'
   return {
     ...user,
     is_owner: Number(user.is_owner ?? (isOwner ? 1 : 0)),
-    avatar_url: toPublicAvatarPath(user.avatar_path),
+    avatar_url: buildUserAvatarUrl(user.id, user.avatar_path),
     email: isOwner ? user.email : null,
     phone: isOwner ? user.phone : null,
   }
