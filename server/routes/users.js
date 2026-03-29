@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
@@ -59,13 +58,7 @@ async function logAdminAction(db, actorUserId, section, action, targetUserId = n
 
 function toPublicAvatarPath(avatarPath) {
   if (!avatarPath) return null
-  const raw = String(avatarPath).trim()
-  if (!raw) return null
-  if (raw.startsWith('/uploads/')) return toUploadPublicUrl(raw)
-  const rel = path.relative(path.join(process.cwd(), 'server'), raw).replaceAll('\\', '/')
-  if (!rel || rel.startsWith('..')) return null
-  const publicPath = `/uploads/${rel.replace(/^uploads\//, '')}`
-  return toUploadPublicUrl(publicPath)
+  return toUploadPublicUrl(avatarPath)
 }
 
 async function getPendingProfitTotal(db, userId, sourceType = 'all') {

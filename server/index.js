@@ -28,6 +28,7 @@ import { createAdsRouter } from './routes/ads.js'
 import { createSupportRouter } from './routes/support.js'
 import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-assets.js'
 import { backfillUploadedAssets } from './services/upload-backfill.js'
+import { migrateUploadReferences } from './services/upload-reference-migration.js'
 import { cleanupOldNotifications } from './services/notifications.js'
 
 const PORT = Number(process.env.PORT || 5174)
@@ -149,6 +150,17 @@ async function bootstrap() {
   const db = await openDb()
   dbRef = db
   await ensureBaseSeed(db)
+  try {
+    const migration = await migrateUploadReferences(db)
+    if (migration.avatarsUpdated > 0 || migration.kycUpdated > 0 || migration.depositProofsUpdated > 0) {
+      console.log(
+        `[uploads] normalized references avatars=${migration.avatarsUpdated} kyc=${migration.kycUpdated} depositProofs=${migration.depositProofsUpdated}`,
+      )
+    }
+  } catch (error) {
+    if (SENTRY_DSN) Sentry.captureException(error)
+    console.warn('[uploads] reference migration failed', error instanceof Error ? error.message : String(error))
+  }
   try {
     const uploadBackfill = await backfillUploadedAssets(db)
     if (uploadBackfill.persisted > 0 || uploadBackfill.missing > 0) {

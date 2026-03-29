@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import crypto from 'node:crypto'
-import path from 'node:path'
 import * as Sentry from '@sentry/node'
 import { hashPassword, signToken, verifyPassword, verifyToken } from '../auth.js'
 import { get, run } from '../db.js'
 import { requireApproved, requireAuth } from '../middleware/auth.js'
 import { sendPasswordResetEmail } from '../services/email.js'
 import { sendPasswordResetSms } from '../services/sms.js'
+import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 import { refreshVerificationStatus } from '../services/verification.js'
 
 const asyncRoute = (handler) => async (req, res) => {
@@ -21,10 +21,7 @@ const asyncRoute = (handler) => async (req, res) => {
 
 function toPublicAvatarPath(avatarPath) {
   if (!avatarPath) return null
-  const rel = path.relative(path.join(process.cwd(), 'server'), avatarPath).replaceAll('\\', '/')
-  const publicPath = `/uploads/${rel.replace(/^uploads\//, '')}`
-  const version = path.basename(avatarPath).replace(/[^a-zA-Z0-9._-]/g, '')
-  return version ? `${publicPath}?v=${encodeURIComponent(version)}` : publicPath
+  return toUploadPublicUrl(avatarPath)
 }
 
 function toSafeUser(user) {

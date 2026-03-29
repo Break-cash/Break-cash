@@ -13,7 +13,7 @@ import {
 } from '../services/premium-identity.js'
 import { sendPhoneCodeSms } from '../services/sms.js'
 import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../services/verification.js'
-import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { persistUploadedAsset, toStoredUploadReference, toUploadPublicUrl } from '../services/uploaded-assets.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 
 const asyncRoute = (handler) => async (req, res) => {
@@ -64,14 +64,9 @@ async function handleSingleUpload(req, res, fieldName) {
   })
 }
 
-function toPublicPath(absPath) {
-  const rel = path.relative(path.join(process.cwd(), 'server'), absPath).replaceAll('\\', '/')
-  return `/uploads/${rel.replace(/^uploads\//, '')}`
-}
-
 function toPublicAvatarUrl(absPath) {
   if (!absPath) return null
-  return toUploadPublicUrl(toPublicPath(absPath))
+  return toUploadPublicUrl(absPath)
 }
 
 function normalizeProfile(row) {
@@ -167,12 +162,12 @@ export function createProfileRouter(db) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
     await persistUploadedAsset(db, {
-      publicUrl: toPublicPath(req.file.path),
+      publicUrl: toStoredUploadReference(req.file.path),
       absolutePath: req.file.path,
       mimeType: req.file.mimetype,
       originalName: req.file.originalname,
     })
-    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [req.file.path, req.user.id])
+    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [toStoredUploadReference(req.file.path), req.user.id])
     const profile = await fetchProfile(db, req.user.id)
     return res.json({ ok: true, profile })
   }))
@@ -191,13 +186,13 @@ export function createProfileRouter(db) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
     await persistUploadedAsset(db, {
-      publicUrl: toPublicPath(req.file.path),
+      publicUrl: toStoredUploadReference(req.file.path),
       absolutePath: req.file.path,
       mimeType: req.file.mimetype,
       originalName: req.file.originalname,
     })
 
-    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [req.file.path, userId])
+    await run(db, `UPDATE users SET avatar_path = ? WHERE id = ?`, [toStoredUploadReference(req.file.path), userId])
     const user = await fetchProfile(db, userId)
     if (!user) return res.status(404).json({ error: 'NOT_FOUND' })
     return res.json({ ok: true, user })
@@ -215,13 +210,13 @@ export function createProfileRouter(db) {
       const selfie = files.selfie?.[0]
       if (!idDoc || !selfie) return res.status(400).json({ error: 'FILES_REQUIRED' })
       await persistUploadedAsset(db, {
-        publicUrl: toPublicPath(idDoc.path),
+        publicUrl: toStoredUploadReference(idDoc.path),
         absolutePath: idDoc.path,
         mimeType: idDoc.mimetype,
         originalName: idDoc.originalname,
       })
       await persistUploadedAsset(db, {
-        publicUrl: toPublicPath(selfie.path),
+        publicUrl: toStoredUploadReference(selfie.path),
         absolutePath: selfie.path,
         mimeType: selfie.mimetype,
         originalName: selfie.originalname,
@@ -231,7 +226,7 @@ export function createProfileRouter(db) {
         db,
         `INSERT INTO kyc_submissions (user_id, id_document_path, selfie_path, review_status, auto_review_at)
          VALUES (?, ?, ?, 'pending', NULL)`,
-        [req.user.id, idDoc.path, selfie.path],
+        [req.user.id, toStoredUploadReference(idDoc.path), toStoredUploadReference(selfie.path)],
       )
       await run(
         db,

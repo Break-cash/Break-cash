@@ -5,9 +5,20 @@ import { get, run } from '../db.js'
 function normalizeStorageKey(value) {
   const raw = String(value || '').split('?')[0].trim().replaceAll('\\', '/')
   if (!raw) return null
-  const withoutPrefix = raw.replace(/^https?:\/\/[^/]+/i, '').replace(/^\/+/, '')
-  if (!withoutPrefix.startsWith('uploads/')) return null
-  return withoutPrefix.slice('uploads/'.length)
+  const withoutOrigin = raw.replace(/^https?:\/\/[^/]+/i, '')
+  const prefixed = withoutOrigin.replace(/^\/+/, '')
+  if (prefixed.startsWith('uploads/')) {
+    return prefixed.slice('uploads/'.length)
+  }
+  const uploadsIndex = prefixed.toLowerCase().lastIndexOf('/uploads/')
+  if (uploadsIndex >= 0) {
+    return prefixed.slice(uploadsIndex + '/uploads/'.length)
+  }
+  const absoluteUploadsIndex = prefixed.toLowerCase().lastIndexOf('uploads/')
+  if (absoluteUploadsIndex >= 0) {
+    return prefixed.slice(absoluteUploadsIndex + 'uploads/'.length)
+  }
+  return null
 }
 
 export function toUploadPublicUrl(value, options = {}) {
@@ -22,6 +33,11 @@ export function toUploadPublicUrl(value, options = {}) {
 
 export function getUploadStorageKey(value) {
   return normalizeStorageKey(value)
+}
+
+export function toStoredUploadReference(value) {
+  const storageKey = normalizeStorageKey(value)
+  return storageKey ? `/uploads/${storageKey}` : String(value || '').trim() || null
 }
 
 export async function persistUploadedAsset(db, payload) {
