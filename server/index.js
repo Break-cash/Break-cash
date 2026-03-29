@@ -27,6 +27,7 @@ import { createRewardsRouter } from './routes/rewards.js'
 import { createAdsRouter } from './routes/ads.js'
 import { createSupportRouter } from './routes/support.js'
 import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-assets.js'
+import { backfillUploadedAssets } from './services/upload-backfill.js'
 import { cleanupOldNotifications } from './services/notifications.js'
 
 const PORT = Number(process.env.PORT || 5174)
@@ -148,6 +149,17 @@ async function bootstrap() {
   const db = await openDb()
   dbRef = db
   await ensureBaseSeed(db)
+  try {
+    const uploadBackfill = await backfillUploadedAssets(db)
+    if (uploadBackfill.persisted > 0 || uploadBackfill.missing > 0) {
+      console.log(
+        `[uploads] backfill persisted=${uploadBackfill.persisted} skipped=${uploadBackfill.skipped} missing=${uploadBackfill.missing}`,
+      )
+    }
+  } catch (error) {
+    if (SENTRY_DSN) Sentry.captureException(error)
+    console.warn('[uploads] backfill failed', error instanceof Error ? error.message : String(error))
+  }
 
   const strategyTradeSweepIntervalMs = Math.max(15000, Number(process.env.STRATEGY_TRADE_SWEEP_INTERVAL_MS || 30000))
   const notificationsCleanupIntervalMs = Math.max(

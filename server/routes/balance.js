@@ -27,6 +27,7 @@ import {
 import { createLocalizedNotification } from '../services/notifications.js'
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
+import { persistUploadedAsset } from '../services/uploaded-assets.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const PRINCIPAL_UNLOCK_RATIO = 0.5
@@ -1523,6 +1524,14 @@ export function createBalanceRouter(db) {
     const proofImagePath = req.file
       ? `/uploads/payment-proofs/${path.basename(req.file.path).replaceAll('\\', '/')}`
       : null
+    if (req.file && proofImagePath) {
+      await persistUploadedAsset(db, {
+        publicUrl: proofImagePath,
+        absolutePath: req.file.path,
+        mimeType: req.file.mimetype,
+        originalName: req.file.originalname,
+      })
+    }
 
     const payload = [req.user.id, amount, currency, method, transferRef, notes || null, proofImagePath, idempotencyKey || null]
     try {

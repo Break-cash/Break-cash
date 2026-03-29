@@ -358,7 +358,6 @@ export function Profile() {
           ) : null}
         </div>
       </motion.section>
-      <LeaderboardSection config={leaderboardConfig} />
       <section className="glass-panel elite-enter rounded-3xl p-3">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_announcement_board')}</p>
@@ -435,6 +434,8 @@ export function Profile() {
           })}
         </div>
       </section>
+
+      <LeaderboardSection config={leaderboardConfig} />
 
       <motion.section
         initial={{ opacity: 0, y: 12 }}

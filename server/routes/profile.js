@@ -214,6 +214,18 @@ export function createProfileRouter(db) {
       const idDoc = files.idDocument?.[0]
       const selfie = files.selfie?.[0]
       if (!idDoc || !selfie) return res.status(400).json({ error: 'FILES_REQUIRED' })
+      await persistUploadedAsset(db, {
+        publicUrl: toPublicPath(idDoc.path),
+        absolutePath: idDoc.path,
+        mimeType: idDoc.mimetype,
+        originalName: idDoc.originalname,
+      })
+      await persistUploadedAsset(db, {
+        publicUrl: toPublicPath(selfie.path),
+        absolutePath: selfie.path,
+        mimeType: selfie.mimetype,
+        originalName: selfie.originalname,
+      })
 
       await run(
         db,

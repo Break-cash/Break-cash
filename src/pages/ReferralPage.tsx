@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Link as LinkIcon, Users, Wallet } from 'lucide-react'
-import { getMyReferralSummary, subscribeToLiveUpdates, type ReferralSummary } from '../api'
+import { getHomeLeaderboardConfig, getMyReferralSummary, subscribeToLiveUpdates, type HomeLeaderboardConfig, type ReferralSummary } from '../api'
+import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../components/home/LeaderboardSection'
 import { useI18n } from '../i18nCore'
 
 function formatDate(value: string) {
@@ -16,6 +17,7 @@ export function ReferralPage() {
   const [error, setError] = useState('')
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const refreshTimerRef = useRef<number | null>(null)
 
   const loadReferralSummary = useCallback(async (withLoading = false) => {
@@ -36,7 +38,18 @@ export function ReferralPage() {
   }, [loadReferralSummary])
 
   useEffect(() => {
+    getHomeLeaderboardConfig()
+      .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+      .catch(() => setLeaderboardConfig(defaultHomeLeaderboardConfig))
+  }, [])
+
+  useEffect(() => {
     const unsub = subscribeToLiveUpdates((event) => {
+      if (event.type === 'home_content_updated' || (event.type === 'settings_updated' && event.key === 'home_leaderboard')) {
+        getHomeLeaderboardConfig()
+          .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+          .catch(() => {})
+      }
       if (event.type !== 'balance_updated') return
       const source = String(event.source || '').trim().toLowerCase()
       if (source && source !== 'referral_reward') return
@@ -160,6 +173,8 @@ export function ReferralPage() {
               </p>
             </div>
           </section>
+
+          <LeaderboardSection config={leaderboardConfig} />
 
           <section className="rounded-2xl border border-app-border bg-app-card p-3">
             <div className="mb-2 text-sm font-semibold text-white">{t('referral_reward_history')}</div>

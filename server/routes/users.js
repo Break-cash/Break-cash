@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
@@ -7,6 +8,7 @@ import { createLockedCompensationReward, getMainBalance, adjustBalance, normaliz
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { sendPushToUser } from '../services/push-notifications.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
+import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 async function withTransaction(db, fn) {
   if (typeof db.connect === 'function') {
@@ -53,6 +55,17 @@ async function logAdminAction(db, actorUserId, section, action, targetUserId = n
      VALUES (?, ?, ?, ?, ?)`,
     [actorUserId, targetUserId, section, action, JSON.stringify(metadata || {})],
   )
+}
+
+function toPublicAvatarPath(avatarPath) {
+  if (!avatarPath) return null
+  const raw = String(avatarPath).trim()
+  if (!raw) return null
+  if (raw.startsWith('/uploads/')) return toUploadPublicUrl(raw)
+  const rel = path.relative(path.join(process.cwd(), 'server'), raw).replaceAll('\\', '/')
+  if (!rel || rel.startsWith('..')) return null
+  const publicPath = `/uploads/${rel.replace(/^uploads\//, '')}`
+  return toUploadPublicUrl(publicPath)
 }
 
 async function getPendingProfitTotal(db, userId, sourceType = 'all') {
@@ -213,8 +226,12 @@ export function createUsersRouter(db) {
     LIMIT ${limit}
     OFFSET ${offset}`, params)
 
+    const normalizedRows = rows.map((row) => ({
+      ...row,
+      avatar_path: row.avatar_path ? toPublicAvatarPath(row.avatar_path) : null,
+    }))
     const isOwner = req.user.role === 'owner'
-    const users = isOwner ? rows : rows.map((u) => ({ ...u, email: null, phone: null }))
+    const users = isOwner ? normalizedRows : normalizedRows.map((u) => ({ ...u, email: null, phone: null }))
     return res.json({ users })
   })
 

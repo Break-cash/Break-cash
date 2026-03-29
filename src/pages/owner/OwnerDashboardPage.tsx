@@ -2493,6 +2493,10 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                   </label>
                 </div>
 
+                <div className="rounded-2xl border border-sky-400/15 bg-sky-400/8 px-4 py-3 text-sm leading-6 text-sky-100">
+                  العرض العام مختصر جدًا: الصورة والاسم والمركز فقط، بينما تظهر الإيداعات واللقب والوصف عند الضغط على البطاقة.
+                </div>
+
                 <div className="space-y-4">
                   {homeLeaderboardDraft.competitors.map((item, index) => {
                     const meta = ownerLeaderboardPlaceMeta[index] || ownerLeaderboardPlaceMeta[0]
@@ -2581,15 +2585,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                             />
                           </label>
                           <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                            <span className="owner-hint">المعرف</span>
-                            <input
-                              value={item.username}
-                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'username', e.target.value)}
-                              placeholder="@username"
-                            />
-                          </label>
-                          <label className="wallet-inline-input" style={{ display: 'grid', gap: 6 }}>
-                            <span className="owner-hint">رابط الصورة</span>
+                            <span className="owner-hint">رابط الصورة أو صورة البروفايل</span>
                             <input
                               value={item.avatar || ''}
                               onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'avatar', e.target.value)}
@@ -2624,15 +2620,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                             />
                           </label>
                           <label className="wallet-inline-input lg:col-span-2" style={{ display: 'grid', gap: 6 }}>
-                            <span className="owner-hint">النص السفلي</span>
-                            <input
-                              value={item.ctaLabel}
-                              onChange={(e) => handleHomeLeaderboardCompetitorChange(index, 'ctaLabel', e.target.value)}
-                              placeholder="عرض ملف المتصدر"
-                            />
-                          </label>
-                          <label className="wallet-inline-input lg:col-span-2" style={{ display: 'grid', gap: 6 }}>
-                            <span className="owner-hint">الوصف التعريفي</span>
+                            <span className="owner-hint">تفاصيل إضافية تظهر عند الضغط</span>
                             <textarea
                               rows={4}
                               value={item.spotlight}
@@ -2646,12 +2634,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                           <div>
                             <div className="text-[11px] text-slate-500">معاينة سريعة</div>
                             <div className="mt-1 text-sm font-semibold text-white">
-                              {item.name || `المركز ${index + 1}`} • {Number(item.totalDeposits || 0).toLocaleString('en-US')} USDT
+                              المركز {index + 1} • {item.name || 'بدون اسم بعد'}
                             </div>
                           </div>
                           <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${meta.chipClass}`}>
                             <Sparkles size={12} />
-                            جاهز للعرض بعد الحفظ
+                            {Number(item.totalDeposits || 0).toLocaleString('en-US')} USDT
                           </div>
                         </div>
                       </div>

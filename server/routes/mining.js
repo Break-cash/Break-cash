@@ -13,6 +13,7 @@ import {
   executeMiningEmergencyWithdrawal,
 } from '../services/wallet-service.js'
 import { createLocalizedNotification } from '../services/notifications.js'
+import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 import { getVipRuntimeRules, normalizeVipTierConfig } from '../services/vip-rules.js'
 
 const MINING_PERMISSION = 'تعدين'
@@ -689,8 +690,14 @@ export function createMiningRouter(db) {
       return res.status(400).json({ error: 'INVALID_FILE_TYPE' })
     }
     const fileUrl = `/uploads/mining-media/${path.basename(req.file.path).replaceAll('\\', '/')}`
+    await persistUploadedAsset(db, {
+      publicUrl: fileUrl,
+      absolutePath: req.file.path,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    })
     const type = mime.startsWith('video/') ? 'video' : 'image'
-    return res.json({ ok: true, url: fileUrl, type })
+    return res.json({ ok: true, url: toUploadPublicUrl(fileUrl) || fileUrl, type })
   })
 
   return router

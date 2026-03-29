@@ -6,6 +6,7 @@ import { all, get, run } from '../db.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import { hasPermission } from '../services/permissions.js'
+import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const DEFAULT_BRAND_LOGO_URL = '/break-cash-logo-premium.png'
 const LOCKED_PLATFORM_SETTING_KEYS = new Set([
@@ -249,13 +250,13 @@ export function createSettingsRouter(db) {
     enabled: false,
     badge: 'أعلى المودعين',
     title: 'أعلى 3 مودعين لهذا الشهر',
-    description: 'معاينة فاخرة لأعلى المستخدمين في إجمالي الإيداعات الشهرية. يمكنك تعبئة هذه البيانات من لوحة المالك ثم تفعيل القسم عند الجاهزية.',
+    description: 'عرض مختصر لأعلى المستخدمين في إجمالي الإيداعات الشهرية مع تفاصيل تظهر عند الضغط على كل مركز.',
     summaryLabel: 'إجمالي إيداعات الشهر',
     summaryValue: '184,520 USDT',
     podiumLabels: ['الأول هذا الشهر', 'الثاني هذا الشهر', 'الثالث هذا الشهر'],
     detailsTitle: 'تفاصيل المتصدرين',
-    detailsSubtitle: 'بطاقات تعريف قابلة للتعديل تخص أصحاب المراكز الثلاثة فقط',
-    detailsHint: 'يمكن تعديل هذه البيانات من لوحة المالك قبل إظهار القسم للعامة',
+    detailsSubtitle: 'اضغط على أي مركز لعرض الإيداعات واللقب والوصف الخاص به.',
+    detailsHint: 'يمكن تعديل هذه البيانات من لوحة المالك قبل إظهار القسم للعامة.',
     noteLabel: 'الوصف التعريفي',
     tierLabel: 'التصنيف',
     growthLabel: 'نمو الشهر',
@@ -638,11 +639,17 @@ export function createSettingsRouter(db) {
     }
 
     const publicUrl = toPublicPath(req.file.path)
+    await persistUploadedAsset(db, {
+      publicUrl,
+      absolutePath: req.file.path,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    })
     await upsertSettingValue(key, publicUrl)
     if (key === 'logo_url') {
       await syncBrandLogos(publicUrl)
     }
-    return res.json({ ok: true, key, url: publicUrl })
+    return res.json({ ok: true, key, url: toUploadPublicUrl(publicUrl) || publicUrl })
   }))
 
   router.get('/registration-status', asyncRoute(async (_req, res) => {
