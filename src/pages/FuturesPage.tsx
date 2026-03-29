@@ -88,7 +88,7 @@ export function FuturesPage() {
     [codes],
   )
   const publishedStrategyTrades = useMemo(
-    () => codes.filter((item) => item.featureType === 'trial_trade' && item.isActive),
+    () => codes.filter((item) => item.featureType === 'trial_trade' && item.isActive && !item.alreadyUsed),
     [codes],
   )
   const latestSettledTrade = useMemo(() => {
