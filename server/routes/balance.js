@@ -426,6 +426,52 @@ async function relockApprovedDepositPrincipalLocksForUser(db, userId, currency, 
   return Number(result?.changes || result?.rowCount || 0)
 }
 
+async function rebuildApprovedDepositPrincipalLocksForUser(db, userId, currency, rules = null, unlockProfile = null) {
+  const safeRules = rules || (await getRules(db))
+  const normalizedCurrency = normalizeCurrency(currency || 'USDT')
+  const profile = unlockProfile || (await getEffectiveUnlockProfile(db, userId, normalizedCurrency, safeRules))
+  const depositRows = await all(
+    db,
+    `SELECT id, amount
+     FROM deposit_requests
+     WHERE user_id = ?
+       AND currency = ?
+       AND request_status IN ('approved', 'completed')
+       AND COALESCE(wallet_transaction_id, 0) > 0
+     ORDER BY id ASC`,
+    [userId, normalizedCurrency],
+  )
+  await run(
+    db,
+    `DELETE FROM user_principal_locks
+     WHERE user_id = ?
+       AND currency = ?
+       AND source_type = 'deposit_request'`,
+    [userId, normalizedCurrency],
+  )
+  if (profile.forceUnlockPrincipal) return 0
+  let created = 0
+  for (const row of depositRows) {
+    const principalAmount = Number(row.amount || 0)
+    if (!Number.isFinite(principalAmount) || principalAmount <= 0) continue
+    await createPrincipalLock(db, {
+      userId,
+      currency: normalizedCurrency,
+      principalAmount,
+      sourceType: 'deposit_request',
+      sourceId: Number(row.id || 0),
+      unlockRatio: profile.unlockRatio,
+      minimumProfitToUnlock: profile.minimumProfitToUnlock,
+      principalLockedRatio: profile.principalLockedRatio,
+      clearProfitRestriction: profile.clearProfitRestriction,
+      ownerApprovalRequired: profile.ownerApprovalRequired,
+      forceUnlockPrincipal: profile.forceUnlockPrincipal,
+    })
+    created += 1
+  }
+  return created
+}
+
 function calculateRequiredProfitAmount(principalAmount, unlockRatio, minimumProfitToUnlock) {
   const principal = Number(principalAmount || 0)
   const ratio = Number(unlockRatio || 0)
@@ -526,6 +572,27 @@ async function reapplyPrincipalLocksForAllUsers(db, rules = null) {
   return affected
 }
 
+async function rebuildApprovedDepositPrincipalLocksForAllUsers(db, rules = null) {
+  const safeRules = rules || (await getRules(db))
+  const rows = await all(
+    db,
+    `SELECT DISTINCT user_id, currency
+     FROM deposit_requests
+     WHERE request_status IN ('approved', 'completed')
+       AND COALESCE(wallet_transaction_id, 0) > 0`,
+  )
+  let affected = 0
+  for (const row of rows) {
+    affected += await rebuildApprovedDepositPrincipalLocksForUser(
+      db,
+      Number(row.user_id || 0),
+      String(row.currency || 'USDT'),
+      safeRules,
+    )
+  }
+  return affected
+}
+
 async function resetPrincipalUnlockOverridesForAllUsers(db) {
   const result = await run(
     db,
@@ -549,8 +616,9 @@ function schedulePrincipalLockBackfill(db) {
   setTimeout(async () => {
     try {
       const rules = await getRules(db)
+      const rebuilt = await rebuildApprovedDepositPrincipalLocksForAllUsers(db, rules)
       const affected = await reapplyPrincipalLocksForAllUsers(db, rules)
-      console.info('[balance] principal lock backfill applied', { affected })
+      console.info('[balance] principal lock backfill applied', { rebuilt, affected })
     } catch (error) {
       console.error('[balance] principal lock backfill failed', error)
     }
@@ -1510,6 +1578,7 @@ export function createBalanceRouter(db) {
     if (shouldResetPrincipalOverrides) {
       await resetPrincipalUnlockOverridesForAllUsers(db)
     }
+    await rebuildApprovedDepositPrincipalLocksForAllUsers(db, nextRules)
     await reapplyPrincipalLocksForAllUsers(db, nextRules)
     publishLiveUpdate({ type: 'home_content_updated', source: 'balance_rules', key: 'balance_rules' })
     publishLiveUpdate({ type: 'balance_rules_updated', source: 'balance_rules', key: 'balance_rules' })
