@@ -8,19 +8,6 @@ import { publishLiveUpdate } from '../services/live-updates.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
-const PROMOTED_AD_MEDIA_URLS = new Set([
-  '/ads/event-a.mp4',
-  '/ads/breakcash-best.jpeg',
-  '/ads/exclusive-offer-ar.jpeg',
-  '/ads/exclusive-offer-en.jpeg',
-  '/ads/breakcash-best-video.mp4',
-])
-const REMOVED_AD_MEDIA_URLS = ['/ads/event-banner.jpeg']
-const SALES_PRIORITY_MEDIA_URLS = [
-  '/ads/exclusive-offer-ar.jpeg',
-  '/ads/exclusive-offer-en.jpeg',
-  '/ads/breakcash-best-video.mp4',
-]
 const GLOBAL_PROMOTED_AD_ITEMS = [
   { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
   { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
@@ -40,60 +27,14 @@ const SEEDED_PROMOTED_ASSETS = [
   },
 ]
 
-const DEFAULT_ADS = {
-  home: [
-    { type: 'image', mediaUrl: '/ads/break-logo-promo.jpeg', title: '????? ????', description: '????? ?????? ??????', linkUrl: '/portfolio' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-ar.jpeg', title: 'Exclusive Offer AR', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'video', mediaUrl: '/ads/mining-feed.mp4', title: '????? ????? ???', description: '??? ??????? ??????', linkUrl: '/mining' },
-    { type: 'video', mediaUrl: '/ads/event-a.mp4', title: '????? ?', description: '??? ????? ????? ????? ?? ???? ??????? ?????????.', linkUrl: '/mining' },
-    { type: 'video', mediaUrl: '/ads/mining-power.mp4', title: '????? ????? ????', description: '??? ???? ????? ???????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/breakcash-best.jpeg', title: '???? ??? ?? ??????', description: '???? ?????? ???? ?????? ?????? ???? ?????? ????????.', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/breakcash-best-video.mp4', title: 'BreakCash Best Video', description: 'Brand campaign video', linkUrl: '/portfolio' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-en.jpeg', title: 'Exclusive Offer EN', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'image', mediaUrl: '/ads/mining-banner.jpeg', title: '????? ?????', description: '?????? ????? ??????? ???? ??????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
-    { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
-  ],
-  deposit: [
-    { type: 'image', mediaUrl: '/ads/break-logo-promo.jpeg', title: '????? ????', description: '????? ?????? ??????', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/event-a.mp4', title: '????? ?', description: '??? ????? ????? ????? ?? ???? ??????? ?????????.', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-en.jpeg', title: 'Exclusive Offer EN', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'video', mediaUrl: '/ads/mining-feed.mp4', title: '????? ????? ???', description: '??? ??????? ??????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/breakcash-best.jpeg', title: '???? ??? ?? ??????', description: '???? ?????? ???? ?????? ?????? ???? ?????? ????????.', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/breakcash-best-video.mp4', title: 'BreakCash Best Video', description: 'Brand campaign video', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/mining-power.mp4', title: '????? ????? ????', description: '??? ???? ????? ???????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-ar.jpeg', title: 'Exclusive Offer AR', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'image', mediaUrl: '/ads/mining-banner.jpeg', title: '????? ?????', description: '???? ??? ????? ??????? ???????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
-    { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
-  ],
-  mining: [
-    { type: 'image', mediaUrl: '/ads/break-logo-promo.jpeg', title: '????? ????', description: '????? ?????? ??????', linkUrl: '/portfolio' },
-    { type: 'image', mediaUrl: '/ads/breakcash-best.jpeg', title: '???? ??? ?? ??????', description: '???? ?????? ???? ?????? ?????? ???? ?????? ????????.', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/breakcash-best-video.mp4', title: 'BreakCash Best Video', description: 'Brand campaign video', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/mining-feed.mp4', title: '????? ????? ???', description: '??? ???? ???? ?? ???????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-ar.jpeg', title: 'Exclusive Offer AR', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'video', mediaUrl: '/ads/mining-power.mp4', title: '????? ????? ????', description: '??? ???? ????? ???????', linkUrl: '/mining' },
-    { type: 'video', mediaUrl: '/ads/event-a.mp4', title: '????? ?', description: '??? ????? ????? ????? ?? ???? ??????? ?????????.', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-en.jpeg', title: 'Exclusive Offer EN', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'image', mediaUrl: '/ads/mining-banner.jpeg', title: '????? ?????', description: '???? ????? ??????? ???????? ??', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
-    { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
-  ],
-  profile: [
-    { type: 'image', mediaUrl: '/ads/break-logo-promo.jpeg', title: '????? ????', description: '????? ?????? ??????', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/event-a.mp4', title: '????? ?', description: '??? ????? ????? ????? ?? ???? ??????? ?????????.', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-en.jpeg', title: 'Exclusive Offer EN', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'video', mediaUrl: '/ads/mining-feed.mp4', title: '????? ????? ???', description: '??? ??????? ??????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/exclusive-offer-ar.jpeg', title: 'Exclusive Offer AR', description: 'Referral bonus campaign', linkUrl: '/referral' },
-    { type: 'video', mediaUrl: '/ads/mining-power.mp4', title: '????? ????? ????', description: '??? ???? ????? ???????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/ads/breakcash-best.jpeg', title: '???? ??? ?? ??????', description: '???? ?????? ???? ?????? ?????? ???? ?????? ????????.', linkUrl: '/portfolio' },
-    { type: 'video', mediaUrl: '/ads/breakcash-best-video.mp4', title: 'BreakCash Best Video', description: 'Brand campaign video', linkUrl: '/portfolio' },
-    { type: 'image', mediaUrl: '/ads/mining-banner.jpeg', title: '????? ?????', description: '?????? ????? ??????? ???? ??????', linkUrl: '/mining' },
-    { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
-    { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
-  ],
-}
+const DEFAULT_ADS = Object.fromEntries(
+  ['home', 'deposit', 'mining', 'profile'].map((placement) => [
+    placement,
+    GLOBAL_PROMOTED_AD_ITEMS.map((item) => ({
+      ...item,
+    })),
+  ]),
+)
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -155,136 +96,60 @@ async function ensureSeededPromotedAssetsPersisted(db) {
 
 async function ensurePromotedAdsPersisted(db) {
   await ensureSeededPromotedAssetsPersisted(db)
-  for (const mediaUrl of REMOVED_AD_MEDIA_URLS) {
-    await run(db, `DELETE FROM ads WHERE media_url = ?`, [mediaUrl])
-  }
-  for (const item of GLOBAL_PROMOTED_AD_ITEMS) {
-    const existingGlobal = await get(
+  const allowedMediaUrls = GLOBAL_PROMOTED_AD_ITEMS.map((item) => item.mediaUrl)
+  const allowedPlaceholders = allowedMediaUrls.map(() => '?').join(', ')
+  await run(
+    db,
+    `DELETE FROM ads
+     WHERE media_url NOT IN (${allowedPlaceholders})`,
+    allowedMediaUrls,
+  )
+  await run(
+    db,
+    `DELETE FROM ads
+     WHERE placement <> 'all' AND media_url IN (${allowedPlaceholders})`,
+    allowedMediaUrls,
+  )
+
+  for (let index = 0; index < GLOBAL_PROMOTED_AD_ITEMS.length; index += 1) {
+    const item = GLOBAL_PROMOTED_AD_ITEMS[index]
+    const rows = await all(
       db,
-      `SELECT id, is_active
+      `SELECT id
        FROM ads
        WHERE placement = 'all' AND media_url = ?
-       ORDER BY id ASC
-       LIMIT 1`,
+       ORDER BY id ASC`,
       [item.mediaUrl],
     )
-    if (existingGlobal?.id) {
-      if (!Number(existingGlobal.is_active)) {
-        await run(
-          db,
-          `UPDATE ads
-           SET is_active = 1,
-               updated_at = datetime('now')
-           WHERE id = ?`,
-          [existingGlobal.id],
-        )
-      }
-    } else {
-      const maxGlobalSortRow = await get(
-        db,
-        `SELECT COALESCE(MAX(sort_order), -1) AS max_sort
-         FROM ads
-         WHERE placement = 'all'`,
-      )
-      const nextGlobalSort = Number(maxGlobalSortRow?.max_sort ?? -1) + 1
+
+    const primary = rows[0]
+    if (!primary?.id) {
       await run(
         db,
         `INSERT INTO ads (type, media_url, title, description, link_url, placement, sort_order, is_active)
          VALUES (?, ?, ?, ?, ?, 'all', ?, 1)`,
-        [item.type, item.mediaUrl, item.title || '', item.description || '', item.linkUrl || null, nextGlobalSort],
+        [item.type, item.mediaUrl, item.title || '', item.description || '', item.linkUrl || null, index],
       )
+      continue
     }
+
     await run(
       db,
-      `DELETE FROM ads
-       WHERE placement IN ('home', 'deposit', 'mining', 'profile') AND media_url = ?`,
-      [item.mediaUrl],
-    )
-  }
-  for (const placement of ['home', 'deposit', 'mining', 'profile']) {
-    const placementDefaults = Array.isArray(DEFAULT_ADS[placement]) ? DEFAULT_ADS[placement] : []
-    const promotedItems = placementDefaults.filter((item) => PROMOTED_AD_MEDIA_URLS.has(String(item.mediaUrl || '').trim()))
-    if (promotedItems.length === 0) continue
-
-    const maxSortRow = await get(
-      db,
-      `SELECT COALESCE(MAX(sort_order), -1) AS max_sort
-       FROM ads
-       WHERE placement = ?`,
-      [placement],
-    )
-    let nextSort = Number(maxSortRow?.max_sort ?? -1) + 1
-
-    for (const item of promotedItems) {
-      const mediaUrl = String(item.mediaUrl || '').trim()
-      const existing = await get(
-        db,
-        `SELECT id, is_active, sort_order
-         FROM ads
-         WHERE placement = ? AND media_url = ?
-         ORDER BY id ASC
-         LIMIT 1`,
-        [placement, mediaUrl],
-      )
-
-      if (existing?.id) {
-        if (!Number(existing.is_active)) {
-          await run(
-            db,
-            `UPDATE ads
-             SET is_active = 1,
-                 updated_at = datetime('now')
-             WHERE id = ?`,
-            [existing.id],
-          )
-        }
-        continue
-      }
-
-      await run(
-        db,
-        `INSERT INTO ads (type, media_url, title, description, link_url, placement, sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-        [item.type, mediaUrl, item.title || '', item.description || '', item.linkUrl || null, placement, nextSort],
-      )
-      nextSort += 1
-    }
-
-    const placementRows = await all(
-      db,
-      `SELECT id, media_url
-       FROM ads
-       WHERE placement = ?
-       ORDER BY sort_order ASC, id ASC`,
-      [placement],
+      `UPDATE ads
+       SET type = ?,
+           title = ?,
+           description = ?,
+           link_url = ?,
+           placement = 'all',
+           sort_order = ?,
+           is_active = 1,
+           updated_at = datetime('now')
+       WHERE id = ?`,
+      [item.type, item.title || '', item.description || '', item.linkUrl || null, index, primary.id],
     )
 
-    const salesRows = []
-    const otherRows = []
-    for (const row of placementRows) {
-      if (SALES_PRIORITY_MEDIA_URLS.includes(String(row.media_url || '').trim())) {
-        salesRows.push(row)
-      } else {
-        otherRows.push(row)
-      }
-    }
-
-    salesRows.sort(
-      (a, b) =>
-        SALES_PRIORITY_MEDIA_URLS.indexOf(String(a.media_url || '').trim()) -
-        SALES_PRIORITY_MEDIA_URLS.indexOf(String(b.media_url || '').trim()),
-    )
-
-    const orderedRows = [...salesRows, ...otherRows]
-    for (let index = 0; index < orderedRows.length; index += 1) {
-      await run(
-        db,
-        `UPDATE ads
-         SET sort_order = ?,
-             updated_at = datetime('now')
-         WHERE id = ?`,
-        [index, orderedRows[index].id],
-      )
+    for (const duplicate of rows.slice(1)) {
+      await run(db, `DELETE FROM ads WHERE id = ?`, [duplicate.id])
     }
   }
 }
