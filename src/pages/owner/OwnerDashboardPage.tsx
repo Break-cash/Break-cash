@@ -189,7 +189,7 @@ function createDefaultPrincipalWithdrawalRule() {
     withdrawableRatio: 0.5,
     clearProfitRestriction: true,
     applyToAllVipLevels: true,
-    ownerApprovalRequired: false,
+    ownerApprovalRequired: true,
   }
 }
 

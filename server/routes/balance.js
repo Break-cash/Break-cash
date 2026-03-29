@@ -47,7 +47,7 @@ const DEFAULT_BALANCE_RULES = {
     withdrawableRatio: PRINCIPAL_UNLOCK_RATIO,
     clearProfitRestriction: true,
     applyToAllVipLevels: true,
-    ownerApprovalRequired: false,
+    ownerApprovalRequired: true,
   },
 }
 
@@ -128,7 +128,7 @@ function normalizeRules(raw) {
     ),
     clearProfitRestriction: principalRuleBase.clearProfitRestriction !== false,
     applyToAllVipLevels: principalRuleBase.applyToAllVipLevels !== false,
-    ownerApprovalRequired: principalRuleBase.ownerApprovalRequired === true,
+    ownerApprovalRequired: principalRuleBase.ownerApprovalRequired !== false,
   }
   const map = base.unlockRatioByLevel && typeof base.unlockRatioByLevel === 'object' ? base.unlockRatioByLevel : {}
   const unlockRatioByLevel = { ...DEFAULT_BALANCE_RULES.unlockRatioByLevel }
