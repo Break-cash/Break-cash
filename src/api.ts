@@ -2381,6 +2381,7 @@ export type StrategyCodeItem = {
   rewardMode: StrategyCodeRewardMode
   rewardValue: number
   assetSymbol: string
+  purchasePercent: number
   tradeReturnPercent: number
   expiresAt?: string | null
   isActive: boolean
@@ -2395,6 +2396,9 @@ export type StrategyCodeUsage = {
   status: string
   selectedSymbol: string
   balanceSnapshot: number
+  totalAssetsSnapshot?: number
+  lockedExcludedAmount?: number
+  purchasePercent?: number
   stakeAmount: number
   entryPrice?: number | null
   exitPrice?: number | null
@@ -2427,6 +2431,7 @@ export type StrategyCodeUsageAdminItem = {
   selectedSymbol: string
   balanceSnapshot: number
   stakeAmount: number
+  purchasePercent: number
   rewardValue: number
   tradeReturnPercent: number
   expertName?: string
@@ -2500,6 +2505,10 @@ export async function previewStrategyCode(code: string, symbol?: string) {
     preview: {
       action: 'trial_trade' | 'promo_bonus'
       stakeAmount?: number
+      purchasePercent?: number
+      totalAssets?: number
+      lockedExcludedAmount?: number
+      eligibleAssetBase?: number
       tradeReturnPercent?: number
       rewardMode?: StrategyCodeRewardMode
       rewardValue?: number
@@ -2519,11 +2528,12 @@ export async function redeemStrategyCode(payload: { code: string; symbol?: strin
     codeId: number
     usageId: number
     featureType: StrategyCodeFeatureType
-    status: string
-    assetSymbol?: string
-    stakeAmount?: number
-    tradeReturnPercent?: number
-    entryPrice?: number
+      status: string
+      assetSymbol?: string
+      stakeAmount?: number
+      purchasePercent?: number
+      tradeReturnPercent?: number
+      entryPrice?: number
     strategyCode?: string
     expertName?: string
     autoSettleAt?: string | null
@@ -2563,10 +2573,8 @@ export async function upsertStrategyCodeAdmin(payload: {
   title: string
   description?: string
   expertName?: string
-  featureType: StrategyCodeFeatureType
-  rewardMode: StrategyCodeRewardMode
-  rewardValue: number
   assetSymbol: string
+  purchasePercent: number
   tradeReturnPercent: number
   expiresAt?: string | null
   isActive: boolean

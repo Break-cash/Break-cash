@@ -36,10 +36,8 @@ const DEFAULT_STRATEGY_DRAFT = {
   description: '',
   expertName: '',
   assetSymbol: 'BTCUSDT',
+  purchasePercent: '50',
   tradeReturnPercent: '12',
-  featureType: 'trial_trade' as 'trial_trade' | 'promo_bonus',
-  rewardMode: 'percent' as 'percent' | 'fixed',
-  rewardValue: '10',
   expiresAt: '',
   isActive: true,
 }
@@ -158,10 +156,8 @@ export function AdminDashboardPage() {
         title: item.title,
         description: item.description || '',
         expertName: String(expertDrafts[item.id] || '').trim(),
-        featureType: item.featureType,
-        rewardMode: item.rewardMode,
-        rewardValue: Number(item.rewardValue || 0),
         assetSymbol: item.assetSymbol,
+        purchasePercent: Number(item.purchasePercent || 50),
         tradeReturnPercent: Number(item.tradeReturnPercent || 0),
         expiresAt: item.expiresAt || null,
         isActive: item.isActive,
@@ -184,10 +180,8 @@ export function AdminDashboardPage() {
         title: strategyDraft.title.trim(),
         description: strategyDraft.description.trim(),
         expertName: strategyDraft.expertName.trim(),
-        featureType: strategyDraft.featureType,
-        rewardMode: strategyDraft.rewardMode,
-        rewardValue: Number(strategyDraft.rewardValue || 0),
         assetSymbol: strategyDraft.assetSymbol.trim().toUpperCase() || 'BTCUSDT',
+        purchasePercent: Number(strategyDraft.purchasePercent || 0),
         tradeReturnPercent: Number(strategyDraft.tradeReturnPercent || 0),
         expiresAt: strategyDraft.expiresAt ? new Date(strategyDraft.expiresAt).toISOString() : null,
         isActive: strategyDraft.isActive,
@@ -328,6 +322,7 @@ export function AdminDashboardPage() {
           <section className="rounded-2xl border border-app-border bg-app-card p-4">
             <h2 className="text-sm font-semibold text-white">إنشاء كود استراتيجية</h2>
             <p className="mt-1 text-xs text-app-muted">متاح للمشرفين الذين يملكون صلاحية التداول أو إنشاء المهام.</p>
+            <p className="mt-1 text-xs text-app-muted">يتم خصم نسبة الشراء من إجمالي الأصول بعد استثناء الجزء المقيد، ويعود أصل مبلغ الصفقة كاملًا للمستخدم عند انتهاء المدة.</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <input
                 className="field-input"
@@ -353,28 +348,12 @@ export function AdminDashboardPage() {
                 value={strategyDraft.assetSymbol}
                 onChange={(e) => setStrategyDraft((prev) => ({ ...prev, assetSymbol: e.target.value.toUpperCase() }))}
               />
-              <select
-                className="field-input"
-                value={strategyDraft.featureType}
-                onChange={(e) => setStrategyDraft((prev) => ({ ...prev, featureType: e.target.value as 'trial_trade' | 'promo_bonus' }))}
-              >
-                <option value="trial_trade">صفقة استراتيجية</option>
-                <option value="promo_bonus">مكافأة ترويجية</option>
-              </select>
-              <select
-                className="field-input"
-                value={strategyDraft.rewardMode}
-                onChange={(e) => setStrategyDraft((prev) => ({ ...prev, rewardMode: e.target.value as 'percent' | 'fixed' }))}
-              >
-                <option value="percent">نسبة</option>
-                <option value="fixed">قيمة ثابتة</option>
-              </select>
               <input
                 className="field-input"
                 type="number"
-                placeholder="قيمة المكافأة"
-                value={strategyDraft.rewardValue}
-                onChange={(e) => setStrategyDraft((prev) => ({ ...prev, rewardValue: e.target.value }))}
+                placeholder="نسبة الشراء من إجمالي الأصول بعد استثناء المقيد"
+                value={strategyDraft.purchasePercent}
+                onChange={(e) => setStrategyDraft((prev) => ({ ...prev, purchasePercent: e.target.value }))}
               />
               <input
                 className="field-input"
@@ -422,7 +401,7 @@ export function AdminDashboardPage() {
                     <div>
                       <div className="text-sm font-semibold text-white">{item.title || item.code}</div>
                       <div className="text-xs text-app-muted">
-                        {item.code} · {item.assetSymbol} · {item.isActive ? 'منشورة' : 'معطلة'}
+                        {item.code} · {item.assetSymbol} · شراء {Number(item.purchasePercent || 0).toFixed(0)}% · {item.isActive ? 'منشورة' : 'معطلة'}
                       </div>
                     </div>
                     <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${item.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-300'}`}>
@@ -463,7 +442,7 @@ export function AdminDashboardPage() {
                   <div className="text-sm text-white">
                     <div>#{item.id} · #{item.codeId}</div>
                     <div className="text-xs text-app-muted">
-                      {item.userDisplayName || item.userEmail || item.userPhone || `#${item.userId}`} · {item.selectedSymbol || '--'} · {Number(item.rewardValue || 0).toFixed(2)} USDT
+                      {item.userDisplayName || item.userEmail || item.userPhone || `#${item.userId}`} · {item.selectedSymbol || '--'} · خصم {Number(item.stakeAmount || 0).toFixed(2)} USDT · نسبة {Number(item.purchasePercent || 0).toFixed(0)}%
                     </div>
                   </div>
                   <button

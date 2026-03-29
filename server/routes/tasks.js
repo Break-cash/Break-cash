@@ -2,11 +2,11 @@ import { Router } from 'express'
 import { all, get, run } from '../db.js'
 import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth.js'
 import {
-  createStrategyPromoReward,
   createStrategyTradeOpenDebit,
   createStrategyTradePrincipalReturn,
   createStrategyTradeProfitReward,
   createTaskReward,
+  getWalletAccountsOverview,
   getTotalMainBalance,
 } from '../services/wallet-service.js'
 import { fetchBestQuote, sharedMarketFeed } from '../services/marketFeed.js'
@@ -68,19 +68,37 @@ async function resolveLiveQuote(symbol) {
   return fetchBestQuote(targetSymbol)
 }
 
-function computePromoRewardAmount(balanceSnapshot, codeRow) {
-  const mode = normalizeRewardMode(codeRow?.reward_mode)
-  const value = Number(codeRow?.reward_value || 0)
-  if (mode === 'fixed') return Number(Math.max(0, value).toFixed(8))
-  return Number(Math.max(0, (Number(balanceSnapshot || 0) * value) / 100).toFixed(8))
-}
-
 const STRATEGY_TRADE_MIN_SETTLE_DELAY_MS = 90 * 1000
 const STRATEGY_TRADE_MAX_SETTLE_DELAY_MS = 7 * 60 * 1000
 
 function getStrategyTradeDelayMs() {
   const span = STRATEGY_TRADE_MAX_SETTLE_DELAY_MS - STRATEGY_TRADE_MIN_SETTLE_DELAY_MS
   return STRATEGY_TRADE_MIN_SETTLE_DELAY_MS + Math.floor(Math.random() * (span + 1))
+}
+
+async function getStrategyTradePurchaseBase(db, userId, currency = 'USDT') {
+  const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  const [overview, mainBalance, lockedRow] = await Promise.all([
+    getWalletAccountsOverview(db, userId),
+    getTotalMainBalance(db, userId, normalizedCurrency),
+    get(
+      db,
+      `SELECT COALESCE(SUM(principal_amount), 0) AS locked_amount
+       FROM user_principal_locks
+       WHERE user_id = ? AND currency = ? AND lock_status = 'locked'`,
+      [userId, normalizedCurrency],
+    ),
+  ])
+  const totalAssets = Number(overview?.by_currency?.[normalizedCurrency] ?? overview?.total_assets ?? 0)
+  const lockedAmount = Number(lockedRow?.locked_amount || 0)
+  const eligibleAssets = Number(Math.max(0, Math.min(totalAssets - lockedAmount, Number(mainBalance || 0))).toFixed(8))
+  return {
+    currency: normalizedCurrency,
+    totalAssets: Number(totalAssets.toFixed(8)),
+    lockedAmount: Number(lockedAmount.toFixed(8)),
+    mainBalance: Number(Number(mainBalance || 0).toFixed(8)),
+    eligibleAssets,
+  }
 }
 
 function enrichStrategyUsageRow(row) {
@@ -92,6 +110,13 @@ function enrichStrategyUsageRow(row) {
     status: String(row.usage_status || 'consumed'),
     selectedSymbol: String(row.selected_symbol || row.asset_symbol || 'BTCUSDT').toUpperCase(),
     balanceSnapshot: Number(row.balance_snapshot || 0),
+    totalAssetsSnapshot:
+      Number(meta?.totalAssetsSnapshot || 0) > 0
+        ? Number(meta?.totalAssetsSnapshot || 0)
+        : Number(row.balance_snapshot || 0),
+    lockedExcludedAmount: Number(meta?.lockedExcludedAmount || 0),
+    purchasePercent:
+      Number(row.usage_purchase_percent || row.purchase_percent || meta?.purchasePercent || 50),
     stakeAmount: Number(row.stake_amount || 0),
     entryPrice: row.entry_price == null ? null : Number(row.entry_price),
     exitPrice: row.exit_price == null ? null : Number(row.exit_price),
@@ -474,6 +499,7 @@ function buildStrategyCodeRow(row) {
     rewardMode: normalizeRewardMode(row.reward_mode),
     rewardValue: Number(row.reward_value || 0),
     assetSymbol: String(row.asset_symbol || 'BTCUSDT').toUpperCase(),
+    purchasePercent: Number(row.purchase_percent || 50),
     tradeReturnPercent: Number(row.trade_return_percent || 0),
     expiresAt: row.expires_at,
     isActive: Number(row.is_active || 0) === 1,
@@ -742,17 +768,18 @@ export function createTasksRouter(db) {
     const codeRows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
-              sc.asset_symbol, sc.expert_name, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_at, sc.updated_at,
+              sc.asset_symbol, sc.purchase_percent, sc.expert_name, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_at, sc.updated_at,
               scu.id AS usage_id, scu.status AS usage_status, scu.selected_symbol, scu.balance_snapshot,
-              scu.stake_amount, scu.entry_price, scu.exit_price, scu.reward_value AS usage_reward_value,
+              scu.stake_amount, scu.purchase_percent AS usage_purchase_percent, scu.entry_price, scu.exit_price, scu.reward_value AS usage_reward_value,
               scu.trade_return_percent AS usage_trade_return_percent, scu.confirmed_at, scu.settled_at, scu.created_at AS used_at,
               scu.metadata_json
-       FROM strategy_codes sc
-       LEFT JOIN strategy_code_usages scu
-         ON scu.code_id = sc.id
-        AND scu.user_id = ?
-        AND scu.admin_hidden_at IS NULL
-        ORDER BY sc.id DESC`,
+        FROM strategy_codes sc
+        LEFT JOIN strategy_code_usages scu
+          ON scu.code_id = sc.id
+         AND scu.user_id = ?
+         AND scu.admin_hidden_at IS NULL
+        WHERE sc.feature_type = 'trial_trade'
+         ORDER BY sc.id DESC`,
       [req.user.id],
     )
     const items = codeRows.map((row) => ({
@@ -765,6 +792,7 @@ export function createTasksRouter(db) {
       rewardMode: normalizeRewardMode(row.reward_mode),
       rewardValue: Number(row.reward_value || 0),
       assetSymbol: String(row.asset_symbol || 'BTCUSDT').toUpperCase(),
+      purchasePercent: Number(row.purchase_percent || 50),
       tradeReturnPercent: Number(row.trade_return_percent || 0),
       expiresAt: row.expires_at,
       isActive: Number(row.is_active || 0) === 1,
@@ -784,9 +812,10 @@ export function createTasksRouter(db) {
     const row = await get(
       db,
       `SELECT id, code, title, description, expert_name, feature_type, reward_mode, reward_value, asset_symbol,
-              trade_return_percent, expires_at, is_active
+              purchase_percent, trade_return_percent, expires_at, is_active
        FROM strategy_codes
        WHERE code = ?
+         AND feature_type = 'trial_trade'
        LIMIT 1`,
       [code],
     )
@@ -804,7 +833,6 @@ export function createTasksRouter(db) {
     if (existing) {
       return res.status(400).json({ error: 'CODE_ALREADY_USED', status: existing.status })
     }
-    const balanceSnapshot = await getTotalMainBalance(db, req.user.id, 'USDT')
     const featureType = normalizeFeatureType(row.feature_type)
     const configuredSymbol = String(row.asset_symbol || 'BTCUSDT').toUpperCase()
     if (requestedSymbol && requestedSymbol !== configuredSymbol) {
@@ -826,7 +854,9 @@ export function createTasksRouter(db) {
       if (activeTrade) {
         return res.status(400).json({ error: 'ACTIVE_TRADE_EXISTS', usageId: Number(activeTrade.id || 0) })
       }
-      const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
+      const purchasePercent = normalizePercent(row.purchase_percent, 50)
+      const purchaseBase = await getStrategyTradePurchaseBase(db, req.user.id, 'USDT')
+      const stakeAmount = Number(((purchaseBase.eligibleAssets * purchasePercent) / 100).toFixed(8))
       if (stakeAmount <= 0) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE' })
       return res.json({
         ok: true,
@@ -840,34 +870,19 @@ export function createTasksRouter(db) {
         preview: {
           action: 'trial_trade',
           stakeAmount,
+          purchasePercent,
+          totalAssets: purchaseBase.totalAssets,
+          lockedExcludedAmount: purchaseBase.lockedAmount,
+          eligibleAssetBase: purchaseBase.eligibleAssets,
           tradeReturnPercent: Number(row.trade_return_percent || 0),
-          balanceSnapshot,
-          confirmationMessage: 'سيتم خصم نصف رصيدك الحالي لفتح صفقة استراتيجية، ثم يعود أصل المبلغ مع الربح تلقائيًا خلال مدة عشوائية بين 90 ثانية و7 دقائق.',
+          balanceSnapshot: purchaseBase.eligibleAssets,
+          confirmationMessage:
+            'سيتم خصم النسبة المحددة من إجمالي الأصول بعد استثناء الجزء المقيد، ثم يعود أصل مبلغ الصفقة كاملًا إلى الرصيد عند انتهاء المدة.',
         },
       })
     }
 
-    const rewardAmount = computePromoRewardAmount(balanceSnapshot, row)
-    if (rewardAmount <= 0) return res.status(400).json({ error: 'INVALID_REWARD_RULE' })
-    return res.json({
-      ok: true,
-      codeId: Number(row.id),
-      title: row.title,
-      description: row.description,
-      expertName: String(row.expert_name || ''),
-      featureType,
-      assetSymbol: symbol,
-      currentPrice: Number(quote?.price || 0),
-      requiresConfirmation: true,
-      preview: {
-        action: 'promo_bonus',
-        rewardMode: normalizeRewardMode(row.reward_mode),
-        rewardValue: Number(row.reward_value || 0),
-        rewardAmount,
-        balanceSnapshot,
-        confirmationMessage: 'سيتم تفعيل مكافأة ترويجية واضحة على حسابك بعد التأكيد، ولن يتم خصم أي مبلغ.',
-      },
-    })
+    return res.status(400).json({ error: 'UNSUPPORTED_FEATURE' })
   })
 
   router.post('/strategy-codes/redeem', async (req, res) => {
@@ -882,9 +897,10 @@ export function createTasksRouter(db) {
         const row = await get(
           tx,
           `SELECT id, code, title, description, expert_name, feature_type, reward_mode, reward_value, asset_symbol,
-                  trade_return_percent, expires_at, is_active
+                  purchase_percent, trade_return_percent, expires_at, is_active
            FROM strategy_codes
            WHERE code = ?
+             AND feature_type = 'trial_trade'
            LIMIT 1`,
           [code],
         )
@@ -902,7 +918,9 @@ export function createTasksRouter(db) {
         if (requestedSymbol && requestedSymbol !== configuredSymbol) throw new Error('SYMBOL_LOCKED')
         const symbol = configuredSymbol
         const liveQuote = await resolveLiveQuote(symbol)
-        const balanceSnapshot = await getTotalMainBalance(tx, req.user.id, 'USDT')
+        const purchasePercent = normalizePercent(row.purchase_percent, 50)
+        const purchaseBase = await getStrategyTradePurchaseBase(tx, req.user.id, 'USDT')
+        const balanceSnapshot = purchaseBase.eligibleAssets
 
         if (featureType === 'trial_trade') {
           const activeTrade = await get(
@@ -915,7 +933,7 @@ export function createTasksRouter(db) {
             [req.user.id],
           )
           if (activeTrade) throw new Error('ACTIVE_TRADE_EXISTS')
-          const stakeAmount = Number((balanceSnapshot * 0.5).toFixed(8))
+          const stakeAmount = Number(((purchaseBase.eligibleAssets * purchasePercent) / 100).toFixed(8))
           if (stakeAmount <= 0) throw new Error('INSUFFICIENT_BALANCE')
           const settleDelayMs = getStrategyTradeDelayMs()
           const autoSettleAt = new Date(Date.now() + settleDelayMs).toISOString()
@@ -931,10 +949,10 @@ export function createTasksRouter(db) {
           const inserted = await run(
             tx,
             `INSERT INTO strategy_code_usages (
-              code_id, user_id, status, selected_symbol, feature_type, balance_snapshot, stake_amount,
+              code_id, user_id, status, selected_symbol, feature_type, balance_snapshot, stake_amount, purchase_percent,
               reward_value, trade_return_percent, entry_price, wallet_debit_txn_id, metadata_json, confirmed_at
             )
-             VALUES (?, ?, 'trade_active', ?, ?, ?, ?, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             VALUES (?, ?, 'trade_active', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP)
              RETURNING id`,
             [
               row.id,
@@ -943,6 +961,7 @@ export function createTasksRouter(db) {
               featureType,
               balanceSnapshot,
               stakeAmount,
+              purchasePercent,
               Number(row.trade_return_percent || 0),
               Number(liveQuote.price || 0),
               debit.walletTxnId,
@@ -952,6 +971,10 @@ export function createTasksRouter(db) {
                 expertName: String(row.expert_name || ''),
                 confirmedByUser: req.user.id,
                 balanceSourceDebits: debit.sourceDebits,
+                totalAssetsSnapshot: purchaseBase.totalAssets,
+                lockedExcludedAmount: purchaseBase.lockedAmount,
+                eligibleAssetBase: purchaseBase.eligibleAssets,
+                purchasePercent,
                 autoSettleAt,
                 settleDelayMs,
               }),
@@ -970,6 +993,7 @@ export function createTasksRouter(db) {
             status: 'trade_active',
             assetSymbol: symbol,
             stakeAmount,
+            purchasePercent,
             tradeReturnPercent: Number(row.trade_return_percent || 0),
             entryPrice: Number(liveQuote.price || 0),
             strategyCode: String(row.code || ''),
@@ -980,58 +1004,7 @@ export function createTasksRouter(db) {
           }
         }
 
-        const rewardAmount = computePromoRewardAmount(balanceSnapshot, row)
-        if (rewardAmount <= 0) throw new Error('INVALID_REWARD_RULE')
-        const inserted = await run(
-          tx,
-          `INSERT INTO strategy_code_usages (
-            code_id, user_id, status, selected_symbol, feature_type, balance_snapshot,
-            reward_value, trade_return_percent, metadata_json, confirmed_at
-          )
-           VALUES (?, ?, 'promo_granted', ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)
-           RETURNING id`,
-          [
-            row.id,
-            req.user.id,
-            symbol,
-            featureType,
-            balanceSnapshot,
-            rewardAmount,
-            JSON.stringify({
-              code: row.code,
-              title: row.title,
-              expertName: String(row.expert_name || ''),
-              rewardMode: normalizeRewardMode(row.reward_mode),
-            }),
-          ],
-        )
-        const usageId = Number(inserted.rows?.[0]?.id || inserted.lastID || 0)
-        const reward = await createStrategyPromoReward(tx, {
-          userId: req.user.id,
-          amount: rewardAmount,
-          usageId,
-          currency: 'USDT',
-        })
-        await run(
-          tx,
-          `UPDATE strategy_code_usages
-           SET wallet_credit_txn_id = ?, settled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [reward?.walletTxnId || null, usageId],
-        )
-        await createLocalizedNotification(tx, req.user.id, 'strategy_bonus_activated', {
-          code: row.code,
-          amount: rewardAmount,
-          currency: 'USDT',
-        })
-        return {
-          codeId: Number(row.id),
-          usageId,
-          featureType,
-          status: 'promo_granted',
-          rewardAmount,
-          balanceAfter: reward?.balanceAfter || balanceSnapshot,
-        }
+        throw new Error('UNSUPPORTED_FEATURE')
       })
       return res.json({ ok: true, ...payload })
     } catch (error) {
@@ -1044,6 +1017,7 @@ export function createTasksRouter(db) {
         'INVALID_REWARD_RULE',
         'INSUFFICIENT_BALANCE',
         'QUOTE_UNAVAILABLE',
+        'UNSUPPORTED_FEATURE',
       ])
       if (error instanceof Error && codeMap.has(error.message)) {
         return res.status(400).json({ error: error.message })
@@ -1091,27 +1065,29 @@ export function createTasksRouter(db) {
     const rows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
-              sc.asset_symbol, sc.expert_name, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_by, sc.created_at, sc.updated_at,
+              sc.asset_symbol, sc.purchase_percent, sc.expert_name, sc.trade_return_percent, sc.expires_at, sc.is_active, sc.created_by, sc.created_at, sc.updated_at,
               creator.display_name AS created_by_name,
               COUNT(scu.id) AS usage_count,
-              COUNT(CASE WHEN scu.status IN ('promo_granted', 'trade_settled', 'trade_active') THEN 1 END) AS consumed_count
+              COUNT(CASE WHEN scu.status IN ('trade_settled', 'trade_active') THEN 1 END) AS consumed_count
        FROM strategy_codes sc
-       LEFT JOIN users creator ON creator.id = sc.created_by
-       LEFT JOIN strategy_code_usages scu ON scu.code_id = sc.id
-        AND scu.admin_hidden_at IS NULL
+        LEFT JOIN users creator ON creator.id = sc.created_by
+        LEFT JOIN strategy_code_usages scu ON scu.code_id = sc.id
+         AND scu.admin_hidden_at IS NULL
+       WHERE sc.feature_type = 'trial_trade'
        GROUP BY sc.id, creator.display_name
        ORDER BY sc.id DESC`,
     )
     const usages = await all(
       db,
        `SELECT scu.id, scu.code_id, scu.user_id, scu.status, scu.selected_symbol, scu.balance_snapshot,
-               scu.stake_amount, scu.reward_value, scu.trade_return_percent, scu.entry_price, scu.exit_price,
+               scu.stake_amount, scu.purchase_percent, scu.reward_value, scu.trade_return_percent, scu.entry_price, scu.exit_price,
                scu.confirmed_at, scu.settled_at, scu.created_at, sc.expert_name,
-               u.display_name, u.email, u.phone
+                u.display_name, u.email, u.phone
         FROM strategy_code_usages scu
         LEFT JOIN strategy_codes sc ON sc.id = scu.code_id
         LEFT JOIN users u ON u.id = scu.user_id
         WHERE scu.admin_hidden_at IS NULL
+          AND COALESCE(sc.feature_type, 'trial_trade') = 'trial_trade'
         ORDER BY scu.id DESC
         LIMIT 400`,
     )
@@ -1128,6 +1104,7 @@ export function createTasksRouter(db) {
         selectedSymbol: String(row.selected_symbol || '').toUpperCase(),
         balanceSnapshot: Number(row.balance_snapshot || 0),
         stakeAmount: Number(row.stake_amount || 0),
+        purchasePercent: Number(row.purchase_percent || 50),
         rewardValue: Number(row.reward_value || 0),
         tradeReturnPercent: Number(row.trade_return_percent || 0),
         expertName: String(row.expert_name || ''),
@@ -1146,23 +1123,21 @@ export function createTasksRouter(db) {
     const title = normalizeText(req.body?.title, 90)
     const description = normalizeText(req.body?.description, 220)
     const expertName = normalizeText(req.body?.expertName, 120)
-    const featureType = normalizeFeatureType(req.body?.featureType)
-    const rewardMode = normalizeRewardMode(req.body?.rewardMode)
-    const rewardValue = Math.max(0, Number(req.body?.rewardValue || 0))
     const assetSymbol = normalizeCode(req.body?.assetSymbol || 'BTCUSDT') || 'BTCUSDT'
+    const purchasePercent = normalizePercent(req.body?.purchasePercent, 50)
     const tradeReturnPercent = normalizePercent(req.body?.tradeReturnPercent, 0)
     const expiresAt = normalizeDate(req.body?.expiresAt)
     const isActive = req.body?.isActive === false ? 0 : 1
-    if (!code || !title) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (!code || !title || purchasePercent <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
 
     if (id > 0) {
       await run(
         db,
         `UPDATE strategy_codes
-         SET code = ?, title = ?, description = ?, feature_type = ?, reward_mode = ?, reward_value = ?,
-             asset_symbol = ?, expert_name = ?, trade_return_percent = ?, expires_at = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+         SET code = ?, title = ?, description = ?, feature_type = 'trial_trade', reward_mode = 'percent', reward_value = 0,
+             asset_symbol = ?, purchase_percent = ?, expert_name = ?, trade_return_percent = ?, expires_at = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
-        [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, expertName || null, tradeReturnPercent, expiresAt, isActive, id],
+        [code, title, description || null, assetSymbol, purchasePercent, expertName || null, tradeReturnPercent, expiresAt, isActive, id],
       )
       return res.json({ ok: true, id })
     }
@@ -1170,11 +1145,11 @@ export function createTasksRouter(db) {
       db,
       `INSERT INTO strategy_codes (
         code, title, description, feature_type, reward_mode, reward_value,
-        asset_symbol, expert_name, trade_return_percent, expires_at, is_active, created_by
+        asset_symbol, purchase_percent, expert_name, trade_return_percent, expires_at, is_active, created_by
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, 'trial_trade', 'percent', 0, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
-      [code, title, description || null, featureType, rewardMode, rewardValue, assetSymbol, expertName || null, tradeReturnPercent, expiresAt, isActive, req.user.id],
+      [code, title, description || null, assetSymbol, purchasePercent, expertName || null, tradeReturnPercent, expiresAt, isActive, req.user.id],
     )
     return res.json({ ok: true, id: Number(inserted.lastID || inserted.rows?.[0]?.id || 0) })
   })

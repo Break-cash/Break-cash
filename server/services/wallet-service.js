@@ -7,6 +7,7 @@ import { all, get, run } from '../db.js'
 import {
   getMainBalance,
   getMainBalanceSources,
+  getWalletAccountsOverview,
   recordTransaction,
   createEarningEntry,
   getTotalMainBalance,
@@ -16,7 +17,7 @@ import {
 } from './wallet-ledger.js'
 
 // Re-export for consumers
-export { getMainBalance, getTotalMainBalance, getWalletHistory, getEarningHistory }
+export { getMainBalance, getTotalMainBalance, getWalletAccountsOverview, getWalletHistory, getEarningHistory }
 
 const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits'])
 const MAX_REWARD_LOCK_HOURS = 24 * 365

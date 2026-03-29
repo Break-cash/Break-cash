@@ -326,6 +326,7 @@ CREATE TABLE IF NOT EXISTS strategy_codes (
   reward_mode TEXT NOT NULL DEFAULT 'percent',
   reward_value REAL NOT NULL DEFAULT 0,
   asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT',
+  purchase_percent REAL NOT NULL DEFAULT 50,
   trade_return_percent REAL NOT NULL DEFAULT 0,
   expires_at TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -344,6 +345,7 @@ CREATE TABLE IF NOT EXISTS strategy_code_usages (
   feature_type TEXT NOT NULL DEFAULT 'trial_trade',
   balance_snapshot REAL NOT NULL DEFAULT 0,
   stake_amount REAL NOT NULL DEFAULT 0,
+  purchase_percent REAL NOT NULL DEFAULT 50,
   reward_value REAL NOT NULL DEFAULT 0,
   trade_return_percent REAL NOT NULL DEFAULT 0,
   entry_price REAL,
@@ -993,6 +995,14 @@ async function ensureSchema(db) {
     }
   }
   await ensureStrategyCodeCol('expert_name', `ALTER TABLE strategy_codes ADD COLUMN expert_name TEXT`)
+  await ensureStrategyCodeCol('purchase_percent', `ALTER TABLE strategy_codes ADD COLUMN purchase_percent REAL NOT NULL DEFAULT 50`)
+  const strategyUsageCols = await allAsync(db, `PRAGMA table_info(strategy_code_usages)`)
+  const ensureStrategyUsageCol = async (name, sql) => {
+    if (!strategyUsageCols.some((row) => String(row.name) === name)) {
+      await runAsync(db, sql)
+    }
+  }
+  await ensureStrategyUsageCol('purchase_percent', `ALTER TABLE strategy_code_usages ADD COLUMN purchase_percent REAL NOT NULL DEFAULT 50`)
   const lockCols = await allAsync(db, `PRAGMA table_info(user_principal_locks)`)
   const ensureLockCol = async (name, sql) => {
     if (!lockCols.some((row) => String(row.name) === name)) {

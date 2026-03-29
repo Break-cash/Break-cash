@@ -295,6 +295,7 @@ async function ensureSchema(db) {
       reward_mode TEXT NOT NULL DEFAULT 'percent',
       reward_value DOUBLE PRECISION NOT NULL DEFAULT 0,
       asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT',
+      purchase_percent DOUBLE PRECISION NOT NULL DEFAULT 50,
       trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
       expires_at TIMESTAMP,
       is_active INTEGER NOT NULL DEFAULT 1,
@@ -313,6 +314,7 @@ async function ensureSchema(db) {
       feature_type TEXT NOT NULL DEFAULT 'trial_trade',
       balance_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0,
       stake_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      purchase_percent DOUBLE PRECISION NOT NULL DEFAULT 50,
       reward_value DOUBLE PRECISION NOT NULL DEFAULT 0,
       trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
       entry_price DOUBLE PRECISION,
@@ -818,6 +820,7 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS reward_mode TEXT NOT NULL DEFAULT 'percent'`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS reward_value DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS asset_symbol TEXT NOT NULL DEFAULT 'BTCUSDT'`)
+  await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS purchase_percent DOUBLE PRECISION NOT NULL DEFAULT 50`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS expert_name TEXT`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`)
@@ -830,6 +833,7 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS feature_type TEXT NOT NULL DEFAULT 'trial_trade'`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS balance_snapshot DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS stake_amount DOUBLE PRECISION NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS purchase_percent DOUBLE PRECISION NOT NULL DEFAULT 50`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS reward_value DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS trade_return_percent DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS entry_price DOUBLE PRECISION`)

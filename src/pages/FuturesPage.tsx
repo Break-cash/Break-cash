@@ -276,13 +276,13 @@ export function FuturesPage() {
       await refreshCodes()
       setPreview(null)
       setTaskCode('')
-      playFeedbackSound('strategyCode').catch(() => {})
-      if (res.featureType === 'trial_trade') {
-        setMessage({
-          type: 'success',
-          text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT. ${tradeDisplayConfig.active_notice}`,
-        })
-      } else {
+        playFeedbackSound('strategyCode').catch(() => {})
+        if (res.featureType === 'trial_trade') {
+          setMessage({
+            type: 'success',
+            text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT بنسبة ${Number(res.purchasePercent || 0).toFixed(0)}% من الأصول المتاحة بعد استثناء المقيد، وسيعود أصل الصفقة كاملًا عند الإغلاق. ${tradeDisplayConfig.active_notice}`,
+          })
+        } else {
         setMessage({
           type: 'success',
           text: `تم تفعيل المكافأة الترويجية بنجاح وإضافتها عبر النظام المالي الجديد.`,
@@ -456,7 +456,7 @@ export function FuturesPage() {
         </div>
         <h2 className="text-sm font-semibold text-white">كود فتح الصفقات الاستراتيجية</h2>
         <p className="mt-1 text-xs text-app-muted">
-          يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة قبل أي خصم أو تفعيل.
+          يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة توضح نسبة الشراء من الأصول المتاحة بعد استثناء الجزء المقيد.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
@@ -502,6 +502,10 @@ export function FuturesPage() {
                     <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
                       <div className="text-[11px] text-app-muted">العائد المحدد</div>
                       <div className="mt-1 text-sm font-semibold text-white">{Number(item.tradeReturnPercent || 0).toFixed(2)}%</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">نسبة الشراء</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{Number(item.purchasePercent || 0).toFixed(0)}%</div>
                     </div>
                     <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
                       <div className="text-[11px] text-app-muted">الخبير المعتمد</div>
@@ -596,6 +600,10 @@ export function FuturesPage() {
                     <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
                       <div className="text-[11px] text-app-muted">نسبة العائد المحددة</div>
                       <div className="mt-1 text-sm font-semibold text-white">{Number(trade.tradeReturnPercent || 0).toFixed(2)}%</div>
+                    </div>
+                    <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
+                      <div className="text-[11px] text-app-muted">نسبة الشراء</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{Number(trade.purchasePercent || 0).toFixed(0)}%</div>
                     </div>
                     <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
                       <div className="text-[11px] text-app-muted">موعد الإغلاق</div>
@@ -705,19 +713,25 @@ export function FuturesPage() {
                 <div className="mt-1 text-sm font-semibold text-white">{Number(preview.currentPrice || 0).toLocaleString()}</div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">الرصيد الحالي</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.balanceSnapshot || 0).toFixed(2)} USDT</div>
+                <div className="text-[11px] text-app-muted">الأصول المتاحة المحتسبة</div>
+                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.eligibleAssetBase || preview.preview.balanceSnapshot || 0).toFixed(2)} USDT</div>
+              </div>
+              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
+                <div className="text-[11px] text-app-muted">إجمالي الأصول</div>
+                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.totalAssets || 0).toFixed(2)} USDT</div>
+              </div>
+              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
+                <div className="text-[11px] text-app-muted">المقيد المستثنى</div>
+                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.lockedExcludedAmount || 0).toFixed(2)} USDT</div>
+              </div>
+              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
+                <div className="text-[11px] text-app-muted">نسبة الشراء</div>
+                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.purchasePercent || 0).toFixed(0)}%</div>
               </div>
               {preview.preview.stakeAmount ? (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 sm:col-span-2">
                   <div className="text-[11px] text-amber-100/80">المبلغ الذي سيُخصم بعد موافقتك</div>
                   <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.stakeAmount).toFixed(2)} USDT</div>
-                </div>
-              ) : null}
-              {preview.preview.rewardAmount ? (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 sm:col-span-2">
-                  <div className="text-[11px] text-emerald-100/80">المكافأة المعلنة قبل التأكيد</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.rewardAmount).toFixed(2)} USDT</div>
                 </div>
               ) : null}
             </div>

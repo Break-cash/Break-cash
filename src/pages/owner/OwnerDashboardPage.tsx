@@ -317,10 +317,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     title: '',
     description: '',
     expertName: '',
-    featureType: 'trial_trade' as 'trial_trade' | 'promo_bonus',
-    rewardMode: 'percent' as 'percent' | 'fixed',
-    rewardValue: '0',
     assetSymbol: 'BTCUSDT',
+    purchasePercent: '50',
     tradeReturnPercent: '0',
     expiresAt: '',
     isActive: true,
@@ -1289,10 +1287,8 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         title: strategyCodeDraft.title,
         description: strategyCodeDraft.description,
         expertName: strategyCodeDraft.expertName,
-        featureType: strategyCodeDraft.featureType,
-        rewardMode: strategyCodeDraft.rewardMode,
-        rewardValue: Number(strategyCodeDraft.rewardValue || 0),
         assetSymbol: strategyCodeDraft.assetSymbol,
+        purchasePercent: Number(strategyCodeDraft.purchasePercent || 0),
         tradeReturnPercent: Number(strategyCodeDraft.tradeReturnPercent || 0),
         expiresAt: strategyCodeDraft.expiresAt || null,
         isActive: strategyCodeDraft.isActive,
@@ -1304,7 +1300,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         title: '',
         description: '',
         expertName: '',
-        rewardValue: '0',
+        purchasePercent: '50',
         tradeReturnPercent: '0',
         expiresAt: '',
       }))
@@ -3041,40 +3037,12 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 onChange={(e) => setStrategyCodeDraft((prev) => ({ ...prev, expertName: e.target.value }))}
               />
               <div className="owner-form-row">
-                <select
-                  className="field-input"
-                  value={strategyCodeDraft.featureType}
-                  onChange={(e) =>
-                    setStrategyCodeDraft((prev) => ({
-                      ...prev,
-                      featureType: e.target.value as 'trial_trade' | 'promo_bonus',
-                    }))
-                  }
-                >
-                  <option value="trial_trade">يفتح صفقات استراتيجية</option>
-                  <option value="promo_bonus">يفعل مكافأة ترويجية</option>
-                </select>
-                <select
-                  className="field-input"
-                  value={strategyCodeDraft.rewardMode}
-                  onChange={(e) =>
-                    setStrategyCodeDraft((prev) => ({
-                      ...prev,
-                      rewardMode: e.target.value as 'percent' | 'fixed',
-                    }))
-                  }
-                >
-                  <option value="percent">النسبة</option>
-                  <option value="fixed">القيمة الثابتة</option>
-                </select>
-              </div>
-              <div className="owner-form-row">
                 <input
                   type="number"
                   className="field-input"
-                  placeholder="قيمة المكافأة أو نسبتها"
-                  value={strategyCodeDraft.rewardValue}
-                  onChange={(e) => setStrategyCodeDraft((prev) => ({ ...prev, rewardValue: e.target.value }))}
+                  placeholder="نسبة الشراء من إجمالي الأصول بعد استثناء المقيد"
+                  value={strategyCodeDraft.purchasePercent}
+                  onChange={(e) => setStrategyCodeDraft((prev) => ({ ...prev, purchasePercent: e.target.value }))}
                 />
                 <input
                   type="number"
@@ -3123,7 +3091,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 {strategyCodes.map((item) => (
                   <li key={item.id} className="owner-history-item">
                     <span>{item.code}</span>
-                    <span>{item.featureType === 'trial_trade' ? 'صفقات استراتيجية' : 'مكافأة'}</span>
+                    <span>{Number(item.purchasePercent || 0).toFixed(0)}% من الأصول المتاحة</span>
                     <span>{item.expertName || 'بدون خبير'}</span>
                     <span>{item.usageCount} استخدام</span>
                     <span>{item.createdByName || `#${item.createdBy || '-'}`}</span>
@@ -4779,6 +4747,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
               </div>
             </div>
             <div className="owner-actions-card">
+              <div className="owner-hint">
+                يتم خصم نسبة الشراء من إجمالي الأصول بعد استثناء الجزء المقيد، ويعود أصل مبلغ الصفقة كاملًا للمستخدم عند انتهاء المدة.
+              </div>
               <div className="owner-form-row">
                 <input
                   className="field-input"
