@@ -1208,7 +1208,8 @@ export function createOwnerGrowthRouter(db) {
               COALESCE(s.admin_role, 'admin') AS admin_role,
               COALESCE(s.is_active, 1) AS is_active,
               COALESCE(s.can_view_sensitive, 0) AS can_view_sensitive,
-              COALESCE(pc.permissions_count, 0) AS permissions_count
+              COALESCE(pc.permissions_count, 0) AS permissions_count,
+              COALESCE(pl.locked_balance, 0) AS locked_balance
        FROM users u
        LEFT JOIN admin_staff_profiles s ON s.user_id = u.id
        LEFT JOIN (
@@ -1216,6 +1217,12 @@ export function createOwnerGrowthRouter(db) {
          FROM permissions
          GROUP BY user_id
        ) pc ON pc.user_id = u.id
+       LEFT JOIN (
+         SELECT user_id, SUM(principal_amount) AS locked_balance
+         FROM user_principal_locks
+         WHERE lock_status = 'locked'
+         GROUP BY user_id
+       ) pl ON pl.user_id = u.id
        WHERE u.role IN ('admin', 'moderator')
        ORDER BY u.id DESC`,
     )

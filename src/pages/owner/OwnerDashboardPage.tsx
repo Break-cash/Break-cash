@@ -4840,7 +4840,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     <li key={item.id} className="owner-history-item">
                       <div className="owner-history-main">
                         <strong>{item.display_name || item.email || item.phone || `المستخدم #${item.id}`}</strong>
-                        <small>{`${item.admin_role} | ${Number(item.permissions_count || 0)} صلاحية | ${Number(item.can_view_sensitive || 0) === 1 ? 'وصول حساس' : 'وصول عادي'}`}</small>
+                        <small>{`${item.admin_role} | ${Number(item.permissions_count || 0)} صلاحية | ${Number(item.can_view_sensitive || 0) === 1 ? 'وصول حساس' : 'وصول عادي'} | الرصيد المقيد: ${Number(item.locked_balance || 0).toFixed(2)} USDT`}</small>
                       </div>
                       <div className="owner-history-actions">
                         <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleUpdateStaffRoleAction(item.id, item.admin_role, Number(item.is_active || 0) !== 1)} disabled={ownerExtraSaving}>

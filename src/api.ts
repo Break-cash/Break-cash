@@ -2075,6 +2075,7 @@ export type AdminStaffItem = {
   is_active: number
   can_view_sensitive: number
   permissions_count: number
+  locked_balance?: number
 }
 
 export type AdminAccountHealthIssue = {
