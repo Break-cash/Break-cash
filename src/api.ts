@@ -785,6 +785,8 @@ export type EarningEntry = {
   reference_id: number
   currency: string
   amount: number
+  consumed_amount?: number
+  available_amount?: number
   status: string
   payout_mode?: RewardPayoutMode
   locked_until?: string | null
@@ -800,6 +802,7 @@ export type EarningGroup = {
   entries: EarningEntry[]
   total_amount: number
   transferred_count: number
+  consumed_count?: number
   pending_count: number
   timed_locked_count?: number
   timed_locked_amount?: number
@@ -2504,13 +2507,14 @@ export async function previewStrategyCode(code: string, symbol?: string) {
     requiresConfirmation: boolean
     preview: {
       action: 'trial_trade' | 'promo_bonus'
-      stakeAmount?: number
-      purchasePercent?: number
-      totalAssets?: number
-      lockedExcludedAmount?: number
-      eligibleAssetBase?: number
-      tradeReturnPercent?: number
-      rewardMode?: StrategyCodeRewardMode
+        stakeAmount?: number
+        purchasePercent?: number
+        totalAssets?: number
+        lockedExcludedAmount?: number
+        pendingEarnings?: number
+        eligibleAssetBase?: number
+        tradeReturnPercent?: number
+        rewardMode?: StrategyCodeRewardMode
       rewardValue?: number
       rewardAmount?: number
       balanceSnapshot: number

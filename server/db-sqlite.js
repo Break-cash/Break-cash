@@ -803,18 +803,19 @@ CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_status ON owner_financia
 CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_target ON owner_financial_approval_reports(target_user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS earning_entries (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  source_type TEXT NOT NULL,
-  reference_type TEXT NOT NULL,
-  reference_id INTEGER NOT NULL,
-  currency TEXT NOT NULL DEFAULT 'USDT',
-  amount REAL NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
-  locked_until TEXT,
-  transferred_at TEXT,
-  transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    source_type TEXT NOT NULL,
+    reference_type TEXT NOT NULL,
+    reference_id INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USDT',
+    amount REAL NOT NULL,
+    consumed_amount REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+    locked_until TEXT,
+    transferred_at TEXT,
+    transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(source_type, reference_type, reference_id)
 );
@@ -1029,6 +1030,7 @@ async function ensureSchema(db) {
       await runAsync(db, sql)
     }
   }
+  await ensureEarningEntryCol('consumed_amount', `ALTER TABLE earning_entries ADD COLUMN consumed_amount REAL NOT NULL DEFAULT 0`)
   await ensureEarningEntryCol('payout_mode', `ALTER TABLE earning_entries ADD COLUMN payout_mode TEXT NOT NULL DEFAULT 'withdrawable'`)
   await ensureEarningEntryCol('locked_until', `ALTER TABLE earning_entries ADD COLUMN locked_until TEXT`)
   const overrideCols = await allAsync(db, `PRAGMA table_info(user_unlock_overrides)`)

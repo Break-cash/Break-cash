@@ -282,10 +282,15 @@ export function WalletPage() {
     return v !== key ? v : type
   }
 
-  function statusLabel(status: string): string {
-    const key = status === 'transferred' ? 'earning_status_transferred' : 'earning_status_pending'
-    return t(key)
-  }
+function statusLabel(status: string): string {
+  const key =
+    status === 'transferred'
+      ? 'earning_status_transferred'
+      : status === 'consumed'
+        ? 'earning_status_consumed'
+        : 'earning_status_pending'
+  return t(key)
+}
 
   function clearFilters() {
     setFilters({ sourceType: '', transactionType: '', dateFrom: '', dateTo: '' })
@@ -627,6 +632,11 @@ export function WalletPage() {
                             {entry.transferred_wallet_txn_id ? ` · #${entry.transferred_wallet_txn_id}` : ''}
                             {` · ${formatDate(entry.created_at)}`}
                           </p>
+                          {Number(entry.consumed_amount || 0) > 0 ? (
+                            <p className="mt-1 text-[11px] text-cyan-300">
+                              {`المتبقي بعد استخدام جزء منه في صفقة استراتيجية: ${formatAmount(entry.available_amount || 0, entry.currency)}`}
+                            </p>
+                          ) : null}
                           {entry.status === 'pending' && entry.locked_until ? (
                             <div className="mt-1 flex flex-wrap items-center gap-2">
                               <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-1 font-mono text-[11px] text-amber-200">

@@ -8,6 +8,7 @@ import {
   getMainBalance,
   getMainBalanceSources,
   getWalletAccountsOverview,
+  getPendingEarningBalanceSources,
   recordTransaction,
   createEarningEntry,
   getTotalMainBalance,
@@ -200,7 +201,7 @@ async function finalizeRewardTransfer(db, { userId, currency, entryId, idempoten
 }
 
 function buildRewardEntryScopeFilter(userIds = [], sourceType = 'all') {
-  const clauses = [`status = 'pending'`]
+  const clauses = [`status = 'pending'`, `amount > COALESCE(consumed_amount, 0)`]
   const params = []
   if (Array.isArray(userIds) && userIds.length > 0) {
     clauses.push(`user_id IN (${userIds.map(() => '?').join(', ')})`)
@@ -435,7 +436,59 @@ function sortBalancesForStrategyTrade(rows) {
       const weightDiff = weightOf(left.sourceType) - weightOf(right.sourceType)
       if (weightDiff !== 0) return weightDiff
       return right.balance - left.balance
+      })
+  }
+
+function getStrategyTradeSourceWeight(sourceType) {
+  const idx = STRATEGY_TRADE_SOURCE_PRIORITY.indexOf(String(sourceType || '').trim().toLowerCase())
+  return idx >= 0 ? idx : STRATEGY_TRADE_SOURCE_PRIORITY.length + 1
+}
+
+async function getPendingStrategyTradeEarningRows(db, userId, currency) {
+  const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  const rows = await all(
+    db,
+    `SELECT id, source_type, amount, consumed_amount, created_at
+     FROM earning_entries
+     WHERE user_id = ?
+       AND currency = ?
+       AND status = 'pending'
+       AND amount > COALESCE(consumed_amount, 0)
+     ORDER BY created_at ASC, id ASC`,
+    [userId, normalizedCurrency],
+  )
+  return rows
+    .map((row) => ({
+      id: Number(row.id || 0),
+      sourceType: String(row.source_type || 'system').trim().toLowerCase(),
+      remainingAmount: Number(Math.max(0, Number(row.amount || 0) - Number(row.consumed_amount || 0)).toFixed(8)),
+    }))
+    .filter((row) => row.id > 0 && row.remainingAmount > 0)
+    .sort((left, right) => {
+      const weightDiff = getStrategyTradeSourceWeight(left.sourceType) - getStrategyTradeSourceWeight(right.sourceType)
+      if (weightDiff !== 0) return weightDiff
+      return left.id - right.id
     })
+}
+
+export async function getStrategyTradePurchasePower(db, userId, currency = 'USDT') {
+  const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  const [mainSources, pendingSources] = await Promise.all([
+    getMainBalanceSources(db, userId, normalizedCurrency),
+    getPendingEarningBalanceSources(db, userId, normalizedCurrency),
+  ])
+  const normalizedMainSources = sortBalancesForStrategyTrade(mainSources)
+  const normalizedPendingSources = sortBalancesForStrategyTrade(pendingSources)
+  const mainBalance = Number(normalizedMainSources.reduce((sum, row) => sum + Number(row.balance || 0), 0).toFixed(8))
+  const pendingEarnings = Number(normalizedPendingSources.reduce((sum, row) => sum + Number(row.balance || 0), 0).toFixed(8))
+  return {
+    currency: normalizedCurrency,
+    mainBalance,
+    pendingEarnings,
+    totalFundingAssets: Number((mainBalance + pendingEarnings).toFixed(8)),
+    mainSources: normalizedMainSources,
+    pendingSources: normalizedPendingSources,
+  }
 }
 
 function normalizeStrategyTradeSourceSplits(raw, totalAmount = 0) {
@@ -466,16 +519,26 @@ export async function createStrategyTradeOpenDebit(db, opts) {
   const safeAmount = Number(Number(amount || 0).toFixed(8))
   if (!userId || safeAmount <= 0) throw new Error('INVALID_INPUT')
   const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
-  const sourceBalances = sortBalancesForStrategyTrade(await getMainBalanceSources(db, userId, normalizedCurrency))
-  const totalBalance = Number(sourceBalances.reduce((acc, row) => acc + row.balance, 0).toFixed(8))
-  if (totalBalance < safeAmount) throw new Error('INSUFFICIENT_BALANCE')
+  const funding = await getStrategyTradePurchasePower(db, userId, normalizedCurrency)
+  const pendingRows = await getPendingStrategyTradeEarningRows(db, userId, normalizedCurrency)
+  if (funding.totalFundingAssets < safeAmount) throw new Error('INSUFFICIENT_BALANCE')
 
   const baseKey = idempotencyKey || `strategy_trade_open_${userId}_${referenceId || Date.now()}`
   let remaining = safeAmount
   let primaryTxnId = null
   const sourceDebits = []
+  const addSourceDebit = (sourceType, amountValue) => {
+    const normalizedAmount = Number(Number(amountValue || 0).toFixed(8))
+    if (normalizedAmount <= 0) return
+    const existing = sourceDebits.find((row) => row.sourceType === sourceType)
+    if (existing) {
+      existing.amount = Number((Number(existing.amount || 0) + normalizedAmount).toFixed(8))
+      return
+    }
+    sourceDebits.push({ sourceType, amount: normalizedAmount })
+  }
 
-  for (const row of sourceBalances) {
+  for (const row of funding.mainSources) {
     if (remaining <= 0) break
     const debitAmount = Number(Math.min(row.balance, remaining).toFixed(8))
     if (debitAmount <= 0) continue
@@ -487,13 +550,38 @@ export async function createStrategyTradeOpenDebit(db, opts) {
       referenceType,
       referenceId,
       amount: -debitAmount,
-      idempotencyKey: `${baseKey}_${row.sourceType}`,
-      createdBy,
-      metadata: { strategyTradeStage: 'open' },
-    })
-    if (!primaryTxnId) primaryTxnId = txn.id
-    sourceDebits.push({ sourceType: row.sourceType, amount: debitAmount })
-    remaining = Number((remaining - debitAmount).toFixed(8))
+        idempotencyKey: `${baseKey}_${row.sourceType}`,
+        createdBy,
+        metadata: { strategyTradeStage: 'open' },
+      })
+      if (!primaryTxnId) primaryTxnId = txn.id
+      addSourceDebit(row.sourceType, debitAmount)
+      remaining = Number((remaining - debitAmount).toFixed(8))
+    }
+
+  for (const row of pendingRows) {
+    if (remaining <= 0) break
+    const consumeAmount = Number(Math.min(row.remainingAmount, remaining).toFixed(8))
+    if (consumeAmount <= 0) continue
+    await run(
+      db,
+      `UPDATE earning_entries
+       SET consumed_amount = COALESCE(consumed_amount, 0) + ?,
+           status = CASE
+             WHEN COALESCE(consumed_amount, 0) + ? >= amount THEN 'consumed'
+             ELSE status
+           END,
+           transferred_at = CASE
+             WHEN COALESCE(consumed_amount, 0) + ? >= amount THEN CURRENT_TIMESTAMP
+             ELSE transferred_at
+           END
+       WHERE id = ?
+         AND status = 'pending'
+         AND amount > COALESCE(consumed_amount, 0)`,
+      [consumeAmount, consumeAmount, consumeAmount, row.id],
+    )
+    addSourceDebit(row.sourceType, consumeAmount)
+    remaining = Number((remaining - consumeAmount).toFixed(8))
   }
 
   if (remaining > 0.00000001) throw new Error('INSUFFICIENT_BALANCE')

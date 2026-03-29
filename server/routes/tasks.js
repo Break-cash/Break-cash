@@ -6,7 +6,7 @@ import {
   createStrategyTradePrincipalReturn,
   createStrategyTradeProfitReward,
   createTaskReward,
-  getWalletAccountsOverview,
+  getStrategyTradePurchasePower,
   getTotalMainBalance,
 } from '../services/wallet-service.js'
 import { fetchBestQuote, sharedMarketFeed } from '../services/marketFeed.js'
@@ -78,9 +78,8 @@ function getStrategyTradeDelayMs() {
 
 async function getStrategyTradePurchaseBase(db, userId, currency = 'USDT') {
   const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
-  const [overview, mainBalance, lockedRow] = await Promise.all([
-    getWalletAccountsOverview(db, userId),
-    getTotalMainBalance(db, userId, normalizedCurrency),
+  const [funding, lockedRow] = await Promise.all([
+    getStrategyTradePurchasePower(db, userId, normalizedCurrency),
     get(
       db,
       `SELECT COALESCE(SUM(principal_amount), 0) AS locked_amount
@@ -89,14 +88,17 @@ async function getStrategyTradePurchaseBase(db, userId, currency = 'USDT') {
       [userId, normalizedCurrency],
     ),
   ])
-  const totalAssets = Number(overview?.by_currency?.[normalizedCurrency] ?? overview?.total_assets ?? 0)
   const lockedAmount = Number(lockedRow?.locked_amount || 0)
-  const eligibleAssets = Number(Math.max(0, Math.min(totalAssets - lockedAmount, Number(mainBalance || 0))).toFixed(8))
+  const totalAssets = Number(funding?.totalFundingAssets || 0)
+  const mainBalance = Number(funding?.mainBalance || 0)
+  const pendingEarnings = Number(funding?.pendingEarnings || 0)
+  const eligibleAssets = Number(Math.max(0, totalAssets - lockedAmount).toFixed(8))
   return {
     currency: normalizedCurrency,
     totalAssets: Number(totalAssets.toFixed(8)),
     lockedAmount: Number(lockedAmount.toFixed(8)),
-    mainBalance: Number(Number(mainBalance || 0).toFixed(8)),
+    mainBalance: Number(mainBalance.toFixed(8)),
+    pendingEarnings: Number(pendingEarnings.toFixed(8)),
     eligibleAssets,
   }
 }
@@ -870,16 +872,17 @@ export function createTasksRouter(db) {
         preview: {
           action: 'trial_trade',
           stakeAmount,
-          purchasePercent,
-          totalAssets: purchaseBase.totalAssets,
-          lockedExcludedAmount: purchaseBase.lockedAmount,
-          eligibleAssetBase: purchaseBase.eligibleAssets,
-          tradeReturnPercent: Number(row.trade_return_percent || 0),
-          balanceSnapshot: purchaseBase.eligibleAssets,
-          confirmationMessage:
-            'سيتم خصم النسبة المحددة من إجمالي الأصول بعد استثناء الجزء المقيد، ثم يعود أصل مبلغ الصفقة كاملًا إلى الرصيد عند انتهاء المدة.',
-        },
-      })
+            purchasePercent,
+            totalAssets: purchaseBase.totalAssets,
+            lockedExcludedAmount: purchaseBase.lockedAmount,
+            pendingEarnings: purchaseBase.pendingEarnings,
+            eligibleAssetBase: purchaseBase.eligibleAssets,
+            tradeReturnPercent: Number(row.trade_return_percent || 0),
+            balanceSnapshot: purchaseBase.eligibleAssets,
+            confirmationMessage:
+              'سيتم خصم النسبة المحددة من إجمالي الأصول المحتسبة للشراء، وتشمل المكتسبات القابلة وغير القابلة للسحب مع استثناء الجزء المقيد فقط، ثم يعود أصل مبلغ الصفقة كاملًا إلى الرصيد عند انتهاء المدة.',
+          },
+        })
     }
 
     return res.status(400).json({ error: 'UNSUPPORTED_FEATURE' })
@@ -973,6 +976,7 @@ export function createTasksRouter(db) {
                 balanceSourceDebits: debit.sourceDebits,
                 totalAssetsSnapshot: purchaseBase.totalAssets,
                 lockedExcludedAmount: purchaseBase.lockedAmount,
+                pendingEarnings: purchaseBase.pendingEarnings,
                 eligibleAssetBase: purchaseBase.eligibleAssets,
                 purchasePercent,
                 autoSettleAt,

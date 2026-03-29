@@ -251,12 +251,48 @@ export async function createEarningEntry(db, payload) {
   return id ? { id } : await get(db, `SELECT id FROM earning_entries WHERE source_type = ? AND reference_type = ? AND reference_id = ? LIMIT 1`, [sourceType, referenceType, referenceId])
 }
 
+export async function getPendingEarningBalanceSources(db, userId, currency = 'USDT') {
+  const curr = String(currency || 'USDT').trim().toUpperCase()
+  const rows = await all(
+    db,
+    `SELECT source_type, COALESCE(SUM(
+        CASE
+          WHEN amount > COALESCE(consumed_amount, 0) THEN amount - COALESCE(consumed_amount, 0)
+          ELSE 0
+        END
+      ), 0) AS balance
+     FROM earning_entries
+     WHERE user_id = ?
+       AND currency = ?
+       AND status = 'pending'
+       AND amount > COALESCE(consumed_amount, 0)
+     GROUP BY source_type
+     ORDER BY source_type ASC`,
+    [userId, curr],
+  )
+  return rows.map((row) => ({
+    sourceType: String(row.source_type || 'system').trim().toLowerCase(),
+    balance: Number(row.balance || 0),
+  }))
+}
+
 /**
  * Transfer earning entry to main balance and record in ledger
  */
 export async function transferEarningToMain(db, earningEntryId, idempotencyKey = null) {
   const entry = await get(db, `SELECT * FROM earning_entries WHERE id = ? AND status = 'pending' LIMIT 1`, [earningEntryId])
   if (!entry) return null
+  const remainingAmount = Number(Math.max(0, Number(entry.amount || 0) - Number(entry.consumed_amount || 0)).toFixed(8))
+  if (remainingAmount <= 0) {
+    await run(
+      db,
+      `UPDATE earning_entries
+       SET status = 'consumed', transferred_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'pending'`,
+      [earningEntryId],
+    )
+    return null
+  }
   const payoutMode = String(entry.payout_mode || 'withdrawable').trim().toLowerCase()
   if (payoutMode === 'bonus_locked') return null
   if (entry.locked_until) {
@@ -271,7 +307,7 @@ export async function transferEarningToMain(db, earningEntryId, idempotencyKey =
     sourceType: entry.source_type,
     referenceType: 'earning_entry',
     referenceId: entry.id,
-    amount: entry.amount,
+    amount: remainingAmount,
     idempotencyKey: idempotencyKey || `earning_${entry.id}`,
   })
 
@@ -409,7 +445,7 @@ export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybe
   const whereClause = conditions.join(' AND ')
   const rows = await all(
     db,
-    `SELECT id, source_type, reference_type, reference_id, currency, amount, status,
+    `SELECT id, source_type, reference_type, reference_id, currency, amount, consumed_amount, status,
             payout_mode, locked_until, transferred_at, transferred_wallet_txn_id, created_at
      FROM earning_entries
      WHERE ${whereClause}
@@ -419,8 +455,15 @@ export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybe
 
   const entries = rows.map((r) => ({
     ...r,
+    consumed_amount: Number(r.consumed_amount || 0),
+    available_amount: Number(Math.max(0, Number(r.amount || 0) - Number(r.consumed_amount || 0)).toFixed(8)),
     label_key: `earning_source_${r.source_type}`,
-    status_label_key: r.status === 'transferred' ? 'earning_status_transferred' : 'earning_status_pending',
+    status_label_key:
+      r.status === 'transferred'
+        ? 'earning_status_transferred'
+        : r.status === 'consumed'
+          ? 'earning_status_consumed'
+          : 'earning_status_pending',
   }))
 
   if (!grouped) return entries
@@ -434,6 +477,7 @@ export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybe
         entries: [],
         total_amount: 0,
         transferred_count: 0,
+        consumed_count: 0,
         pending_count: 0,
         timed_locked_count: 0,
         timed_locked_amount: 0,
@@ -444,6 +488,7 @@ export async function getEarningHistory(db, userId, optsOrSourceType = {}, maybe
     bySource[key].entries.push(e)
     bySource[key].total_amount = Number((Number(bySource[key].total_amount) + Number(e.amount || 0)).toFixed(8))
     if (e.status === 'transferred') bySource[key].transferred_count += 1
+    else if (e.status === 'consumed') bySource[key].consumed_count += 1
     else {
       bySource[key].pending_count += 1
       const payoutMode = String(e.payout_mode || 'withdrawable').trim().toLowerCase()

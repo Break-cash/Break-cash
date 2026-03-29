@@ -280,7 +280,7 @@ export function FuturesPage() {
         if (res.featureType === 'trial_trade') {
           setMessage({
             type: 'success',
-            text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT بنسبة ${Number(res.purchasePercent || 0).toFixed(0)}% من الأصول المتاحة بعد استثناء المقيد، وسيعود أصل الصفقة كاملًا عند الإغلاق. ${tradeDisplayConfig.active_notice}`,
+            text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT بنسبة ${Number(res.purchasePercent || 0).toFixed(0)}% من إجمالي الأصول المحتسبة للشراء، وتشمل المكتسبات القابلة وغير القابلة للسحب بعد استثناء المقيد فقط، وسيعود أصل الصفقة كاملًا عند الإغلاق. ${tradeDisplayConfig.active_notice}`,
           })
         } else {
         setMessage({
@@ -456,7 +456,7 @@ export function FuturesPage() {
         </div>
         <h2 className="text-sm font-semibold text-white">كود فتح الصفقات الاستراتيجية</h2>
         <p className="mt-1 text-xs text-app-muted">
-          يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة توضح نسبة الشراء من الأصول المتاحة بعد استثناء الجزء المقيد.
+          يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة توضح نسبة الشراء من إجمالي الأصول المحتسبة للشراء، وتشمل المكتسبات القابلة وغير القابلة للسحب مع استثناء الجزء المقيد فقط.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
@@ -713,12 +713,16 @@ export function FuturesPage() {
                 <div className="mt-1 text-sm font-semibold text-white">{Number(preview.currentPrice || 0).toLocaleString()}</div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">الأصول المتاحة المحتسبة</div>
+                <div className="text-[11px] text-app-muted">الأصول المحتسبة للشراء</div>
                 <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.eligibleAssetBase || preview.preview.balanceSnapshot || 0).toFixed(2)} USDT</div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">إجمالي الأصول</div>
+                <div className="text-[11px] text-app-muted">إجمالي الأصول المحتسبة</div>
                 <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.totalAssets || 0).toFixed(2)} USDT</div>
+              </div>
+              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
+                <div className="text-[11px] text-app-muted">المكتسبات المضمنة</div>
+                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.pendingEarnings || 0).toFixed(2)} USDT</div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
                 <div className="text-[11px] text-app-muted">المقيد المستثنى</div>

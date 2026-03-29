@@ -1045,19 +1045,20 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE withdrawal_requests DROP COLUMN IF EXISTS processed_txn_id`).catch(() => {})
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS earning_entries (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      source_type TEXT NOT NULL,
-      reference_type TEXT NOT NULL,
-      reference_id INTEGER NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'USDT',
-      amount DOUBLE PRECISION NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
-      locked_until TIMESTAMP,
-      transferred_at TIMESTAMP,
-      transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+      CREATE TABLE IF NOT EXISTS earning_entries (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        source_type TEXT NOT NULL,
+        reference_type TEXT NOT NULL,
+        reference_id INTEGER NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'USDT',
+        amount DOUBLE PRECISION NOT NULL,
+        consumed_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        payout_mode TEXT NOT NULL DEFAULT 'withdrawable',
+        locked_until TIMESTAMP,
+        transferred_at TIMESTAMP,
+        transferred_wallet_txn_id INTEGER REFERENCES wallet_transactions(id) ON DELETE SET NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(source_type, reference_type, reference_id)
     )
@@ -1065,6 +1066,7 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE user_reward_payout_overrides ADD COLUMN IF NOT EXISTS lock_hours INTEGER`)
   await db.query(`ALTER TABLE earning_entries ADD COLUMN IF NOT EXISTS payout_mode TEXT NOT NULL DEFAULT 'withdrawable'`)
   await db.query(`ALTER TABLE earning_entries ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP`)
+  await db.query(`ALTER TABLE earning_entries ADD COLUMN IF NOT EXISTS consumed_amount DOUBLE PRECISION NOT NULL DEFAULT 0`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_user ON earning_entries(user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_status ON earning_entries(status)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_earning_entries_reference ON earning_entries(reference_type, reference_id)`)
