@@ -8,6 +8,7 @@ import {
   type FriendItem,
   type FriendUser,
 } from '../api'
+import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
 
@@ -370,6 +371,7 @@ export function FriendsPage() {
       )}
 
       {selectedUser ? (
+        <AppModalPortal>
         <div className="friends-profile-overlay" onClick={() => setSelectedUser(null)}>
           <div className="friends-profile-popup" onClick={(e) => e.stopPropagation()}>
             <button
@@ -432,6 +434,7 @@ export function FriendsPage() {
             </div>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
     </div>
   )

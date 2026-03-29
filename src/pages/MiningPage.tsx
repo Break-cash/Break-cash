@@ -11,6 +11,7 @@ import {
   type AdItem,
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
+import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { playFeedbackSound, vibrateFeedback } from '../appFeedback'
 import { useI18n } from '../i18nCore'
 import { emitToast } from '../toastBus'
@@ -277,6 +278,7 @@ export function MiningPage() {
       ) : null}
 
       {confirmAction ? (
+        <AppModalPortal>
         <div className="liquid-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
           <div className="liquid-modal-card w-full max-w-sm rounded-2xl border border-app-border bg-app-card p-4">
             <h3 className="text-base font-semibold text-white">{t('mining_confirm_title')}</h3>
@@ -309,6 +311,7 @@ export function MiningPage() {
             </div>
           </div>
       </div>
+        </AppModalPortal>
       ) : null}
     </div>
   )

@@ -28,6 +28,7 @@ import {
   updateWalletLink,
 } from '../api'
 import { AdBanner } from '../components/ads/AdBanner'
+import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { DEPOSIT_TERMS_AR } from '../depositTerms'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
@@ -839,6 +840,7 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
       </button>
 
       {termsOpen && (
+        <AppModalPortal>
         <div className="deposit-terms-overlay liquid-modal-backdrop" onClick={() => setTermsOpen(false)}>
           <div
             className="deposit-terms-modal liquid-modal-card"
@@ -863,9 +865,11 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
             </button>
           </div>
         </div>
+        </AppModalPortal>
       )}
 
       {proofExampleOpen ? (
+        <AppModalPortal>
         <div className="deposit-terms-overlay liquid-modal-backdrop" onClick={() => setProofExampleOpen(false)}>
           <div
             className="deposit-proof-modal liquid-modal-card"
@@ -906,6 +910,7 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
             </button>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
     </div>
   )

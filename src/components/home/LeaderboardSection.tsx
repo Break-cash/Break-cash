@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, Crown, Medal, Trophy } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { createPortal } from 'react-dom'
 import { getPublicFriendProfile, type FriendUser, type HomeLeaderboardCompetitor, type HomeLeaderboardConfig } from '../../api'
+import { AppModalPortal } from '../ui/AppModalPortal'
 import { UserIdentityBadges } from '../user/UserIdentityBadges'
 
 export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
@@ -238,15 +238,6 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
         Number(selectedUser.blueBadge || 0) === 1),
   )
 
-  useEffect(() => {
-    if (!selectedUser || typeof document === 'undefined') return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [selectedUser])
-
   const podium = [
     { competitor: rankedCompetitors[1], style: podiumStyles[1] },
     { competitor: rankedCompetitors[0], style: podiumStyles[0] },
@@ -391,8 +382,8 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
         </motion.div>
       </motion.div>
 
-      {selectedUser && typeof document !== 'undefined'
-        ? createPortal(
+      {selectedUser ? (
+        <AppModalPortal>
         <div className="friends-profile-overlay" onClick={() => setSelectedUser(null)}>
           <div className="friends-profile-popup" onClick={(e) => e.stopPropagation()}>
             <button
@@ -460,8 +451,8 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
             </div>
           </div>
         </div>
-        , document.body)
-        : null}
+        </AppModalPortal>
+      ) : null}
     </section>
   )
 }

@@ -18,6 +18,7 @@ import { I18nProvider } from './i18n'
 import { translations, type Language } from './i18nCore'
 import { Layout } from './Layout'
 import { AppToastViewport } from './components/toast/AppToastViewport'
+import { AppModalPortal } from './components/ui/AppModalPortal'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
 import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
@@ -530,6 +531,7 @@ function App() {
       />
       </Routes>
       {logoutConfirmOpen ? (
+        <AppModalPortal>
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div className="glass-panel w-full max-w-sm rounded-2xl p-4 shadow-[0_20px_44px_rgba(0,0,0,0.35)]">
             <h3 className="text-base font-semibold text-[var(--text-primary)]">{dict.logout_confirm_title}</h3>
@@ -552,8 +554,10 @@ function App() {
             </div>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
       {recoveryModalOpen ? (
+        <AppModalPortal>
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="glass-panel w-full max-w-md rounded-2xl border border-brand-blue/35 p-4 shadow-[0_22px_50px_rgba(0,0,0,0.45)]">
             <h3 className="text-base font-semibold text-[var(--text-primary)]">{dict.recovery_code_title}</h3>
@@ -589,6 +593,7 @@ function App() {
             </div>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
       <AppToastViewport />
     </I18nProvider>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, Info, X } from 'lucide-react'
 import { useI18n } from '../i18nCore'
+import { AppModalPortal } from './ui/AppModalPortal'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -96,6 +97,7 @@ export function InstallPrompt() {
       </div>
 
       {guideOpen ? (
+        <AppModalPortal>
         <div className="liquid-modal-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" dir={direction}>
           <div className="liquid-modal-card w-full max-w-md rounded-2xl border border-app-border bg-app-card p-4 shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-2">
@@ -122,6 +124,7 @@ export function InstallPrompt() {
             <p className="mt-3 text-xs text-white/60">{t('install_prompt_compatibility')}</p>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
     </>
   )

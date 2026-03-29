@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { getEarningHistory, getWalletHistory, type EarningEntry, type EarningGroup } from '../api'
+import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { WalletSummaryPanel } from '../components/wallet/WalletSummaryPanel'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
@@ -482,6 +483,7 @@ export function WalletPage() {
       )}
 
       {selectedTxn ? (
+        <AppModalPortal>
         <div
           className="liquid-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setSelectedTxn(null)}
@@ -558,6 +560,7 @@ export function WalletPage() {
             </div>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
 
       {tab === 'earnings' ? (

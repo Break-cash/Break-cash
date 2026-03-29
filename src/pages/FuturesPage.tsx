@@ -15,6 +15,7 @@ import {
   type StrategyTradeDisplayConfig,
 } from '../api'
 import { playFeedbackSound } from '../appFeedback'
+import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
 import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useI18n } from '../i18nCore'
@@ -681,6 +682,7 @@ export function FuturesPage() {
       ) : null}
 
       {preview ? (
+        <AppModalPortal>
         <div className="liquid-modal-backdrop fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="liquid-modal-card w-full max-w-lg rounded-3xl border border-app-border bg-app-card p-4 shadow-[0_24px_54px_rgba(0,0,0,0.45)]">
             <h3 className="text-base font-semibold text-white">تأكيد تفعيل الكود</h3>
@@ -738,6 +740,7 @@ export function FuturesPage() {
             </div>
           </div>
         </div>
+        </AppModalPortal>
       ) : null}
     </div>
   )
