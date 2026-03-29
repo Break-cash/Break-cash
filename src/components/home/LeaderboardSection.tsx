@@ -60,8 +60,8 @@ export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
 const podiumStyles = [
   {
     place: 1,
-    orderClass: 'order-1 lg:order-2',
-    wrapper: 'lg:-translate-y-4 lg:scale-[1.03]',
+    orderClass: 'order-2',
+    wrapper: 'sm:pt-3 lg:-translate-y-4 lg:scale-[1.03]',
     cardClass:
       'border-yellow-300/35 bg-[linear-gradient(180deg,rgba(250,204,21,0.2),rgba(30,41,59,0.96)_34%,rgba(15,23,42,0.98))] shadow-[0_0_40px_rgba(250,204,21,0.18)]',
     icon: Crown,
@@ -70,8 +70,8 @@ const podiumStyles = [
   },
   {
     place: 2,
-    orderClass: 'order-2 lg:order-1',
-    wrapper: 'lg:translate-y-5',
+    orderClass: 'order-1',
+    wrapper: 'sm:translate-y-2 lg:translate-y-5',
     cardClass:
       'border-slate-300/25 bg-[linear-gradient(180deg,rgba(226,232,240,0.15),rgba(30,41,59,0.96)_34%,rgba(15,23,42,0.98))] shadow-[0_0_24px_rgba(148,163,184,0.12)]',
     icon: Medal,
@@ -80,8 +80,8 @@ const podiumStyles = [
   },
   {
     place: 3,
-    orderClass: 'order-3 lg:order-3',
-    wrapper: 'lg:translate-y-8',
+    orderClass: 'order-3',
+    wrapper: 'sm:translate-y-4 lg:translate-y-8',
     cardClass:
       'border-orange-300/25 bg-[linear-gradient(180deg,rgba(251,146,60,0.16),rgba(30,41,59,0.96)_34%,rgba(15,23,42,0.98))] shadow-[0_0_24px_rgba(251,146,60,0.12)]',
     icon: Medal,
@@ -173,9 +173,17 @@ const COUNTRY_FLAG_ALIASES: Record<string, string> = {
   germany: 'DE',
 }
 
-function Avatar({ name, avatar }: { name: string; avatar?: string | null }) {
+function Avatar({
+  name,
+  avatar,
+  className = 'h-20 w-20 text-xl',
+}: {
+  name: string
+  avatar?: string | null
+  className?: string
+}) {
   return (
-    <div className="inline-flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/5 text-xl font-semibold text-white/90">
+    <div className={`inline-flex items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/5 font-semibold text-white/90 ${className}`}>
       {avatar ? (
         <img src={avatar} alt={name} className="h-full w-full object-cover" />
       ) : (
@@ -268,7 +276,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
         </div>
 
         <div className="rounded-[1.75rem] border border-white/8 bg-white/[0.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] lg:p-5">
-          <div className="grid gap-4 lg:grid-cols-3 lg:items-end">
+          <div className="grid grid-cols-3 items-end gap-2 sm:gap-4 lg:items-end">
             {podium.map(({ competitor, style }, index) => {
               const Icon = style.icon
               return (
@@ -277,22 +285,28 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                   initial={{ opacity: 0, y: 24 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45, delay: 0.08 * index, ease: 'easeOut' }}
-                  className={`${style.orderClass} ${style.wrapper} mx-auto w-full max-w-sm lg:max-w-none`}
+                  className={`${style.orderClass} ${style.wrapper} mx-auto w-full max-w-[7.5rem] sm:max-w-[10.5rem] lg:max-w-none`}
                   whileHover={{ scale: 1.03 }}
                 >
                   <button
                     type="button"
                     onClick={() => handleOpenCompetitorProfile(competitor)}
-                    className={`flex min-h-[12.5rem] w-full flex-col items-center justify-center rounded-[1.5rem] border px-4 py-5 text-center ${style.cardClass}`}
+                    className={`flex min-h-[9.75rem] w-full flex-col items-center justify-center rounded-[1.2rem] border px-2 py-3 text-center sm:min-h-[12rem] sm:rounded-[1.5rem] sm:px-4 sm:py-5 ${style.cardClass}`}
                   >
-                    <div className={`mb-3 inline-flex h-11 min-w-11 items-center justify-center rounded-full border border-white/15 bg-slate-950/80 px-3 text-white ring-4 ${style.ringClass}`}>
-                      <Icon size={18} className={style.accentClass} />
+                    <div className={`mb-2 inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-white/15 bg-slate-950/80 px-2 text-white ring-4 sm:mb-3 sm:h-11 sm:min-w-11 sm:px-3 ${style.ringClass}`}>
+                      <Icon size={16} className={style.accentClass} />
                     </div>
-                    <div className="text-sm font-semibold text-white/75">{leaderboard.podiumLabels[style.place - 1]}</div>
-                    <div className="mt-3">
-                      <Avatar name={competitor.name} avatar={competitor.avatar} />
+                    <div className="text-[10px] font-semibold leading-4 text-white/75 sm:text-sm">{leaderboard.podiumLabels[style.place - 1]}</div>
+                    <div className="mt-2 sm:mt-3">
+                      <Avatar
+                        name={competitor.name}
+                        avatar={competitor.avatar}
+                        className="h-14 w-14 text-base sm:h-20 sm:w-20 sm:text-xl"
+                      />
                     </div>
-                    <div className="mt-4 text-lg font-black text-white">{competitor.name}</div>
+                    <div className="mt-2 line-clamp-2 text-sm font-black leading-5 text-white sm:mt-4 sm:text-lg">
+                      {competitor.name}
+                    </div>
                   </button>
                 </motion.div>
               )
