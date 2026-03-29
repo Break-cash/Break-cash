@@ -453,6 +453,22 @@ async function resetPrincipalUnlockOverridesForAllUsers(db) {
   return Number(result?.changes || result?.rowCount || 0)
 }
 
+let principalLockBackfillStarted = false
+
+function schedulePrincipalLockBackfill(db) {
+  if (principalLockBackfillStarted) return
+  principalLockBackfillStarted = true
+  setTimeout(async () => {
+    try {
+      const rules = await getRules(db)
+      const affected = await reapplyPrincipalLocksForAllUsers(db, rules)
+      console.info('[balance] principal lock backfill applied', { affected })
+    } catch (error) {
+      console.error('[balance] principal lock backfill failed', error)
+    }
+  }, 250)
+}
+
 async function ensureVipTierDefaults(db) {
   for (const tier of getDefaultVipTierRows()) {
     const storagePayload = toVipTierStoragePayload(tier)
@@ -1142,6 +1158,7 @@ function buildUserPrincipalLockItems(items, options = {}) {
 
 export function createBalanceRouter(db) {
   const router = Router()
+  schedulePrincipalLockBackfill(db)
   const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
   const proofsDir = path.join(uploadsRoot, 'payment-proofs')
   fs.mkdirSync(proofsDir, { recursive: true })
