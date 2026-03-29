@@ -18,9 +18,48 @@ function toPublicPath(absPath) {
   return `/uploads/${rel.replace(/^uploads[/\\]/, '')}`
 }
 
+function toFriendUserPayload(row) {
+  return {
+    id: row.id,
+    displayName: row.display_name || `#${row.id}`,
+    bio: String(row.bio || '').slice(0, 120),
+    avatarUrl: row.avatar_path ? toPublicPath(row.avatar_path) : null,
+    verificationStatus: String(row.verification_status || 'unverified'),
+    blueBadge: Number(row.blue_badge || 0),
+    vipLevel: Number(row.vip_level || 0),
+    premiumBadge: String(row.profile_badge || '').trim() || null,
+    country: String(row.country || '').trim() || null,
+    depositPrivacyEnabled: Number(row.deposit_privacy_enabled ?? 1) === 1,
+    tradingBalance: Number(row.deposit_privacy_enabled ?? 1) === 1 ? null : Number(row.trading_balance || 0),
+  }
+}
+
 export function createFriendsRouter(db) {
   const router = Router()
   router.use(requireAuth(db))
+
+  router.get('/public-profile/:userId', asyncRoute(async (req, res) => {
+    const userId = Number(req.params?.userId)
+    if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const row = await get(
+      db,
+      `SELECT u.id, u.display_name, u.bio, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.profile_badge, u.country, u.deposit_privacy_enabled,
+              COALESCE(bal.total_balance, 0) AS trading_balance
+       FROM users u
+       LEFT JOIN (
+         SELECT user_id, SUM(balance_amount) AS total_balance
+         FROM wallet_accounts
+         WHERE account_type = 'main' AND source_type = 'system'
+         GROUP BY user_id
+       ) bal ON bal.user_id = u.id
+       WHERE u.id = ? AND u.is_banned = 0
+       LIMIT 1`,
+      [userId],
+    )
+    if (!row) return res.status(404).json({ error: 'NOT_FOUND' })
+    return res.json({ user: toFriendUserPayload(row) })
+  }))
 
   // بحث المستخدمين بالـ ID (رقم أو بداية الرقم)
   router.get('/search', asyncRoute(async (req, res) => {
@@ -44,19 +83,7 @@ export function createFriendsRouter(db) {
        LIMIT 20`,
       [`${q}%`, me],
     )
-    const users = rows.map((r) => ({
-      id: r.id,
-      displayName: r.display_name || `#${r.id}`,
-      bio: String(r.bio || '').slice(0, 120),
-      avatarUrl: r.avatar_path ? toPublicPath(r.avatar_path) : null,
-      verificationStatus: String(r.verification_status || 'unverified'),
-      blueBadge: Number(r.blue_badge || 0),
-      vipLevel: Number(r.vip_level || 0),
-      premiumBadge: String(r.profile_badge || '').trim() || null,
-      country: String(r.country || '').trim() || null,
-      depositPrivacyEnabled: Number(r.deposit_privacy_enabled ?? 1) === 1,
-      tradingBalance: Number(r.deposit_privacy_enabled ?? 1) === 1 ? null : Number(r.trading_balance || 0),
-    }))
+    const users = rows.map((r) => toFriendUserPayload(r))
     return res.json({ users })
   }))
 

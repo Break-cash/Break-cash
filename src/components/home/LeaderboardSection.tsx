@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { ChevronDown, Crown, Medal, Trophy } from 'lucide-react'
 import { motion } from 'framer-motion'
-import type { HomeLeaderboardCompetitor, HomeLeaderboardConfig } from '../../api'
+import { getPublicFriendProfile, type FriendUser, type HomeLeaderboardCompetitor, type HomeLeaderboardConfig } from '../../api'
+import { UserIdentityBadges } from '../user/UserIdentityBadges'
 
 export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
   enabled: false,
@@ -120,6 +121,57 @@ function formatDeposits(value: number) {
   return new Intl.NumberFormat('en-US').format(value)
 }
 
+const COUNTRY_FLAG_ALIASES: Record<string, string> = {
+  tr: 'TR',
+  turkey: 'TR',
+  turkiye: 'TR',
+  sa: 'SA',
+  'saudi arabia': 'SA',
+  saudi: 'SA',
+  eg: 'EG',
+  egypt: 'EG',
+  ae: 'AE',
+  uae: 'AE',
+  iq: 'IQ',
+  iraq: 'IQ',
+  sy: 'SY',
+  syria: 'SY',
+  jo: 'JO',
+  jordan: 'JO',
+  lb: 'LB',
+  lebanon: 'LB',
+  kw: 'KW',
+  kuwait: 'KW',
+  qa: 'QA',
+  qatar: 'QA',
+  bh: 'BH',
+  bahrain: 'BH',
+  om: 'OM',
+  oman: 'OM',
+  ye: 'YE',
+  yemen: 'YE',
+  ma: 'MA',
+  morocco: 'MA',
+  dz: 'DZ',
+  algeria: 'DZ',
+  tn: 'TN',
+  tunisia: 'TN',
+  ly: 'LY',
+  libya: 'LY',
+  us: 'US',
+  usa: 'US',
+  'united states': 'US',
+  america: 'US',
+  gb: 'GB',
+  uk: 'GB',
+  britain: 'GB',
+  england: 'GB',
+  fr: 'FR',
+  france: 'FR',
+  de: 'DE',
+  germany: 'DE',
+}
+
 function Avatar({ name, avatar }: { name: string; avatar?: string | null }) {
   return (
     <div className="inline-flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/5 text-xl font-semibold text-white/90">
@@ -141,8 +193,49 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
   const leaderboard = resolveLeaderboardConfig(config)
   const rankedCompetitors = leaderboard.competitors.slice(0, 3)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [selectedUser, setSelectedUser] = useState<FriendUser | null>(null)
+  const [selectedUserLoadingId, setSelectedUserLoadingId] = useState<number | null>(null)
+  const [selectedUserError, setSelectedUserError] = useState<string | null>(null)
 
   if (!previewMode && !leaderboard.enabled) return null
+
+  async function handleOpenCompetitorProfile(competitor: HomeLeaderboardCompetitor) {
+    const userId = Number(competitor.id || 0)
+    if (!userId || previewMode) return
+    setSelectedUserError(null)
+    setSelectedUserLoadingId(userId)
+    try {
+      const res = await getPublicFriendProfile(userId)
+      setSelectedUser(res.user)
+    } catch {
+      setSelectedUserError('تعذر تحميل بطاقة البروفايل الآن.')
+    } finally {
+      setSelectedUserLoadingId(null)
+    }
+  }
+
+  function getCountryFlagEmoji(value?: string | null) {
+    const raw = String(value || '').trim()
+    if (!raw) return ''
+    const lower = raw.toLowerCase()
+    const code = /^[a-z]{2}$/i.test(raw) ? raw.toUpperCase() : COUNTRY_FLAG_ALIASES[lower] || ''
+    if (!code) return ''
+    return String.fromCodePoint(...code.split('').map((char) => 127397 + char.charCodeAt(0)))
+  }
+
+  const selectedBadgeColor =
+    selectedUser && Number(selectedUser.blueBadge || 0) === 1
+      ? 'blue'
+      : selectedUser?.verificationStatus === 'verified'
+        ? 'gold'
+        : 'none'
+  const selectedVerified = selectedUser?.verificationStatus === 'verified'
+  const selectedHasPublicTitles = Boolean(
+    selectedUser &&
+      ((selectedUser.vipLevel || 0) > 0 ||
+        selectedUser.verificationStatus === 'verified' ||
+        Number(selectedUser.blueBadge || 0) === 1),
+  )
 
   const podium = [
     { competitor: rankedCompetitors[1], style: podiumStyles[1] },
@@ -186,7 +279,11 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                   className={`${style.orderClass} ${style.wrapper} mx-auto w-full max-w-sm lg:max-w-none`}
                   whileHover={{ scale: 1.03 }}
                 >
-                  <div className={`flex min-h-[12.5rem] flex-col items-center justify-center rounded-[1.5rem] border px-4 py-5 text-center ${style.cardClass}`}>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCompetitorProfile(competitor)}
+                    className={`flex min-h-[12.5rem] w-full flex-col items-center justify-center rounded-[1.5rem] border px-4 py-5 text-center ${style.cardClass}`}
+                  >
                     <div className={`mb-3 inline-flex h-11 min-w-11 items-center justify-center rounded-full border border-white/15 bg-slate-950/80 px-3 text-white ring-4 ${style.ringClass}`}>
                       <Icon size={18} className={style.accentClass} />
                     </div>
@@ -195,7 +292,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                       <Avatar name={competitor.name} avatar={competitor.avatar} />
                     </div>
                     <div className="mt-4 text-lg font-black text-white">{competitor.name}</div>
-                  </div>
+                  </button>
                 </motion.div>
               )
             })}
@@ -208,6 +305,11 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
           transition={{ duration: 0.45, delay: 0.24, ease: 'easeOut' }}
           className="mt-5 rounded-[1.75rem] border border-white/8 bg-white/[0.035] p-3 lg:p-5"
         >
+          {selectedUserError ? (
+            <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              {selectedUserError}
+            </div>
+          ) : null}
           <div className="mb-4">
             <h3 className="text-lg font-bold text-white">{leaderboard.detailsTitle}</h3>
             <p className="text-sm text-slate-400">{leaderboard.detailsSubtitle}</p>
@@ -261,6 +363,15 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                       <div className="mt-3 rounded-2xl border border-white/8 bg-white/[0.03] p-3 text-sm leading-6 text-slate-200">
                         {competitor.spotlight}
                       </div>
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCompetitorProfile(competitor)}
+                          className="rounded-full border border-sky-400/20 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:bg-sky-400/16"
+                        >
+                          {selectedUserLoadingId === competitor.id ? 'جارٍ تحميل البروفايل...' : 'عرض بطاقة البروفايل'}
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                 </motion.div>
@@ -269,6 +380,76 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
           </div>
         </motion.div>
       </motion.div>
+
+      {selectedUser ? (
+        <div className="friends-profile-overlay" onClick={() => setSelectedUser(null)}>
+          <div className="friends-profile-popup" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="friends-profile-close"
+              onClick={() => setSelectedUser(null)}
+              aria-label="إغلاق"
+            >
+              ×
+            </button>
+            <div className="friends-profile-header">
+              <div className="friends-profile-avatar">
+                {selectedUser.avatarUrl ? (
+                  <img src={selectedUser.avatarUrl} alt={selectedUser.displayName} />
+                ) : (
+                  <span>{String(selectedUser.id).slice(-2)}</span>
+                )}
+              </div>
+              <div className="friends-profile-title-wrap">
+                <div className="friends-profile-title-row">
+                  <span className="friends-profile-name">{selectedUser.displayName}</span>
+                  {getCountryFlagEmoji(selectedUser.country) ? (
+                    <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/8 px-1.5 text-base leading-5">
+                      {getCountryFlagEmoji(selectedUser.country)}
+                    </span>
+                  ) : null}
+                  <UserIdentityBadges
+                    badgeColor={selectedBadgeColor}
+                    vipLevel={selectedUser.vipLevel || 0}
+                    premiumBadge={selectedUser.premiumBadge}
+                    mode="verified"
+                  />
+                </div>
+                {selectedHasPublicTitles ? (
+                  <div className="friends-profile-public-titles">
+                    <UserIdentityBadges
+                      badgeColor={selectedBadgeColor}
+                      vipLevel={selectedUser.vipLevel || 0}
+                      mode="secondary"
+                    />
+                  </div>
+                ) : null}
+                <div className="friends-profile-id">ID: {selectedUser.id}</div>
+              </div>
+            </div>
+
+            <div className="friends-profile-bio">
+              {selectedUser.bio?.trim() || 'لا يوجد وصف عام لهذا الحساب بعد.'}
+            </div>
+
+            <div className="friends-profile-status-row">
+              <span className={`friends-verify-dot ${selectedVerified ? 'verified' : 'unverified'}`} />
+              <span className="friends-verify-text">
+                {selectedVerified ? 'حساب موثّق' : 'الحساب غير موثّق'}
+              </span>
+            </div>
+
+            <div className="friends-profile-balance">
+              <span>رصيد التداول</span>
+              <strong>
+                {selectedUser.depositPrivacyEnabled || selectedUser.tradingBalance == null
+                  ? 'مخفي'
+                  : `${Number(selectedUser.tradingBalance || 0).toFixed(2)} USDT`}
+              </strong>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

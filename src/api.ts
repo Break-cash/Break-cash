@@ -706,6 +706,10 @@ export async function searchUsersById(q: string) {
   return apiFetch(`/api/friends/search?q=${encodeURIComponent(q)}`) as Promise<{ users: FriendUser[] }>
 }
 
+export async function getPublicFriendProfile(userId: number) {
+  return apiFetch(`/api/friends/public-profile/${encodeURIComponent(String(userId))}`) as Promise<{ user: FriendUser }>
+}
+
 export async function sendFriendRequest(toUserId: number) {
   return apiFetch('/api/friends/request', {
     method: 'POST',
