@@ -140,6 +140,23 @@ export function createSettingsRouter(db) {
     }
   }
 
+  function mergeHomeLeaderboardConfig(currentConfig, incomingConfig) {
+    const base = typeof currentConfig === 'object' && currentConfig ? currentConfig : {}
+    const patch = typeof incomingConfig === 'object' && incomingConfig ? incomingConfig : {}
+    const currentCompetitors = Array.isArray(base.competitors) ? base.competitors : []
+    const patchCompetitors = Array.isArray(patch.competitors) ? patch.competitors : null
+    return {
+      ...base,
+      ...patch,
+      competitors: patchCompetitors
+        ? currentCompetitors.map((item, index) => ({
+            ...(typeof item === 'object' && item ? item : {}),
+            ...(typeof patchCompetitors[index] === 'object' && patchCompetitors[index] ? patchCompetitors[index] : {}),
+          }))
+        : currentCompetitors,
+    }
+  }
+
   async function toDataUrl(filePath, mimeType) {
     const fileBuffer = await fs.promises.readFile(filePath)
     const normalizedMime = String(mimeType || 'application/octet-stream').trim() || 'application/octet-stream'
@@ -456,7 +473,15 @@ export function createSettingsRouter(db) {
   }))
 
   router.post('/home-leaderboard', requireAuth(db), requireRole('owner'), asyncRoute(async (req, res) => {
-    const config = await hydrateHomeLeaderboardAvatarSettings(req.body || {})
+    const row = await get(db, `SELECT value FROM settings WHERE key='home_leaderboard' LIMIT 1`)
+    let parsed = null
+    try {
+      parsed = JSON.parse(String(row?.value || 'null'))
+    } catch {
+      parsed = null
+    }
+    const mergedConfig = mergeHomeLeaderboardConfig(parsed, req.body || {})
+    const config = await hydrateHomeLeaderboardAvatarSettings(mergedConfig)
     await run(
       db,
       `INSERT INTO settings (key, value) VALUES ('home_leaderboard', ?)
