@@ -14,14 +14,16 @@ const PROMOTED_AD_MEDIA_URLS = new Set([
   '/ads/exclusive-offer-ar.jpeg',
   '/ads/exclusive-offer-en.jpeg',
   '/ads/breakcash-best-video.mp4',
-  '/uploads/ads/mani.jpeg',
-  '/uploads/ads/frnd.jpeg',
 ])
 const REMOVED_AD_MEDIA_URLS = ['/ads/event-banner.jpeg']
 const SALES_PRIORITY_MEDIA_URLS = [
   '/ads/exclusive-offer-ar.jpeg',
   '/ads/exclusive-offer-en.jpeg',
   '/ads/breakcash-best-video.mp4',
+]
+const GLOBAL_PROMOTED_AD_ITEMS = [
+  { type: 'image', mediaUrl: '/uploads/ads/mani.jpeg', title: 'Deposit', description: 'Open the deposit page', linkUrl: '/deposit' },
+  { type: 'image', mediaUrl: '/uploads/ads/frnd.jpeg', title: 'Invite & Earn', description: 'Open referral center', linkUrl: '/referral' },
 ]
 const SEEDED_PROMOTED_ASSETS = [
   {
@@ -155,6 +157,49 @@ async function ensurePromotedAdsPersisted(db) {
   await ensureSeededPromotedAssetsPersisted(db)
   for (const mediaUrl of REMOVED_AD_MEDIA_URLS) {
     await run(db, `DELETE FROM ads WHERE media_url = ?`, [mediaUrl])
+  }
+  for (const item of GLOBAL_PROMOTED_AD_ITEMS) {
+    const existingGlobal = await get(
+      db,
+      `SELECT id, is_active
+       FROM ads
+       WHERE placement = 'all' AND media_url = ?
+       ORDER BY id ASC
+       LIMIT 1`,
+      [item.mediaUrl],
+    )
+    if (existingGlobal?.id) {
+      if (!Number(existingGlobal.is_active)) {
+        await run(
+          db,
+          `UPDATE ads
+           SET is_active = 1,
+               updated_at = datetime('now')
+           WHERE id = ?`,
+          [existingGlobal.id],
+        )
+      }
+    } else {
+      const maxGlobalSortRow = await get(
+        db,
+        `SELECT COALESCE(MAX(sort_order), -1) AS max_sort
+         FROM ads
+         WHERE placement = 'all'`,
+      )
+      const nextGlobalSort = Number(maxGlobalSortRow?.max_sort ?? -1) + 1
+      await run(
+        db,
+        `INSERT INTO ads (type, media_url, title, description, link_url, placement, sort_order, is_active)
+         VALUES (?, ?, ?, ?, ?, 'all', ?, 1)`,
+        [item.type, item.mediaUrl, item.title || '', item.description || '', item.linkUrl || null, nextGlobalSort],
+      )
+    }
+    await run(
+      db,
+      `DELETE FROM ads
+       WHERE placement IN ('home', 'deposit', 'mining', 'profile') AND media_url = ?`,
+      [item.mediaUrl],
+    )
   }
   for (const placement of ['home', 'deposit', 'mining', 'profile']) {
     const placementDefaults = Array.isArray(DEFAULT_ADS[placement]) ? DEFAULT_ADS[placement] : []
