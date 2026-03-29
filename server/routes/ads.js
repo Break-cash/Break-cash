@@ -9,11 +9,11 @@ import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-as
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
 const GLOBAL_PROMOTED_AD_ITEMS = [
+  { type: 'image', mediaUrl: '/ads/mani.jpeg', title: 'mani', description: 'Open the deposit page', linkUrl: '/deposit' },
+  { type: 'image', mediaUrl: '/ads/frnd.jpeg', title: 'frnd', description: 'Open referral center', linkUrl: '/referral' },
   { type: 'image', mediaUrl: '/ads/mining-main-banner.jpg', title: 'اعلان تعدين', description: 'اذهب إلى التعدين', linkUrl: '/mining' },
   { type: 'video', mediaUrl: '/ads/mining-feed.mp4', title: 'اعلان تعدين فيد', description: 'تفاصيل التعدين', linkUrl: '/mining' },
   { type: 'image', mediaUrl: '/ads/breakcash-best.jpeg', title: 'بريك كاش الافضل', description: 'عرض بريك كاش الافضل', linkUrl: '/portfolio' },
-  { type: 'image', mediaUrl: '/ads/mani.jpeg', title: 'mani', description: 'Open the deposit page', linkUrl: '/deposit' },
-  { type: 'image', mediaUrl: '/ads/frnd.jpeg', title: 'frnd', description: 'Open referral center', linkUrl: '/referral' },
 ]
 const SEEDED_PROMOTED_ASSETS = []
 
