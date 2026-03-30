@@ -63,6 +63,25 @@ export async function getWalletAccountsOverview(db, userId) {
      FROM wallet_accounts WHERE user_id = ?`,
     [userId],
   )
+  const pendingFirstDepositBonusRows = await all(
+    db,
+    `SELECT currency,
+            COALESCE(SUM(
+              CASE
+                WHEN amount > COALESCE(consumed_amount, 0) THEN amount - COALESCE(consumed_amount, 0)
+                ELSE 0
+              END
+            ), 0) AS balance
+     FROM earning_entries
+     WHERE user_id = ?
+       AND source_type = 'deposits'
+       AND reference_type = 'first_deposit_bonus'
+       AND payout_mode = 'bonus_locked'
+       AND status = 'pending'
+       AND amount > COALESCE(consumed_amount, 0)
+     GROUP BY currency`,
+    [userId],
+  )
   let totalAssets = 0
   const byCurrency = {}
   const bySource = []
@@ -75,6 +94,19 @@ export async function getWalletAccountsOverview(db, userId) {
       source_type: String(r.source_type || 'system'),
       currency: curr,
       account_type: String(r.account_type || 'main'),
+      balance: amt,
+    })
+  }
+  for (const bonusRow of pendingFirstDepositBonusRows) {
+    const amt = Number(bonusRow.balance || 0)
+    if (amt <= 0) continue
+    const curr = String(bonusRow.currency || 'USDT').toUpperCase()
+    totalAssets = Number((totalAssets + amt).toFixed(8))
+    byCurrency[curr] = Number((Number(byCurrency[curr] || 0) + amt).toFixed(8))
+    bySource.push({
+      source_type: 'deposits',
+      currency: curr,
+      account_type: 'pending_bonus',
       balance: amt,
     })
   }
