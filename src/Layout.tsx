@@ -369,6 +369,24 @@ export function Layout({
     )
   }
 
+  function isSupportNotification(item: { title?: string; body?: string }) {
+    const haystack = `${String(item.title || '')} ${String(item.body || '')}`.toLowerCase()
+    return (
+      haystack.includes('support') ||
+      haystack.includes('help') ||
+      haystack.includes('ticket') ||
+      haystack.includes('الدعم') ||
+      haystack.includes('مساعدة') ||
+      haystack.includes('محادثة')
+    )
+  }
+
+  function resolveNotificationRoute(item: { title?: string; body?: string }) {
+    if (isStrategyNotification(item)) return '/futures'
+    if (isSupportNotification(item)) return canManageSupport ? '/admin/support' : '/support'
+    return null
+  }
+
   useEffect(() => {
     apiFetch('/api/notifications/unreadCount')
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
@@ -395,7 +413,8 @@ export function Layout({
 
   useEffect(() => {
     const unsubscribe = subscribeToLiveUpdates((event) => {
-      if (event.type !== 'notification_created' || event.source !== 'notifications') return
+      if (event.type !== 'notification_created') return
+      if (!['notifications', 'support'].includes(String(event.source || '').trim().toLowerCase())) return
       const title = String(event.title || '').trim()
       const body = String(event.body || '').trim()
       if (!title && !body) return
@@ -966,16 +985,19 @@ export function Layout({
                               ? 'border border-brand-blue/30 bg-brand-blue/10 shadow-[0_0_0_1px_rgba(0,123,255,0.12)]'
                               : 'opacity-80'
                           } ${
-                            isStrategyNotification(item) ? 'border border-amber-400/25 bg-amber-500/10' : ''
+                            isStrategyNotification(item) || isSupportNotification(item)
+                              ? 'border border-amber-400/25 bg-amber-500/10'
+                              : ''
                           }`}
                         >
                           <button
                             type="button"
                             className="min-w-0 flex-1 text-start"
                             onClick={() => {
-                              if (!isStrategyNotification(item)) return
+                              const route = resolveNotificationRoute(item)
+                              if (!route) return
                               closeHeaderPopups()
-                              navigate('/futures')
+                              navigate(route)
                             }}
                           >
                             <div className="flex items-center gap-2">
@@ -985,7 +1007,7 @@ export function Layout({
                                   جديد
                                 </span>
                               ) : null}
-                              {isStrategyNotification(item) ? (
+                              {isStrategyNotification(item) || isSupportNotification(item) ? (
                                 <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">
                                   مهم
                                 </span>
@@ -995,6 +1017,10 @@ export function Layout({
                             <div className="mt-1 text-[11px] text-white/40">{formatNotificationTimestamp(item.created_at)}</div>
                             {isStrategyNotification(item) ? (
                               <div className="mt-1 text-[11px] text-amber-200/85">اضغط لفتح لوحة الصفقات الاستراتيجية</div>
+                            ) : isSupportNotification(item) ? (
+                              <div className="mt-1 text-[11px] text-amber-200/85">
+                                {canManageSupport ? 'اضغط لفتح مركز دعم الإدارة' : 'اضغط لفتح مركز المساعدة'}
+                              </div>
                             ) : null}
                           </button>
                           {Number(item.is_read || 0) === 0 ? (

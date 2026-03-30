@@ -6302,6 +6302,11 @@ button:focus-visible,
 .app-header-notifications-panel > .glass-panel {
   width: min(100%, 560px);
   margin-inline-start: auto;
+  max-height: min(78dvh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .app-header-brand-wrap {
