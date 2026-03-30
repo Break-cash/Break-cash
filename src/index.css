@@ -6220,6 +6220,190 @@ button:focus-visible,
   }
 }
 
+@media (max-width: 640px) {
+  .login-wrapper {
+    align-items: flex-start;
+    min-height: 100dvh;
+    padding: 12px 10px 18px;
+  }
+
+  .login-shell {
+    gap: 12px;
+    padding: 10px;
+    border-radius: 22px;
+  }
+
+  .login-brand-panel {
+    order: 2;
+    gap: 12px;
+    padding: 2px;
+  }
+
+  .login-card {
+    order: 1;
+    padding: 16px 14px;
+    border-radius: 20px;
+  }
+
+  .login-form-header {
+    margin-bottom: 12px;
+  }
+
+  .login-form-title {
+    font-size: 1.15rem;
+  }
+
+  .login-card-topline {
+    gap: 10px;
+  }
+
+  .login-card-kicker {
+    margin-bottom: 4px;
+    letter-spacing: 0.18em;
+    font-size: 10px;
+  }
+
+  .login-title {
+    font-size: 1.25rem;
+    line-height: 1.25;
+  }
+
+  .login-subtitle {
+    font-size: 0.9rem;
+    line-height: 1.65;
+    margin: 0;
+  }
+
+  .login-lang-switch {
+    width: 100%;
+    justify-content: stretch;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
+  .login-lang-btn {
+    flex: 1 1 0;
+    min-height: 36px;
+  }
+
+  .login-premium-brand {
+    width: min(100%, 188px);
+    margin: 0 auto 4px;
+  }
+
+  .login-premium-brand-shell {
+    width: 96px;
+    height: 96px;
+  }
+
+  .login-premium-logo-wrap {
+    width: 72px;
+    height: 72px;
+  }
+
+  .login-premium-brand.variant-b .login-premium-brand-shell {
+    width: min(100%, 176px);
+    height: 76px;
+    border-radius: 16px;
+  }
+
+  .login-premium-brand.variant-b .login-premium-logo-wrap {
+    width: 58px;
+    height: 58px;
+    margin-inline-end: 42px;
+    border-radius: 14px;
+  }
+
+  .login-premium-brand.variant-b .login-premium-brand-shell::after {
+    inset-inline-end: 14px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  .login-trust-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .login-trust-stat {
+    padding: 10px 8px;
+    border-radius: 14px;
+    text-align: center;
+  }
+
+  .login-trust-stat strong {
+    font-size: 0.88rem;
+  }
+
+  .login-trust-stat span {
+    font-size: 0.68rem;
+    line-height: 1.35;
+  }
+
+  .login-trust-list {
+    display: none;
+  }
+
+  .login-primary-hint {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .login-footer-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .login-footer-links .link-btn {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    text-align: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .login-shell {
+    padding: 8px;
+  }
+
+  .login-card {
+    padding: 14px 12px;
+  }
+
+  .login-trust-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .login-premium-brand {
+    width: min(100%, 160px);
+  }
+
+  .login-premium-brand-shell {
+    width: 84px;
+    height: 84px;
+  }
+
+  .login-premium-logo-wrap {
+    width: 62px;
+    height: 62px;
+  }
+
+  .login-premium-brand.variant-b .login-premium-brand-shell {
+    width: min(100%, 160px);
+    height: 68px;
+  }
+
+  .login-premium-brand.variant-b .login-premium-logo-wrap {
+    width: 52px;
+    height: 52px;
+    margin-inline-end: 36px;
+  }
+}
+
 /* Desktop closer to mobile layout */
 @media (min-width: 1024px) {
   .app-root {
