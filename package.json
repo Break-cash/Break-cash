@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "node server/index.js",
+    "avatars:assign-seed": "node server/scripts/assign-seed-profile-avatars.js",
     "wallet:integrity": "node server/scripts/wallet-integrity-check.js",
     "dev:all": "node server/index.js",
     "build": "tsc -b && vite build",

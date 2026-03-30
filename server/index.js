@@ -32,6 +32,7 @@ import { migrateUploadReferences } from './services/upload-reference-migration.j
 import { cleanupOldNotifications } from './services/notifications.js'
 import { backfillUserAvatarBlobs } from './services/user-avatars.js'
 import { reapplyRewardPoliciesToPendingEntries } from './services/wallet-service.js'
+import { syncSeededProfileAvatars } from './services/seed-profile-avatars.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -187,6 +188,17 @@ async function bootstrap() {
   } catch (error) {
     if (SENTRY_DSN) Sentry.captureException(error)
     console.warn('[avatars] backfill failed', error instanceof Error ? error.message : String(error))
+  }
+  try {
+    const seededAvatarResults = await syncSeededProfileAvatars(db)
+    const updatedCount = seededAvatarResults.filter((item) => item.status === 'updated').length
+    const missingCount = seededAvatarResults.filter((item) => item.status === 'missing_user').length
+    if (updatedCount > 0 || missingCount > 0) {
+      console.log(`[avatars] seeded profile sync updated=${updatedCount} missing=${missingCount}`)
+    }
+  } catch (error) {
+    if (SENTRY_DSN) Sentry.captureException(error)
+    console.warn('[avatars] seeded profile sync failed', error instanceof Error ? error.message : String(error))
   }
   try {
     const taskRewardRelease = await reapplyRewardPoliciesToPendingEntries(db, { sourceType: 'tasks' })
