@@ -98,7 +98,7 @@ export function AdminDashboardPage() {
 
         const users = usersRes.users || []
         const strategyItems = (strategyRes.items || []).filter((item) => item.featureType === 'trial_trade')
-        const strategyUsageItems = (strategyRes.usages || []).filter((item) => item.status === 'trade_settled')
+        const strategyUsageItems = (strategyRes.usages || []).filter((item) => isStrategyUsageCompleted(item))
         setSnapshot({
           usersCount: users.length,
           pendingDeposits: Number(depositsRes.items?.length || 0),
@@ -126,7 +126,7 @@ export function AdminDashboardPage() {
   async function reloadStrategyCodes() {
     const strategyRes = await getStrategyCodesAdmin()
     const strategyItems = (strategyRes.items || []).filter((item) => item.featureType === 'trial_trade')
-    const strategyUsageItems = (strategyRes.usages || []).filter((item) => item.status === 'trade_settled')
+    const strategyUsageItems = (strategyRes.usages || []).filter((item) => isStrategyUsageCompleted(item))
     setStrategyCodes(strategyItems)
     setStrategyUsages(strategyUsageItems)
     setExpertDrafts(Object.fromEntries(strategyItems.map((item) => [item.id, String(item.expertName || '')])))
@@ -196,7 +196,19 @@ export function AdminDashboardPage() {
     }
   }
 
+  function isStrategyUsageCompleted(item: StrategyCodeUsageAdminItem) {
+    const normalizedStatus = String(item.status || '').trim().toLowerCase()
+    if (['trade_settled', 'settled', 'completed', 'consumed'].includes(normalizedStatus)) return true
+    if (item.settledAt) return true
+    if (item.exitPrice != null && Number.isFinite(Number(item.exitPrice))) return true
+    return false
+  }
+
   async function handleDeleteStrategyUsage(item: StrategyCodeUsageAdminItem) {
+    if (!isStrategyUsageCompleted(item)) {
+      setMessage({ type: 'error', text: 'يمكن حذف الصفقات الاستراتيجية القديمة المكتملة فقط.' })
+      return
+    }
     const confirmed = window.confirm(
       `هل تريد حذف الصفقة المكتملة #${item.id} من السجل الظاهر فقط؟ سيبقى الربح اليومي المقفل أسبوعًا كما هو دون تغيير.`,
     )

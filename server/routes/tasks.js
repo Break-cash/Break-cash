@@ -145,6 +145,15 @@ function enrichStrategyUsageRow(row) {
   }
 }
 
+function isStrategyUsageCompletedRecord(usage) {
+  const normalizedStatus = String(usage?.status || '').trim().toLowerCase()
+  if (['trade_settled', 'settled', 'completed', 'consumed'].includes(normalizedStatus)) return true
+  if (usage?.settled_at) return true
+  if (usage?.wallet_credit_txn_id != null && Number(usage.wallet_credit_txn_id || 0) > 0) return true
+  if (usage?.exit_price != null && Number.isFinite(Number(usage.exit_price))) return true
+  return false
+}
+
 function getStrategyTradeSourceDebits(usage) {
   const meta = parseJsonSafe(usage?.metadata_json, {})
   const configured = Array.isArray(meta?.balanceSourceDebits)
@@ -1198,7 +1207,7 @@ export function createTasksRouter(db) {
 
     const usage = await get(
       db,
-      `SELECT id, status, admin_hidden_at
+      `SELECT id, status, admin_hidden_at, settled_at, wallet_credit_txn_id, exit_price
        FROM strategy_code_usages
        WHERE id = ?
        LIMIT 1`,
@@ -1206,7 +1215,7 @@ export function createTasksRouter(db) {
     )
     if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
     if (usage.admin_hidden_at) return res.json({ ok: true })
-    if (String(usage.status || '') !== 'trade_settled') {
+    if (!isStrategyUsageCompletedRecord(usage)) {
       return res.status(400).json({
         error: 'ONLY_SETTLED_TRADES_CAN_BE_REMOVED',
         message: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط دون المساس بمنطق الأصل والربح.',
