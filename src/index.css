@@ -6234,15 +6234,19 @@ button:focus-visible,
   }
 
   .login-brand-panel {
-    order: 2;
+    order: 1;
     gap: 12px;
-    padding: 2px;
+    padding: 10px 8px 6px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .login-card {
-    order: 1;
+    order: 2;
     padding: 16px 14px;
     border-radius: 20px;
+    margin-top: 2px;
   }
 
   .login-form-header {
@@ -6288,7 +6292,7 @@ button:focus-visible,
 
   .login-premium-brand {
     width: min(100%, 188px);
-    margin: 0 auto 4px;
+    margin: 0 auto 2px;
   }
 
   .login-premium-brand-shell {
@@ -6323,6 +6327,7 @@ button:focus-visible,
   .login-trust-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+    margin-top: 2px;
   }
 
   .login-trust-stat {
@@ -6368,6 +6373,10 @@ button:focus-visible,
 @media (max-width: 420px) {
   .login-shell {
     padding: 8px;
+  }
+
+  .login-brand-panel {
+    padding: 8px 6px 4px;
   }
 
   .login-card {
