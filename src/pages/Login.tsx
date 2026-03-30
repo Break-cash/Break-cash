@@ -219,19 +219,6 @@ export function Login({ onAuthSuccess }: LoginProps) {
         </div>
 
         <div className="login-card">
-          <div className="login-card-brandmark">
-            <div className="login-card-brandmark-image-wrap">
-              <img
-                src={logoBroken ? '/break-cash-logo-premium.png' : logoUrl}
-                alt="BREAK CASH"
-                className="login-card-brandmark-image"
-                decoding="async"
-                loading="eager"
-                onError={() => setLogoBroken(true)}
-              />
-            </div>
-          </div>
-
           <div className="login-form-header">
             <div className="login-form-eyebrow">
               <CheckCircle2 size={14} />
