@@ -22,8 +22,6 @@ import { useI18n } from '../i18nCore'
 
 type Candle = { time: number; open: number; high: number; low: number; close: number }
 const intervals = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
-const TASK_REWARD_LOCK_MS = 7 * 24 * 60 * 60 * 1000
-
 function formatUnlockDate(value?: string | null) {
   if (!value) return '--'
   const date = new Date(value)
@@ -35,20 +33,6 @@ function formatUnlockDate(value?: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function formatLiveCountdown(value?: string | null, now = Date.now()) {
-  if (!value) return 'بانتظار تحديد موعد الإتاحة'
-  const target = Date.parse(value)
-  if (Number.isNaN(target)) return 'بانتظار تحديد موعد الإتاحة'
-  const diff = target - now
-  if (diff <= 0) return 'أصبح الربح قابلاً للسحب الآن'
-  const totalSeconds = Math.floor(diff / 1000)
-  const days = Math.floor(totalSeconds / 86400)
-  const hours = Math.floor((totalSeconds % 86400) / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  return `${days}ي ${hours}س ${minutes}د ${seconds}ث`
 }
 
 export function FuturesPage() {
@@ -66,7 +50,6 @@ export function FuturesPage() {
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
-  const [nowTick, setNowTick] = useState(() => Date.now())
   const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
     active_notice: 'يتم حجز قيمة الصفقة من إجمالي الأصول، بما في ذلك الرصيد المقيد بإدارة المخاطر، ويعود أصل الصفقة مع الربح عند الإغلاق.',
@@ -103,12 +86,6 @@ export function FuturesPage() {
       })
     return settledUsages[0] || null
   }, [codes])
-  const latestSettledTradeUnlockAt = useMemo(() => {
-    if (!latestSettledTrade?.settledAt) return null
-    const settledAtMs = Date.parse(latestSettledTrade.settledAt)
-    if (Number.isNaN(settledAtMs)) return null
-    return new Date(settledAtMs + TASK_REWARD_LOCK_MS).toISOString()
-  }, [latestSettledTrade])
   const latestSettledTradeProfit = useMemo(() => {
     if (!latestSettledTrade) return 0
     return Number(latestSettledTrade.stakeAmount || 0) * (Number(latestSettledTrade.tradeReturnPercent || 0) / 100)
@@ -162,11 +139,6 @@ export function FuturesPage() {
     getStrategyTradeDisplayConfig()
       .then((res) => setTradeDisplayConfig(res.config))
       .catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 1000)
-    return () => window.clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -650,40 +622,26 @@ export function FuturesPage() {
         <section className="rounded-2xl border border-amber-500/25 bg-app-card p-3">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-white">آخر صفقة استراتيجية مكتملة</h2>
-              <p className="text-xs text-app-muted">
-                أصل الصفقة عاد إلى الرصيد، أما الربح فيبقى مقفلاً لمدة 7 أيام كاملة من وقت التسوية.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-center">
-              <div className="text-[11px] text-amber-200/80">الوقت المتبقي لسحب الربح</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-amber-100">
-                {formatLiveCountdown(latestSettledTradeUnlockAt, nowTick)}
-              </div>
+              <h2 className="text-sm font-semibold text-white">{'\u0622\u062e\u0631 \u0635\u0641\u0642\u0629 \u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629 \u0645\u0643\u062a\u0645\u0644\u0629'}</h2>
+              <p className="text-xs text-app-muted">{'\u0623\u0635\u0644 \u0627\u0644\u0635\u0641\u0642\u0629 \u0639\u0627\u062f \u0625\u0644\u0649 \u0627\u0644\u0631\u0635\u064a\u062f\u060c \u0648\u0631\u0628\u062d \u0627\u0644\u0635\u0641\u0642\u0629 \u0623\u0635\u0628\u062d \u0645\u062a\u0627\u062d\u064b\u0627 \u0644\u0644\u0633\u062d\u0628 \u0648\u0641\u0642 \u0627\u0644\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062d\u0627\u0644\u064a\u0629.'}</p>
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">الرمز</div>
+              <div className="text-[11px] text-app-muted">{'\u0627\u0644\u0631\u0645\u0632'}</div>
               <div className="mt-1 text-sm font-semibold text-white">{latestSettledTrade.selectedSymbol || '--'}</div>
             </div>
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">سعر الدخول</div>
+              <div className="text-[11px] text-app-muted">{'\u0633\u0639\u0631 \u0627\u0644\u062f\u062e\u0648\u0644'}</div>
               <div className="mt-1 text-sm font-semibold text-white">{Number(latestSettledTrade.entryPrice || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">سعر الإغلاق</div>
+              <div className="text-[11px] text-app-muted">{'\u0633\u0639\u0631 \u0627\u0644\u0625\u063a\u0644\u0627\u0642'}</div>
               <div className="mt-1 text-sm font-semibold text-white">{Number(latestSettledTrade.exitPrice || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-              <div className="text-[11px] text-app-muted">ربح الصفقة المقفل</div>
+              <div className="text-[11px] text-app-muted">{'\u0631\u0628\u062d \u0627\u0644\u0635\u0641\u0642\u0629'}</div>
               <div className="mt-1 text-sm font-semibold text-white">{latestSettledTradeProfit.toFixed(2)} USDT</div>
-            </div>
-          </div>
-          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
-            <div>موعد فتح السحب: {formatUnlockDate(latestSettledTradeUnlockAt)}</div>
-            <div className="mt-1">
-              يتم عرض هذا العداد لكل صفقة ربح من الأكواد الاستراتيجية حتى يوضح للمستخدم متى يصبح الربح متاحًا للسحب.
             </div>
           </div>
         </section>
