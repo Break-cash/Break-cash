@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Eye, EyeOff, ShieldCheck, Sparkles, WalletCards } from 'lucide-react'
 import {
   getLoginLogoVariant,
   getLogoUrl,
@@ -34,44 +33,6 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
   const brandLabel = 'BREAK CASH'
-
-  const trustHighlights =
-    language === 'ar'
-      ? [
-          { icon: ShieldCheck, title: 'وصول آمن', body: 'تجربة دخول محسّنة مع هوية واضحة ومظهر موثوق.' },
-          { icon: WalletCards, title: 'إدارة متكاملة', body: 'المحفظة، الأسواق، والعمليات الأساسية ضمن واجهة موحدة.' },
-          { icon: Sparkles, title: 'جاهز للاعتماد', body: 'تصميم مؤسسي يركّز على الوضوح والثقة وسهولة الاستخدام.' },
-        ]
-      : language === 'tr'
-        ? [
-            { icon: ShieldCheck, title: 'Guvenli erisim', body: 'Daha net kimlik ve daha guven veren bir giris deneyimi.' },
-            { icon: WalletCards, title: 'Birlesik yonetim', body: 'Cuzdan, piyasalar ve temel islemler tek bir arayuzde.' },
-            { icon: Sparkles, title: 'Resmi gorunum', body: 'Kurumsal, temiz ve hizli bir ilk izlenim icin hazirlandi.' },
-          ]
-        : [
-            { icon: ShieldCheck, title: 'Secure access', body: 'A clearer sign-in experience with stronger brand trust.' },
-            { icon: WalletCards, title: 'Unified control', body: 'Wallets, markets, and key actions in one organized surface.' },
-            { icon: Sparkles, title: 'Official feel', body: 'A more polished, production-ready first impression.' },
-          ]
-
-  const trustStats =
-    language === 'ar'
-      ? [
-          { value: '24/7', label: 'وصول مستمر' },
-          { value: 'PWA', label: 'جاهز للتثبيت' },
-          { value: 'Live', label: 'تحديثات مباشرة' },
-        ]
-      : language === 'tr'
-        ? [
-            { value: '7/24', label: 'Kesintisiz erisim' },
-            { value: 'PWA', label: 'Yuklenebilir' },
-            { value: 'Live', label: 'Canli veri' },
-          ]
-        : [
-            { value: '24/7', label: 'Always available' },
-            { value: 'PWA', label: 'Install ready' },
-            { value: 'Live', label: 'Realtime updates' },
-          ]
 
   useEffect(() => {
     let mounted = true
@@ -146,8 +107,8 @@ export function Login({ onAuthSuccess }: LoginProps) {
 
   return (
     <div className="login-wrapper">
-      <div className="login-shell glass-panel">
-        <div className="login-brand-panel">
+      <div className="login-card glass-panel">
+        <div className="login-header">
           <div className="login-card-topline">
             <div>
               <div className="login-badge">{t('login_badge')}</div>
@@ -190,176 +151,140 @@ export function Login({ onAuthSuccess }: LoginProps) {
           </div>
 
           <p className="login-subtitle">{t('login_subtitle')}</p>
-
-          <div className="login-trust-grid">
-            {trustStats.map((item) => (
-              <div key={item.label} className="login-trust-stat">
-                <strong>{item.value}</strong>
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="login-trust-list">
-            {trustHighlights.map((item) => {
-              const Icon = item.icon
-              return (
-                <div key={item.title} className="login-trust-item">
-                  <span className="login-trust-icon">
-                    <Icon size={16} />
-                  </span>
-                  <div>
-                    <div className="login-trust-title">{item.title}</div>
-                    <p className="login-trust-text">{item.body}</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
 
-        <div className="login-card">
-          <div className="login-form-header">
-            <div className="login-form-eyebrow">
-              <CheckCircle2 size={14} />
-              <span>{isRegister ? t('login_register') : t('login_signin')}</span>
-            </div>
-            <h2 className="login-form-title">{brandLabel}</h2>
-          </div>
+        <form className="login-form" onSubmit={onSubmit}>
+          <label className="login-field">
+            <span className="field-label">{t('login_identifier')}</span>
+            <small className="field-hint">{t('login_identifier_hint')}</small>
+            <input
+              type="text"
+              className="field-input"
+              placeholder={t('login_identifier_ph')}
+              autoComplete="username"
+              inputMode="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              aria-label={t('login_identifier')}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+            />
+          </label>
 
-          <form className="login-form" onSubmit={onSubmit}>
+          <label className="login-field">
+            <span className="field-label">{t('login_password')}</span>
+            <div className="field-input field-input-with-icon">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="field-input-inner"
+                placeholder={t('login_password_ph')}
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                aria-label={t('login_password')}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="field-icon-btn"
+                aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
+                aria-pressed={showPassword}
+                title={showPassword ? t('login_hide_password') : t('login_show_password')}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                👁
+              </button>
+            </div>
+          </label>
+
+          {isRegister ? (
             <label className="login-field">
-              <span className="field-label">{t('login_identifier')}</span>
-              <small className="field-hint">{t('login_identifier_hint')}</small>
+              <span className="field-label">{t('login_invite')}</span>
               <input
                 type="text"
                 className="field-input"
-                placeholder={t('login_identifier_ph')}
-                autoComplete="username"
-                inputMode="text"
-                autoCapitalize="none"
-                autoCorrect="off"
-                aria-label={t('login_identifier')}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder={t('login_invite_ph')}
+                autoComplete="off"
+                aria-label={t('login_invite')}
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
               />
             </label>
+          ) : null}
 
-            <label className="login-field">
-              <span className="field-label">{t('login_password')}</span>
-              <div className="field-input field-input-with-icon">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="field-input-inner"
-                  placeholder={t('login_password_ph')}
-                  autoComplete={isRegister ? 'new-password' : 'current-password'}
-                  aria-label={t('login_password')}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="field-icon-btn"
-                  aria-label={showPassword ? t('login_hide_password') : t('login_show_password')}
-                  aria-pressed={showPassword}
-                  title={showPassword ? t('login_hide_password') : t('login_show_password')}
-                  onClick={() => setShowPassword((v) => !v)}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </label>
+          {error ? <div className="login-error">{error}</div> : null}
+          {successMsg ? <div className="login-success">{successMsg}</div> : null}
 
-            {isRegister ? (
-              <label className="login-field">
-                <span className="field-label">{t('login_invite')}</span>
-                <input
-                  type="text"
-                  className="field-input"
-                  placeholder={t('login_invite_ph')}
-                  autoComplete="off"
-                  aria-label={t('login_invite')}
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                />
-              </label>
-            ) : null}
+          <button type="submit" className="login-submit" disabled={loading}>
+            {loading
+              ? isRegister
+                ? t('login_register_loading')
+                : t('login_signin_loading')
+              : isRegister
+                ? t('login_register')
+                : t('login_signin')}
+          </button>
+          <p className="login-primary-hint">{t('login_primary_action_hint')}</p>
 
-            {error ? <div className="login-error">{error}</div> : null}
-            {successMsg ? <div className="login-success">{successMsg}</div> : null}
-
-            <button type="submit" className="login-submit" disabled={loading}>
-              {loading
-                ? isRegister
-                  ? t('login_register_loading')
-                  : t('login_signin_loading')
-                : isRegister
-                  ? t('login_register')
-                  : t('login_signin')}
-            </button>
-            <p className="login-primary-hint">{t('login_primary_action_hint')}</p>
-
-            <div className="login-footer-links">
-              {!isRegister ? (
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={() => {
-                    setRecoveryError(null)
-                    setRecoverySuccess(null)
-                    setShowRecoveryRequest((v) => !v)
-                  }}
-                >
-                  {showRecoveryRequest ? t('login_recovery_request_close') : t('login_recovery_request_open')}
-                </button>
-              ) : null}
+          <div className="login-footer-links">
+            {!isRegister ? (
               <button
                 type="button"
                 className="link-btn"
                 onClick={() => {
-                  setError(null)
-                  setSuccessMsg(null)
                   setRecoveryError(null)
                   setRecoverySuccess(null)
-                  setShowRecoveryRequest(false)
-                  setIsRegister((v) => !v)
+                  setShowRecoveryRequest((v) => !v)
                 }}
               >
-                {isRegister ? t('login_have_account') : t('login_create_account')}
+                {showRecoveryRequest ? t('login_recovery_request_close') : t('login_recovery_request_open')}
               </button>
-            </div>
-
-            {!isRegister && showRecoveryRequest ? (
-              <div className="login-recovery-panel glass-panel-soft mt-3 rounded-xl p-3">
-                <label className="login-field">
-                  <span className="field-label">{t('login_recovery_request_label')}</span>
-                  <small className="field-hint">{t('login_recovery_request_hint')}</small>
-                  <input
-                    type="text"
-                    className="field-input"
-                    placeholder={t('login_recovery_request_ph')}
-                    autoComplete="off"
-                    inputMode="text"
-                    autoCapitalize="characters"
-                    aria-label={t('login_recovery_request_label')}
-                    value={recoveryCode}
-                    onChange={(e) => setRecoveryCode(e.target.value)}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="login-submit mt-2"
-                  disabled={recoveryLoading}
-                  onClick={onRecoveryRequestSubmit}
-                >
-                  {recoveryLoading ? t('login_recovery_request_loading') : t('login_recovery_request_submit')}
-                </button>
-                {recoveryError ? <div className="login-error mt-2">{recoveryError}</div> : null}
-                {recoverySuccess ? <div className="login-success mt-2">{recoverySuccess}</div> : null}
-              </div>
             ) : null}
-          </form>
-        </div>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setError(null)
+                setSuccessMsg(null)
+                setRecoveryError(null)
+                setRecoverySuccess(null)
+                setShowRecoveryRequest(false)
+                setIsRegister((v) => !v)
+              }}
+            >
+              {isRegister ? t('login_have_account') : t('login_create_account')}
+            </button>
+          </div>
+
+          {!isRegister && showRecoveryRequest ? (
+            <div className="login-recovery-panel glass-panel-soft mt-3 rounded-xl p-3">
+              <label className="login-field">
+                <span className="field-label">{t('login_recovery_request_label')}</span>
+                <small className="field-hint">{t('login_recovery_request_hint')}</small>
+                <input
+                  type="text"
+                  className="field-input"
+                  placeholder={t('login_recovery_request_ph')}
+                  autoComplete="off"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  aria-label={t('login_recovery_request_label')}
+                  value={recoveryCode}
+                  onChange={(e) => setRecoveryCode(e.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="login-submit mt-2"
+                disabled={recoveryLoading}
+                onClick={onRecoveryRequestSubmit}
+              >
+                {recoveryLoading ? t('login_recovery_request_loading') : t('login_recovery_request_submit')}
+              </button>
+              {recoveryError ? <div className="login-error mt-2">{recoveryError}</div> : null}
+              {recoverySuccess ? <div className="login-success mt-2">{recoverySuccess}</div> : null}
+            </div>
+          ) : null}
+        </form>
       </div>
     </div>
   )
