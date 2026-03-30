@@ -152,35 +152,35 @@ export function Home() {
 
   return (
     <div className="page home-page">
-      <section className="mb-6">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
-          <div className="card overflow-hidden rounded-[28px] border border-brand-blue/20 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.2),transparent_28%),linear-gradient(135deg,rgba(6,13,24,0.96),rgba(10,18,32,0.92))] p-0 shadow-[0_22px_52px_rgba(2,8,20,0.38)]">
-            <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)] lg:p-6">
-              <div className="space-y-5">
+      <section className="home-overview mb-6">
+        <div className="home-overview-grid grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+          <div className="home-hero card overflow-hidden rounded-[28px] border border-brand-blue/20 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.2),transparent_28%),linear-gradient(135deg,rgba(6,13,24,0.96),rgba(10,18,32,0.92))] p-0 shadow-[0_22px_52px_rgba(2,8,20,0.38)]">
+            <div className="home-hero-grid grid gap-5 p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)] lg:p-6">
+              <div className="home-hero-copy space-y-5">
                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
                   <BadgeCheck size={14} />
                   <span>{headerCopy.status}</span>
                 </div>
-                <div className="space-y-3">
-                  <h1 className="text-3xl font-black leading-tight text-white lg:text-5xl">{headerCopy.title}</h1>
-                  <p className="max-w-2xl text-sm leading-7 text-slate-300 lg:text-[15px]">{headerCopy.subtitle}</p>
+                <div className="home-hero-headline space-y-3">
+                  <h1 className="home-hero-title text-3xl font-black leading-tight text-white lg:text-5xl">{headerCopy.title}</h1>
+                  <p className="home-hero-subtitle max-w-2xl text-sm leading-7 text-slate-300 lg:text-[15px]">{headerCopy.subtitle}</p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                <div className="home-hero-stats grid gap-3 sm:grid-cols-3">
+                  <div className="home-hero-stat rounded-2xl border border-white/10 bg-white/5 p-3">
                     <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
                       <ShieldCheck size={14} />
                       <span>{headerCopy.statProtection}</span>
                     </div>
                     <div className="mt-3 text-lg font-bold text-white">{headerCopy.statProtectionValue}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="home-hero-stat rounded-2xl border border-white/10 bg-white/5 p-3">
                     <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
                       <Radio size={14} />
                       <span>{headerCopy.statSync}</span>
                     </div>
                     <div className="mt-3 text-lg font-bold text-white">{headerCopy.statSyncValue}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="home-hero-stat rounded-2xl border border-white/10 bg-white/5 p-3">
                     <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
                       <Wallet2 size={14} />
                       <span>{headerCopy.statWallet}</span>
@@ -190,7 +190,7 @@ export function Home() {
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-[24px] border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+              <div className="home-balance-panel space-y-3 rounded-[24px] border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -205,8 +205,8 @@ export function Home() {
                   </span>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3">
+                <div className="home-balance-grid grid gap-3 sm:grid-cols-2">
+                  <div className="home-balance-tile rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3">
                     <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">{t('home_today_earnings')}</div>
                     <div className="mt-2 text-2xl font-bold text-white">+{dailyEarningsSummary.totalAmount.toFixed(2)}</div>
                     <div className="mt-2 text-[11px] leading-5 text-emerald-100/80">
@@ -215,14 +215,14 @@ export function Home() {
                       {dailyEarningsSummary.lockedAmount.toFixed(2)} {balance_info.currency} {headerCopy.locked}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3">
+                  <div className="home-balance-tile rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3">
                     <div className="text-[11px] uppercase tracking-[0.14em] text-amber-200">{headerCopy.fundingLabel}</div>
                     <div className="mt-2 text-2xl font-bold text-white">{formatVisibleAmount(walletSummary.mainBalance)}</div>
                     <div className="mt-2 text-[11px] leading-5 text-amber-100/80">{t('home_funding_hint')}</div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                <div className="home-operations-bar rounded-2xl border border-white/10 bg-black/20 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">{t('home_team_earnings')}</div>
@@ -238,8 +238,8 @@ export function Home() {
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="rounded-[28px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/12 via-app-card to-app-card p-4 shadow-[0_18px_42px_rgba(16,185,129,0.12)]">
+          <div className="home-side-stack space-y-4">
+            <div className="home-channel-card rounded-[28px] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/12 via-app-card to-app-card p-4 shadow-[0_18px_42px_rgba(16,185,129,0.12)]">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
@@ -260,7 +260,7 @@ export function Home() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-4">
+            <div className="home-market-card rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{t('home_most_traded')}</div>
@@ -294,16 +294,16 @@ export function Home() {
 
       <LeaderboardSection config={leaderboardConfig} />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white lg:text-2xl">{t('home_most_traded')}</h2>
+      <div className="home-lower-grid grid gap-6 lg:grid-cols-3">
+        <section className="home-market-table lg:col-span-2 space-y-4">
+          <div className="home-section-head flex items-center justify-between">
+            <h2 className="home-section-title text-xl font-bold text-white lg:text-2xl">{t('home_most_traded')}</h2>
             <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-app-muted">
               {usingFallback ? 'Fallback data' : '24h • Live'}
             </div>
           </div>
 
-          <div className="card overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-0">
+          <div className="home-market-surface card overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-0">
             <div className="table-card">
               <div className="table-head sticky top-0 z-10 bg-app-elevated">
                 <span className="text-xs uppercase tracking-wider">{t('home_pair')}</span>
@@ -352,7 +352,7 @@ export function Home() {
           </div>
         </section>
 
-        <div className="space-y-3 lg:col-span-1">
+        <div className="home-ad-column space-y-3 lg:col-span-1">
           <AdBanner items={ads} placement="home" className="my-0 lg:sticky lg:top-[110px]" />
         </div>
       </div>
