@@ -1696,23 +1696,33 @@ button {
   gap: 6px;
   margin-bottom: 10px;
   align-self: flex-start;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .login-lang-btn {
-  border: 1px solid #2a3550;
-  background: #0e1527;
-  color: #aeb7cb;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #9fabc2;
   border-radius: 999px;
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 11px;
   font-size: 11px;
   cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .login-lang-btn.active {
-  border-color: #39cf86;
-  color: #dcffe9;
-  background: rgba(0, 230, 118, 0.14);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #e7eefc;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.login-lang-btn:hover {
+  color: #d7deec;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .login-badge {
@@ -3314,15 +3324,15 @@ button:focus-visible,
 }
 
 .login-lang-btn {
-  border-color: var(--elite-border);
-  background: #252a33;
+  border-color: transparent;
+  background: transparent;
   color: var(--elite-muted);
 }
 
 .login-lang-btn.active {
-  border-color: rgba(0, 123, 255, 0.5);
-  color: #cfe7ff;
-  background: var(--elite-accent-soft);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #e8eef9;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .login-badge {
@@ -6462,6 +6472,7 @@ button:focus-visible,
   .login-lang-btn {
     flex: 1 1 0;
     min-height: 36px;
+    padding: 0 8px;
   }
 
   .login-premium-brand {
