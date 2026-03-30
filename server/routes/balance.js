@@ -16,7 +16,7 @@ import {
   createFirstDepositBonusReward,
   releaseEligibleRewardEntries,
 } from '../services/wallet-service.js'
-import { getWalletAccountsOverview } from '../services/wallet-ledger.js'
+import { getMainBalanceSources, getPendingEarningBalanceSources, getWalletAccountsOverview } from '../services/wallet-ledger.js'
 import {
   reconcileUserCurrency,
   reconcileAll,
@@ -40,14 +40,14 @@ const DEFAULT_BALANCE_RULES = {
   manualReview: true,
   withdrawalFeePercent: 0,
   minimumProfitToUnlock: 0,
-  defaultUnlockRatio: PRINCIPAL_UNLOCK_RATIO,
-  unlockRatioByLevel: { 0: PRINCIPAL_UNLOCK_RATIO, 1: PRINCIPAL_UNLOCK_RATIO, 2: PRINCIPAL_UNLOCK_RATIO, 3: PRINCIPAL_UNLOCK_RATIO, 4: PRINCIPAL_UNLOCK_RATIO, 5: PRINCIPAL_UNLOCK_RATIO },
+  defaultUnlockRatio: 1,
+  unlockRatioByLevel: { 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 },
   principalWithdrawalRule: {
     enabled: true,
     withdrawableRatio: PRINCIPAL_UNLOCK_RATIO,
-    clearProfitRestriction: true,
+    clearProfitRestriction: false,
     applyToAllVipLevels: true,
-    ownerApprovalRequired: true,
+    ownerApprovalRequired: false,
   },
 }
 
@@ -126,9 +126,9 @@ function normalizeRules(raw) {
       Number(principalRuleBase.withdrawableRatio),
       DEFAULT_BALANCE_RULES.principalWithdrawalRule.withdrawableRatio,
     ),
-    clearProfitRestriction: principalRuleBase.clearProfitRestriction !== false,
+    clearProfitRestriction: false,
     applyToAllVipLevels: principalRuleBase.applyToAllVipLevels !== false,
-    ownerApprovalRequired: principalRuleBase.ownerApprovalRequired !== false,
+    ownerApprovalRequired: false,
   }
   const map = base.unlockRatioByLevel && typeof base.unlockRatioByLevel === 'object' ? base.unlockRatioByLevel : {}
   const unlockRatioByLevel = { ...DEFAULT_BALANCE_RULES.unlockRatioByLevel }
@@ -141,16 +141,14 @@ function normalizeRules(raw) {
     Number.isFinite(minimumProfitToUnlock) && minimumProfitToUnlock >= 0
       ? Number(minimumProfitToUnlock.toFixed(8))
       : DEFAULT_BALANCE_RULES.minimumProfitToUnlock
-  const normalizedDefaultUnlockRatio = normalizeRatio(defaultUnlockRatio, DEFAULT_BALANCE_RULES.defaultUnlockRatio)
+  const normalizedDefaultUnlockRatio = DEFAULT_BALANCE_RULES.defaultUnlockRatio
   const effectiveDefaultUnlockRatio = principalWithdrawalRule.enabled
-    ? principalWithdrawalRule.withdrawableRatio
+    ? normalizedDefaultUnlockRatio
     : normalizedDefaultUnlockRatio
-  const effectiveUnlockRatioByLevel = principalWithdrawalRule.enabled && principalWithdrawalRule.applyToAllVipLevels
-    ? Object.keys(DEFAULT_BALANCE_RULES.unlockRatioByLevel).reduce((acc, key) => {
-        acc[key] = principalWithdrawalRule.withdrawableRatio
-        return acc
-      }, {})
-    : unlockRatioByLevel
+  const effectiveUnlockRatioByLevel = Object.keys(DEFAULT_BALANCE_RULES.unlockRatioByLevel).reduce((acc, key) => {
+    acc[key] = normalizedDefaultUnlockRatio
+    return acc
+  }, {})
   return {
     minDeposit: Number.isFinite(minDeposit) && minDeposit >= 0 ? Number(minDeposit.toFixed(8)) : DEFAULT_BALANCE_RULES.minDeposit,
     minWithdrawal: Number.isFinite(minWithdrawal) && minWithdrawal >= 0 ? Number(minWithdrawal.toFixed(8)) : DEFAULT_BALANCE_RULES.minWithdrawal,
@@ -281,9 +279,9 @@ function getPrincipalWithdrawalRuleConfig(rules) {
     enabled,
     withdrawableRatio: Number(withdrawableRatio.toFixed(4)),
     lockedRatio: Number(Math.max(0, 1 - withdrawableRatio).toFixed(4)),
-    clearProfitRestriction: enabled && raw?.clearProfitRestriction !== false,
+    clearProfitRestriction: false,
     applyToAllVipLevels: raw?.applyToAllVipLevels !== false,
-    ownerApprovalRequired: enabled && raw?.ownerApprovalRequired === true,
+    ownerApprovalRequired: false,
   }
 }
 
@@ -327,13 +325,14 @@ async function getEffectiveUnlockProfile(db, userId, currency, rules) {
 
 async function createPrincipalLock(db, payload) {
   if (payload.forceUnlockPrincipal) return
+  const basePrincipalAmount = Number(payload.principalAmount || 0)
   const lockedPrincipalAmount = Number(
-    (Number(payload.principalAmount || 0) * Number(payload.principalLockedRatio ?? 1)).toFixed(8),
+    (basePrincipalAmount * Number(payload.principalLockedRatio ?? 1)).toFixed(8),
   )
   if (lockedPrincipalAmount <= 0) return
-  const requiredProfitByRatio = payload.ownerApprovalRequired === true || payload.clearProfitRestriction
+  const requiredProfitByRatio = payload.clearProfitRestriction
     ? 0
-    : Number((lockedPrincipalAmount * Number(payload.unlockRatio || 0)).toFixed(8))
+    : Number((basePrincipalAmount * Number(payload.unlockRatio || 0)).toFixed(8))
   const requiredProfitAmount = Number(Math.max(requiredProfitByRatio, Number(payload.minimumProfitToUnlock || 0)).toFixed(8))
   await run(
     db,
@@ -525,7 +524,7 @@ async function reapplyPrincipalLocksForUser(db, userId, currency, rules = null) 
     }
     const lockedPrincipalAmount = Number((basePrincipalAmount * Number(profile.principalLockedRatio ?? 1)).toFixed(8))
     const requiredProfitAmount = calculateRequiredProfitAmount(
-      lockedPrincipalAmount,
+      basePrincipalAmount,
       profile.unlockRatio,
       profile.clearProfitRestriction ? 0 : profile.minimumProfitToUnlock,
     )
@@ -1143,27 +1142,49 @@ async function getDailyWithdrawalRequestedAmount(db, userId, currency) {
 
 async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
   const safeRules = rules || (await getRules(db))
-  const systemMainBalance = await getMainBalanceBySource(db, userId, currency, 'system')
-  const balance = await getBalanceAmount(db, userId, currency)
+  const normalizedCurrency = normalizeCurrency(currency || 'USDT')
+  const [mainSources, pendingSources, balance, profile, withdrawalPolicy, lockRows] = await Promise.all([
+    getMainBalanceSources(db, userId, normalizedCurrency),
+    getPendingEarningBalanceSources(db, userId, normalizedCurrency),
+    getBalanceAmount(db, userId, normalizedCurrency),
+    getEffectiveUnlockProfile(db, userId, normalizedCurrency, safeRules),
+    getEffectiveWithdrawalPolicy(db, userId),
+    all(
+      db,
+      `SELECT id, principal_amount, required_profit_amount
+       FROM user_principal_locks
+       WHERE user_id = ? AND currency = ? AND lock_status = 'locked'
+       ORDER BY id ASC`,
+      [userId, normalizedCurrency],
+    ),
+  ])
+  const mainBalanceMap = new Map(
+    (mainSources || []).map((row) => [String(row.sourceType || 'system').trim().toLowerCase(), Number(row.balance || 0)]),
+  )
+  const pendingEarningBalance = Number(
+    (pendingSources || []).reduce((acc, row) => acc + Number(row.balance || 0), 0).toFixed(8),
+  )
+  const systemMainBalance = Number(mainBalanceMap.get('system') || 0)
+  const taskMainBalance = Number(mainBalanceMap.get('tasks') || 0)
+  const referralMainBalance = Number(mainBalanceMap.get('referrals') || 0)
   const nonSystemMainBalance = Number(Math.max(0, balance - systemMainBalance).toFixed(8))
-  const profile = await getEffectiveUnlockProfile(db, userId, currency, safeRules)
-  const withdrawalPolicy = await getEffectiveWithdrawalPolicy(db, userId)
-  const lockRows = await all(
-    db,
-    `SELECT id, principal_amount, required_profit_amount
-     FROM user_principal_locks
-     WHERE user_id = ? AND currency = ? AND lock_status = 'locked'
-     ORDER BY id ASC`,
-    [userId, currency],
+  const nonWithdrawableEarningBalance = Number(
+    (mainSources || [])
+      .filter((row) => !['system', 'tasks', 'referrals'].includes(String(row.sourceType || '').trim().toLowerCase()))
+      .reduce((acc, row) => acc + Number(row.balance || 0), 0)
+      .toFixed(8),
   )
   const principalLocked = Number(lockRows.reduce((acc, row) => acc + Number(row.principal_amount || 0), 0).toFixed(8))
   const unlockTargetProfit = Number(lockRows.reduce((acc, row) => acc + Number(row.required_profit_amount || 0), 0).toFixed(8))
-  const earnedProfit = Number((Math.max(0, systemMainBalance - principalLocked) + nonSystemMainBalance).toFixed(8))
-  const requiresOwnerApproval = profile.ownerApprovalRequired === true && principalLocked > 0
+  const earnedProfit = Number(
+    (Math.max(0, systemMainBalance - principalLocked) + nonSystemMainBalance).toFixed(8),
+  )
+  const requiresOwnerApproval = false
   const isPrincipalUnlocked =
     profile.forceUnlockPrincipal ||
     principalLocked <= 0 ||
-    (!requiresOwnerApproval && unlockTargetProfit > 0 && earnedProfit >= unlockTargetProfit)
+    unlockTargetProfit <= 0 ||
+    earnedProfit >= unlockTargetProfit
   const lockedSystemBalance = Number(
     (
       isPrincipalUnlocked
@@ -1172,8 +1193,11 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     ).toFixed(8),
   )
   const withdrawableSystemBalance = Number(Math.max(0, systemMainBalance - lockedSystemBalance).toFixed(8))
-  const withdrawableMainBalance = Number(Math.min(balance, withdrawableSystemBalance + nonSystemMainBalance).toFixed(8))
-  const lockedMainBalance = Number(Math.min(balance, lockedSystemBalance).toFixed(8))
+  const withdrawableSourceBalance = Number(
+    (withdrawableSystemBalance + taskMainBalance + referralMainBalance).toFixed(8),
+  )
+  const withdrawableMainBalance = Number(Math.min(balance, withdrawableSourceBalance).toFixed(8))
+  const lockedMainBalance = Number(Math.min(balance, lockedSystemBalance + nonWithdrawableEarningBalance).toFixed(8))
   const todayRequestedAmount = await getDailyWithdrawalRequestedAmount(db, userId, currency)
   const dailyRemaining =
     withdrawalPolicy.dailyLimit > 0
@@ -1193,12 +1217,17 @@ async function calculateWithdrawalSummary(db, userId, currency, rules = null) {
     ).toFixed(2),
   )
   return {
-    currency,
+    currency: normalizedCurrency,
     current_balance: Number(balance.toFixed(8)),
     deposited_principal: principalLocked,
     locked_balance: lockedMainBalance,
     earned_profit: earnedProfit,
     withdrawable_balance: withdrawableBalance,
+    risk_locked_balance: lockedSystemBalance,
+    task_withdrawable_balance: taskMainBalance,
+    referral_withdrawable_balance: referralMainBalance,
+    restricted_earnings_balance: nonWithdrawableEarningBalance,
+    pending_earnings_balance: pendingEarningBalance,
     unlock_target_profit: unlockTargetProfit,
     remaining_profit_to_unlock: remainingProfitToUnlock,
     unlock_progress_pct: unlockProgressPct,
@@ -1227,16 +1256,7 @@ async function unlockAllPrincipalLocksIfEligible(db, userId, currency, rules = n
      WHERE user_id = ? AND currency = ? AND lock_status = 'locked'`,
     [userId, currency],
   )
-  return {
-    ...summary,
-    deposited_principal: 0,
-    locked_balance: 0,
-    withdrawable_balance: Number(summary.current_balance || 0),
-    unlock_target_profit: 0,
-    remaining_profit_to_unlock: 0,
-    unlock_progress_pct: 100,
-    is_principal_unlocked: true,
-  }
+  return calculateWithdrawalSummary(db, userId, currency, rules)
 }
 
 function buildLockBreakdown(locks, earnedProfitPool, options = {}) {
@@ -1285,10 +1305,10 @@ function buildUserWithdrawalSummary(summary) {
     processing_hours_max: Number(summary?.processing_hours_max || 0),
     status_label: isUnlocked ? 'available' : 'partially_restricted',
     status_message: isUnlocked
-      ? 'السحب متاح وفق الرصيد القابل للسحب الظاهر في حسابك.'
+      ? 'السحب متاح من الأرباح القابلة للسحب ومن الرصيد الرئيسي غير المقيد بإدارة المخاطر.'
       : requiresOwnerApproval
-        ? 'جزء من أصل الإيداع مقيد بمراجعة إدارة المخاطر ويتطلب اعتمادًا إداريًا لفكه.'
-        : 'قد يبقى جزء من أصل الإيداع محميًا مؤقتًا حسب سياسة الحساب، ويتم تحديث المتاح للسحب تلقائيًا.',
+        ? 'جزء من الرصيد الرئيسي مقيد تحت إدارة المخاطر ويحتاج مراجعة إدارية قبل فك القيد.'
+        : 'السحب للمستخدم محصور حاليًا في أرباح الصفقات الاستراتيجية والإحالات المؤكدة، أما الرصيد المقيد فيفك عندما تعادل الأرباح حجم الرصيد الرئيسي المقيد.',
   }
 }
 
@@ -1297,13 +1317,13 @@ function buildUserPrincipalLockItems(items, options = {}) {
   return (items || []).map((row) => ({
     id: Number(row.id || 0),
     status_label: String(row.lock_status || '') === 'unlocked' ? 'available' : 'protected',
-    display_title: 'جزء محمي من أصل الإيداع',
+    display_title: 'رصيد مقيد بإدارة المخاطر',
     display_message:
       String(row.lock_status || '') === 'unlocked'
-        ? 'هذا الجزء أصبح متاحًا ضمن الرصيد القابل للسحب.'
+        ? 'تم فك القيد عن هذا الجزء وأصبح داخل الرصيد القابل للسحب.'
         : requiresOwnerApproval
-          ? 'هذا الجزء مقيد بمراجعة إدارة المخاطر ويتطلب اعتمادًا إداريًا لفكه.'
-          : 'هذا الجزء يخضع لسياسة السحب الحالية وسيفتح تلقائيًا عند تحقق الأهلية.',
+          ? 'هذا الجزء مقيد بمراجعة إدارة المخاطر ويحتاج إلى موافقة إدارية لفك القيد.'
+          : 'هذا الجزء محمي للسحب المباشر، ويفك تلقائيًا عندما تصل أرباحك المحتسبة إلى حجم الرصيد الرئيسي المقيد.',
     lock_status: String(row.lock_status || ''),
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -1890,6 +1910,7 @@ export function createBalanceRouter(db) {
             referenceId: requestId,
             idempotencyKey: `withdrawal_auto_${requestId}`,
             note: `Auto-approved withdrawal request #${requestId}`,
+            allowedSourceTypes: ['system', 'tasks', 'referrals'],
           })
           await run(
             tx,
@@ -2246,6 +2267,7 @@ export function createBalanceRouter(db) {
           idempotencyKey: `withdrawal_review_${requestId}`,
           createdBy: req.user.id,
           note: adminNote || `Approved withdrawal request #${requestId}`,
+          allowedSourceTypes: ['system', 'tasks', 'referrals'],
         })
         logAdminFinancialAction({
           adminUserId: req.user.id,

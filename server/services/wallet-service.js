@@ -24,6 +24,7 @@ const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits']
 const MAX_REWARD_LOCK_HOURS = 24 * 365
 const TASK_REWARD_WITHDRAW_LOCK_HOURS = 24 * 7
 const STRATEGY_TRADE_SOURCE_PRIORITY = ['referrals', 'tasks', 'deposits', 'mining', 'system']
+const USER_WITHDRAW_SOURCE_PRIORITY = ['referrals', 'tasks', 'system']
 
 function normalizeMiningTransferAmount(value) {
   const amount = Number(value)
@@ -68,17 +69,72 @@ function normalizeRewardSourceLockHours(raw) {
 
 export async function getRewardPayoutConfig(db) {
   const row = await get(db, `SELECT value FROM settings WHERE key = 'reward_payout_config' LIMIT 1`)
-  if (!row?.value) return { defaultMode: 'withdrawable', sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable' }, defaultLockHours: 0, sourceLockHours: {} }
+  if (!row?.value) {
+    return {
+      defaultMode: 'bonus_locked',
+      sourceModes: {
+        tasks: 'withdrawable',
+        referrals: 'withdrawable',
+        deposits: 'bonus_locked',
+        mining: 'bonus_locked',
+      },
+      defaultLockHours: 0,
+      sourceLockHours: {
+        tasks: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+      },
+    }
+  }
   try {
     const parsed = JSON.parse(String(row.value))
     return {
-      defaultMode: normalizeRewardPayoutMode(parsed?.defaultMode),
-      sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable', ...normalizeRewardSourceModes(parsed?.sourceModes) },
+      defaultMode: normalizeRewardPayoutMode(parsed?.defaultMode || 'bonus_locked'),
+      sourceModes: {
+        tasks: 'withdrawable',
+        referrals: 'withdrawable',
+        deposits: 'bonus_locked',
+        mining: 'bonus_locked',
+        ...normalizeRewardSourceModes(parsed?.sourceModes),
+      },
       defaultLockHours: normalizeRewardLockHours(parsed?.defaultLockHours, 0),
-      sourceLockHours: normalizeRewardSourceLockHours(parsed?.sourceLockHours),
+      sourceLockHours: {
+        tasks: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+        ...normalizeRewardSourceLockHours(parsed?.sourceLockHours),
+      },
     }
   } catch {
-    return { defaultMode: 'withdrawable', sourceModes: { referrals: 'withdrawable', deposits: 'withdrawable' }, defaultLockHours: 0, sourceLockHours: {} }
+    return {
+      defaultMode: 'bonus_locked',
+      sourceModes: {
+        tasks: 'withdrawable',
+        referrals: 'withdrawable',
+        deposits: 'bonus_locked',
+        mining: 'bonus_locked',
+      },
+      defaultLockHours: 0,
+      sourceLockHours: {
+        tasks: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+      },
+    }
+  }
+}
+
+function getMandatoryRewardPayoutPolicy(sourceType = 'all') {
+  const normalizedSourceType = normalizeRewardSourceType(sourceType, 'all')
+  if (normalizedSourceType === 'tasks') {
+    return {
+      payoutMode: 'withdrawable',
+      lockHours: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+    }
+  }
+  if (normalizedSourceType === 'referrals') {
+    return {
+      payoutMode: 'withdrawable',
+      lockHours: 0,
+    }
+  }
+  return {
+    payoutMode: 'bonus_locked',
+    lockHours: 0,
   }
 }
 
@@ -122,6 +178,13 @@ export async function getEffectiveRewardPayoutMode(db, userId, sourceType = 'all
 
 export async function getEffectiveRewardPayoutPolicy(db, userId, sourceType = 'all') {
   const normalizedSourceType = normalizeRewardSourceType(sourceType, 'all')
+  const mandatoryPolicy = getMandatoryRewardPayoutPolicy(normalizedSourceType)
+  if (mandatoryPolicy) {
+    return {
+      payoutMode: normalizeRewardPayoutMode(mandatoryPolicy.payoutMode),
+      lockHours: normalizeRewardLockHours(mandatoryPolicy.lockHours, 0),
+    }
+  }
   const [config, overrideSet] = await Promise.all([
     getRewardPayoutConfig(db),
     getRewardPayoutOverrideSet(db, userId, normalizedSourceType),
@@ -444,6 +507,11 @@ function getStrategyTradeSourceWeight(sourceType) {
   return idx >= 0 ? idx : STRATEGY_TRADE_SOURCE_PRIORITY.length + 1
 }
 
+function getUserWithdrawSourceWeight(sourceType) {
+  const idx = USER_WITHDRAW_SOURCE_PRIORITY.indexOf(String(sourceType || '').trim().toLowerCase())
+  return idx >= 0 ? idx : USER_WITHDRAW_SOURCE_PRIORITY.length + 1
+}
+
 async function getPendingStrategyTradeEarningRows(db, userId, currency) {
   const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
   const rows = await all(
@@ -652,10 +720,24 @@ export async function createWithdrawal(db, opts) {
     referenceId,
     idempotencyKey,
     createdBy,
+    allowedSourceTypes = null,
   } = opts
   if (!userId || !Number.isFinite(amount) || amount <= 0) throw new Error('INVALID_INPUT')
   const normalizedCurrency = String(currency || 'USDT').trim().toUpperCase()
+  const allowedSourceTypeSet = Array.isArray(allowedSourceTypes) && allowedSourceTypes.length > 0
+    ? new Set(
+        allowedSourceTypes
+          .map((item) => String(item || '').trim().toLowerCase())
+          .filter(Boolean),
+      )
+    : null
   const sourceBalances = sortBalancesForStrategyTrade(await getMainBalanceSources(db, userId, normalizedCurrency))
+    .filter((row) => !allowedSourceTypeSet || allowedSourceTypeSet.has(row.sourceType))
+    .sort((left, right) => {
+      const weightDiff = getUserWithdrawSourceWeight(left.sourceType) - getUserWithdrawSourceWeight(right.sourceType)
+      if (weightDiff !== 0) return weightDiff
+      return right.balance - left.balance
+    })
   const balancesBySource = new Map(sourceBalances.map((row) => [row.sourceType, Number(row.balance || 0)]))
   const totalBalance = Number(sourceBalances.reduce((acc, row) => acc + Number(row.balance || 0), 0).toFixed(8))
   if (totalBalance < amount) throw new Error('INSUFFICIENT_BALANCE')

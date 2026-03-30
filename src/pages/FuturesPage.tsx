@@ -69,7 +69,7 @@ export function FuturesPage() {
   const [nowTick, setNowTick] = useState(() => Date.now())
   const [tradeDisplayConfig, setTradeDisplayConfig] = useState<StrategyTradeDisplayConfig>({
     preview_notice: 'سيتم فتح الصفقة الاستراتيجية بعد التأكيد وفق آلية المعالجة الداخلية للنظام.',
-    active_notice: 'تتم إعادة أصل الصفقة مع الربح تلقائيًا بعد اكتمال المعالجة الداخلية.',
+    active_notice: 'يتم حجز قيمة الصفقة من إجمالي الأصول، بما في ذلك الرصيد المقيد بإدارة المخاطر، ويعود أصل الصفقة مع الربح عند الإغلاق.',
     settled_notice: 'تمت تسوية الصفقة الاستراتيجية وإرجاع الأصل مع الربح.',
   })
 
@@ -280,7 +280,7 @@ export function FuturesPage() {
         if (res.featureType === 'trial_trade') {
           setMessage({
             type: 'success',
-            text: `تم فتح الصفقة الاستراتيجية بنجاح. تم خصم ${Number(res.stakeAmount || 0).toFixed(2)} USDT بنسبة ${Number(res.purchasePercent || 0).toFixed(0)}% من إجمالي الأصول المحتسبة للشراء، وتشمل المكتسبات القابلة وغير القابلة للسحب بعد استثناء المقيد فقط، وسيعود أصل الصفقة كاملًا عند الإغلاق. ${tradeDisplayConfig.active_notice}`,
+            text: `\u062a\u0645 \u0641\u062a\u062d \u0627\u0644\u0635\u0641\u0642\u0629 \u0627\u0644\u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629 \u0628\u0646\u062c\u0627\u062d. \u062a\u0645 \u062a\u0645\u0648\u064a\u0644 ${Number(res.stakeAmount || 0).toFixed(2)} USDT \u0628\u0646\u0633\u0628\u0629 ${Number(res.purchasePercent || 0).toFixed(0)}% \u0645\u0646 \u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0623\u0635\u0648\u0644 \u0627\u0644\u0645\u062a\u0627\u062d\u0629 \u0644\u0644\u062a\u0645\u0648\u064a\u0644\u060c \u0628\u0645\u0627 \u064a\u0634\u0645\u0644 \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0642\u064a\u062f \u0648\u0627\u0644\u0645\u0643\u062a\u0633\u0628\u0627\u062a. ${tradeDisplayConfig.active_notice}`, 
           })
         } else {
         setMessage({
@@ -725,8 +725,8 @@ export function FuturesPage() {
                 <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.pendingEarnings || 0).toFixed(2)} USDT</div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">المقيد المستثنى</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.lockedExcludedAmount || 0).toFixed(2)} USDT</div>
+                <div className="text-[11px] text-app-muted">{'\u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0642\u064a\u062f \u0627\u0644\u0645\u062a\u0627\u062d \u0644\u0644\u062a\u0645\u0648\u064a\u0644'}</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.lockedExcludedAmount || 0).toFixed(2)} USDT</div>
               </div>
               <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
                 <div className="text-[11px] text-app-muted">نسبة الشراء</div>

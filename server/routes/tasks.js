@@ -92,7 +92,7 @@ async function getStrategyTradePurchaseBase(db, userId, currency = 'USDT') {
   const totalAssets = Number(funding?.totalFundingAssets || 0)
   const mainBalance = Number(funding?.mainBalance || 0)
   const pendingEarnings = Number(funding?.pendingEarnings || 0)
-  const eligibleAssets = Number(Math.max(0, totalAssets - lockedAmount).toFixed(8))
+  const eligibleAssets = Number(Math.max(0, totalAssets).toFixed(8))
   return {
     currency: normalizedCurrency,
     totalAssets: Number(totalAssets.toFixed(8)),
