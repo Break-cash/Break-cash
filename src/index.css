@@ -6401,25 +6401,25 @@ button:focus-visible,
   }
 
   .login-shell {
-    gap: 8px;
-    padding: 8px;
-    border-radius: 20px;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 22px;
   }
 
   .login-brand-panel {
-    order: 1;
-    gap: 8px;
-    padding: 6px 6px 2px;
-    border-radius: 16px;
-    background: linear-gradient(180deg, rgba(17, 24, 39, 0.34), rgba(17, 24, 39, 0.12));
-    border: 1px solid rgba(255, 255, 255, 0.035);
+    order: 2;
+    gap: 12px;
+    padding: 4px;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
   }
 
   .login-card {
-    order: 2;
+    order: 1;
     padding: 16px 14px;
     border-radius: 20px;
-    margin-top: 0;
+    margin-top: 2px;
   }
 
   .login-form-header {
@@ -6431,7 +6431,7 @@ button:focus-visible,
   }
 
   .login-card-topline {
-    gap: 6px;
+    gap: 10px;
   }
 
   .login-card-kicker {
@@ -6441,15 +6441,15 @@ button:focus-visible,
   }
 
   .login-title {
-    font-size: 1.1rem;
+    font-size: 1.25rem;
     line-height: 1.25;
   }
 
   .login-subtitle {
-    font-size: 0.8rem;
-    line-height: 1.55;
+    font-size: 0.9rem;
+    line-height: 1.65;
     margin: 0;
-    opacity: 0.86;
+    opacity: 1;
   }
 
   .login-lang-switch {
@@ -6465,60 +6465,60 @@ button:focus-visible,
   }
 
   .login-premium-brand {
-    width: min(100%, 154px);
-    margin: 0 auto;
+    width: min(100%, 188px);
+    margin: 0 auto 2px;
   }
 
   .login-premium-brand-shell {
-    width: 78px;
-    height: 78px;
+    width: 96px;
+    height: 96px;
   }
 
   .login-premium-logo-wrap {
-    width: 58px;
-    height: 58px;
+    width: 72px;
+    height: 72px;
   }
 
   .login-premium-brand.variant-b .login-premium-brand-shell {
-    width: min(100%, 148px);
-    height: 62px;
-    border-radius: 14px;
+    width: min(100%, 176px);
+    height: 76px;
+    border-radius: 16px;
   }
 
   .login-premium-brand.variant-b .login-premium-logo-wrap {
-    width: 46px;
-    height: 46px;
-    margin-inline-end: 32px;
-    border-radius: 12px;
+    width: 58px;
+    height: 58px;
+    margin-inline-end: 42px;
+    border-radius: 14px;
   }
 
   .login-premium-brand.variant-b .login-premium-brand-shell::after {
-    inset-inline-end: 10px;
-    font-size: 8px;
-    letter-spacing: 0.08em;
+    inset-inline-end: 14px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
   }
 
   .login-trust-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 0;
+    gap: 8px;
+    margin-top: 2px;
   }
 
   .login-trust-stat {
-    padding: 8px 6px;
-    border-radius: 12px;
+    padding: 10px 8px;
+    border-radius: 14px;
     text-align: center;
-    background: rgba(255, 255, 255, 0.03);
-    border-color: rgba(255, 255, 255, 0.05);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    border-color: rgba(255, 255, 255, 0.08);
   }
 
   .login-trust-stat strong {
-    font-size: 0.8rem;
+    font-size: 0.88rem;
   }
 
   .login-trust-stat span {
-    font-size: 0.62rem;
-    line-height: 1.25;
+    font-size: 0.68rem;
+    line-height: 1.35;
   }
 
   .login-trust-list {
@@ -6548,11 +6548,11 @@ button:focus-visible,
 
 @media (max-width: 420px) {
   .login-shell {
-    padding: 7px;
+    padding: 8px;
   }
 
   .login-brand-panel {
-    padding: 5px 5px 1px;
+    padding: 4px;
   }
 
   .login-card {
@@ -6564,28 +6564,28 @@ button:focus-visible,
   }
 
   .login-premium-brand {
-    width: min(100%, 138px);
+    width: min(100%, 160px);
   }
 
   .login-premium-brand-shell {
-    width: 72px;
-    height: 72px;
+    width: 84px;
+    height: 84px;
   }
 
   .login-premium-logo-wrap {
-    width: 52px;
-    height: 52px;
+    width: 62px;
+    height: 62px;
   }
 
   .login-premium-brand.variant-b .login-premium-brand-shell {
-    width: min(100%, 138px);
-    height: 58px;
+    width: min(100%, 160px);
+    height: 68px;
   }
 
   .login-premium-brand.variant-b .login-premium-logo-wrap {
-    width: 42px;
-    height: 42px;
-    margin-inline-end: 28px;
+    width: 52px;
+    height: 52px;
+    margin-inline-end: 36px;
   }
 }
 
