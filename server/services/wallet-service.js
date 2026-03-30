@@ -22,7 +22,8 @@ export { getMainBalance, getTotalMainBalance, getWalletAccountsOverview, getWall
 
 const REWARD_SOURCE_TYPES = new Set(['mining', 'tasks', 'referrals', 'deposits'])
 const MAX_REWARD_LOCK_HOURS = 24 * 365
-const TASK_REWARD_WITHDRAW_LOCK_HOURS = 24 * 7
+const TASK_REWARD_WITHDRAW_LOCK_HOURS = 0
+const COMPENSATION_REWARD_LOCK_HOURS = 24 * 7
 const STRATEGY_TRADE_SOURCE_PRIORITY = ['referrals', 'tasks', 'deposits', 'mining', 'system']
 const USER_WITHDRAW_SOURCE_PRIORITY = ['referrals', 'tasks', 'system']
 
@@ -1131,12 +1132,12 @@ export async function createLockedCompensationReward(db, opts) {
       [sourceType, referenceType, referenceId],
     ))?.id
   if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
-  const lockedUntil = buildLockedUntilIso(TASK_REWARD_WITHDRAW_LOCK_HOURS)
+  const lockedUntil = buildLockedUntilIso(COMPENSATION_REWARD_LOCK_HOURS)
   await updatePendingEarningPolicy(db, entryId, { payoutMode: 'withdrawable', lockedUntil })
   return {
     earningEntryId: entryId,
     payoutMode: 'withdrawable',
-    lockHours: TASK_REWARD_WITHDRAW_LOCK_HOURS,
+    lockHours: COMPENSATION_REWARD_LOCK_HOURS,
     lockedUntil,
     balanceAfter: await getTotalMainBalance(db, userId, currency),
   }

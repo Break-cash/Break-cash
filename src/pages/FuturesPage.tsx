@@ -304,7 +304,7 @@ export function FuturesPage() {
       await refreshCodes()
       setMessage({
         type: 'success',
-        text: `${tradeDisplayConfig.settled_notice} تم إرجاع أصل الصفقة فورًا، بينما ربح الصفقة ${Number(res.profitAmount || 0).toFixed(2)} USDT يصبح قابلاً للسحب بتاريخ ${formatUnlockDate(res.profitLockedUntil)}.`,
+        text: `${tradeDisplayConfig.settled_notice} \u062a\u0645 \u0625\u0631\u062c\u0627\u0639 \u0623\u0635\u0644 \u0627\u0644\u0635\u0641\u0642\u0629 \u0641\u0648\u0631\u064b\u0627\u060c \u0648\u0623\u0635\u0628\u062d \u0631\u0628\u062d \u0627\u0644\u0635\u0641\u0642\u0629 ${Number(res.profitAmount || 0).toFixed(2)} USDT \u0642\u0627\u0628\u0644\u064b\u0627 \u0644\u0644\u0633\u062d\u0628 \u0641\u0648\u0631\u064b\u0627.`,
       })
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إغلاق الصفقة الاستراتيجية.' })
