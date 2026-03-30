@@ -31,6 +31,7 @@ import { backfillUploadedAssets } from './services/upload-backfill.js'
 import { migrateUploadReferences } from './services/upload-reference-migration.js'
 import { cleanupOldNotifications } from './services/notifications.js'
 import { backfillUserAvatarBlobs } from './services/user-avatars.js'
+import { reapplyRewardPoliciesToPendingEntries } from './services/wallet-service.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -186,6 +187,22 @@ async function bootstrap() {
   } catch (error) {
     if (SENTRY_DSN) Sentry.captureException(error)
     console.warn('[avatars] backfill failed', error instanceof Error ? error.message : String(error))
+  }
+  try {
+    const taskRewardRelease = await reapplyRewardPoliciesToPendingEntries(db, { sourceType: 'tasks' })
+    if (
+      taskRewardRelease.processedEntries > 0 ||
+      taskRewardRelease.releasedEntries > 0 ||
+      taskRewardRelease.lockedEntries > 0 ||
+      taskRewardRelease.bonusLockedEntries > 0
+    ) {
+      console.log(
+        `[tasks] reward policy sync processed=${taskRewardRelease.processedEntries} released=${taskRewardRelease.releasedEntries} releasedAmount=${taskRewardRelease.releasedAmount} locked=${taskRewardRelease.lockedEntries} bonusLocked=${taskRewardRelease.bonusLockedEntries}`,
+      )
+    }
+  } catch (error) {
+    if (SENTRY_DSN) Sentry.captureException(error)
+    console.warn('[tasks] reward policy sync failed', error instanceof Error ? error.message : String(error))
   }
 
   const strategyTradeSweepIntervalMs = Math.max(15000, Number(process.env.STRATEGY_TRADE_SWEEP_INTERVAL_MS || 30000))
