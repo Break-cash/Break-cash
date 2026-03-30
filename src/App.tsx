@@ -60,6 +60,9 @@ const AdminBalancesPage = lazy(() =>
 const AdminPermissionsPage = lazy(() =>
   import('./pages/admin/AdminPermissionsPage').then((m) => ({ default: m.AdminPermissionsPage })),
 )
+const AdminSupportPage = lazy(() =>
+  import('./pages/admin/AdminSupportPage').then((m) => ({ default: m.AdminSupportPage })),
+)
 const AdminDashboardPage = lazy(() =>
   import('./pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })),
 )
@@ -210,6 +213,7 @@ function AnimatedAuthenticatedRoutes({
   canManageInvites,
   canManageBalances,
   canManagePermissions,
+  canManageSupport,
   canViewReports,
   handleLogout,
   refreshCurrentUser,
@@ -219,6 +223,7 @@ function AnimatedAuthenticatedRoutes({
   canManageInvites: boolean
   canManageBalances: boolean
   canManagePermissions: boolean
+  canManageSupport: boolean
   canViewReports: boolean
   handleLogout: () => void
   refreshCurrentUser: () => Promise<void>
@@ -233,6 +238,7 @@ function AnimatedAuthenticatedRoutes({
       canManageInvites={canManageInvites}
       canManageBalances={canManageBalances}
       canManagePermissions={canManagePermissions}
+      canManageSupport={canManageSupport}
       canViewReports={canViewReports}
     >
       <Suspense fallback={<div className="login-wrapper">Loading...</div>}>
@@ -291,6 +297,10 @@ function AnimatedAuthenticatedRoutes({
               <Route
                 path="/admin/permissions"
                 element={canManagePermissions ? <AdminPermissionsPage /> : <Navigate to="/portfolio" replace />}
+              />
+              <Route
+                path="/admin/support"
+                element={canManageSupport ? <AdminSupportPage /> : <Navigate to="/portfolio" replace />}
               />
               <Route path="/owner/*" element={<OwnerGuard user={user} />}>
                 <Route index element={<Navigate to="/owner/operations" replace />} />
@@ -501,6 +511,10 @@ function App() {
     () => hasAnyGrantedPermission(['manage_permissions', 'staff_permissions.manage']),
     [hasAnyGrantedPermission],
   )
+  const canManageSupport = useMemo(
+    () => hasAnyGrantedPermission(['support.manage']),
+    [hasAnyGrantedPermission],
+  )
   const canViewReports = useMemo(
     () => hasAnyGrantedPermission(['view_reports', 'reports.view', 'dashboard.overview.view']),
     [hasAnyGrantedPermission],
@@ -626,6 +640,7 @@ function App() {
               canManageInvites={canManageInvites}
               canManageBalances={canManageBalances}
               canManagePermissions={!!canManagePermissions}
+              canManageSupport={canManageSupport}
               canViewReports={canViewReports}
               handleLogout={handleLogout}
               refreshCurrentUser={refreshCurrentUser}

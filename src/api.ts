@@ -143,6 +143,42 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   return body
 }
 
+export async function apiFormFetch(path: string, formData: FormData, init: RequestInit = {}) {
+  const headers = new Headers(init.headers)
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let res: Response
+  try {
+    res = await fetch(path, { ...init, method: init.method || 'POST', headers, body: formData })
+  } catch (error) {
+    Sentry.captureException(error)
+    emitApiErrorToast('NETWORK_ERROR', 'Network request failed.')
+    throw error
+  }
+  const contentType = res.headers.get('content-type') || ''
+  let body: unknown
+  try {
+    const text = await res.text()
+    body = contentType.includes('application/json') ? JSON.parse(text) : text
+  } catch (parseErr) {
+    console.error('[apiFormFetch] JSON parse failed:', path, parseErr)
+    Sentry.captureMessage(`apiFormFetch parse error at ${path}: ${res.status}`)
+    body = { error: 'REQUEST_FAILED' }
+  }
+
+  if (!res.ok) {
+    const code = resolveErrorCodeFromBody(body)
+    const msg = resolveErrorMessage(code, body)
+    if (res.status >= 500) {
+      Sentry.captureMessage(`API ${res.status} at ${path}: ${msg}`)
+    }
+    throw createApiError(code, body)
+  }
+
+  return body
+}
+
 export async function login(identifier: string, password: string) {
   return apiFetch('/api/auth/login', {
     method: 'POST',
@@ -1542,6 +1578,12 @@ export type SupportTicketItem = {
   subject: string
   message: string
   status: 'open' | 'in_progress' | 'resolved' | 'closed' | string
+  conversation_enabled?: boolean
+  conversation_approved_at?: string | null
+  user_archived_at?: string | null
+  latest_message_at?: string | null
+  archive_eligible_at?: string | null
+  can_user_archive?: boolean
   created_at: string
   updated_at?: string | null
   resolved_at?: string | null
@@ -1549,15 +1591,111 @@ export type SupportTicketItem = {
   email_delivery_error?: string | null
 }
 
+export type SupportMessageAttachment = {
+  id: number
+  file_url: string
+  mime_type?: string | null
+  original_name?: string | null
+  byte_size?: number
+  created_at?: string | null
+}
+
+export type SupportMessageItem = {
+  id: number
+  ticket_id: number
+  sender_user_id: number | null
+  sender_role: 'user' | 'support' | string
+  sender_display_name?: string | null
+  body: string
+  created_at: string
+  attachments: SupportMessageAttachment[]
+}
+
+export type SupportTicketDetail = SupportTicketItem & {
+  user_id: number
+  archive_eligible_at?: string | null
+  can_user_archive?: boolean
+  user?: {
+    id: number
+    display_name?: string | null
+    email?: string | null
+    phone?: string | null
+  }
+  messages: SupportMessageItem[]
+}
+
+export type SupportAdminTicketListItem = SupportTicketItem & {
+  user_id: number
+  display_name?: string | null
+  email?: string | null
+  phone?: string | null
+  messages_count?: number
+}
+
 export async function getMySupportTickets() {
   return apiFetch('/api/support/my') as Promise<{ items: SupportTicketItem[] }>
 }
 
-export async function createSupportTicket(payload: { subject: string; message: string }) {
-  return apiFetch('/api/support/create', {
+export async function getSupportTicketDetail(ticketId: number) {
+  return apiFetch(`/api/support/ticket/${ticketId}`) as Promise<{ item: SupportTicketDetail }>
+}
+
+export async function createSupportTicket(payload: { subject: string; message: string; attachments?: File[] }) {
+  const formData = new FormData()
+  formData.set('subject', payload.subject)
+  formData.set('message', payload.message)
+  for (const file of payload.attachments || []) {
+    formData.append('attachments', file)
+  }
+  return apiFormFetch('/api/support/create', formData) as Promise<{ ok: boolean; item: SupportTicketDetail }>
+}
+
+export async function sendSupportTicketMessage(payload: { ticketId: number; message: string; attachments?: File[] }) {
+  const formData = new FormData()
+  formData.set('message', payload.message)
+  for (const file of payload.attachments || []) {
+    formData.append('attachments', file)
+  }
+  return apiFormFetch(`/api/support/ticket/${payload.ticketId}/message`, formData) as Promise<{ ok: boolean; item: SupportTicketDetail }>
+}
+
+export async function archiveSupportTicket(ticketId: number) {
+  return apiFetch(`/api/support/ticket/${ticketId}/archive`, {
     method: 'POST',
-    body: JSON.stringify(payload),
-  }) as Promise<{ ok: boolean; item: SupportTicketItem }>
+    body: JSON.stringify({}),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function getAdminSupportTickets() {
+  return apiFetch('/api/support/admin/list') as Promise<{ items: SupportAdminTicketListItem[] }>
+}
+
+export async function getAdminSupportTicketDetail(ticketId: number) {
+  return apiFetch(`/api/support/admin/ticket/${ticketId}`) as Promise<{ item: SupportTicketDetail }>
+}
+
+export async function approveSupportConversation(ticketId: number) {
+  return apiFetch('/api/support/admin/approve-conversation', {
+    method: 'POST',
+    body: JSON.stringify({ ticketId }),
+  }) as Promise<{ ok: boolean; item: SupportTicketDetail }>
+}
+
+export async function sendAdminSupportMessage(payload: { ticketId: number; message: string; attachments?: File[] }) {
+  const formData = new FormData()
+  formData.set('ticketId', String(payload.ticketId))
+  formData.set('message', payload.message)
+  for (const file of payload.attachments || []) {
+    formData.append('attachments', file)
+  }
+  return apiFormFetch('/api/support/admin/message', formData) as Promise<{ ok: boolean; item: SupportTicketDetail }>
+}
+
+export async function updateSupportTicketStatus(ticketId: number, status: string) {
+  return apiFetch('/api/support/admin/status', {
+    method: 'POST',
+    body: JSON.stringify({ ticketId, status }),
+  }) as Promise<{ ok: boolean }>
 }
 
 export type UserDailyTradeReward = {

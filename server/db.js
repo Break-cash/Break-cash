@@ -523,6 +523,10 @@ async function ensureSchema(db) {
       subject TEXT NOT NULL,
       message TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open',
+      conversation_enabled INTEGER NOT NULL DEFAULT 0,
+      conversation_approved_at TIMESTAMP,
+      conversation_approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      user_archived_at TIMESTAMP,
       email_delivery_status TEXT,
       email_delivery_error TEXT,
       resolved_at TIMESTAMP,
@@ -531,6 +535,27 @@ async function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id);
     CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+
+    CREATE TABLE IF NOT EXISTS support_messages (
+      id SERIAL PRIMARY KEY,
+      ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+      sender_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      sender_role TEXT NOT NULL DEFAULT 'user',
+      body TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_support_messages_ticket_id ON support_messages(ticket_id, id DESC);
+
+    CREATE TABLE IF NOT EXISTS support_message_attachments (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+      file_url TEXT NOT NULL,
+      mime_type TEXT,
+      original_name TEXT,
+      byte_size INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_support_message_attachments_message_id ON support_message_attachments(message_id);
 
     CREATE TABLE IF NOT EXISTS user_activity_logs (
       id SERIAL PRIMARY KEY,
@@ -732,6 +757,33 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_badge TEXT`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_for_admin_actions INTEGER NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS conversation_enabled INTEGER NOT NULL DEFAULT 0`)
+  await db.query(`ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS conversation_approved_at TIMESTAMP`)
+  await db.query(`ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS conversation_approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL`)
+  await db.query(`ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_archived_at TIMESTAMP`)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS support_messages (
+      id SERIAL PRIMARY KEY,
+      ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+      sender_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      sender_role TEXT NOT NULL DEFAULT 'user',
+      body TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_support_messages_ticket_id ON support_messages(ticket_id, id DESC)`)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS support_message_attachments (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+      file_url TEXT NOT NULL,
+      mime_type TEXT,
+      original_name TEXT,
+      byte_size INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_support_message_attachments_message_id ON support_message_attachments(message_id)`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS admin_hidden_at TIMESTAMP`)
   await db.query(`ALTER TABLE strategy_code_usages ADD COLUMN IF NOT EXISTS admin_hidden_by INTEGER REFERENCES users(id) ON DELETE SET NULL`)
   await db.query(`ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS proof_image_path TEXT`)

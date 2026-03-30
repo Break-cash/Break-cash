@@ -124,6 +124,7 @@ type LayoutProps = {
   canManageInvites?: boolean
   canManageBalances?: boolean
   canManagePermissions?: boolean
+  canManageSupport?: boolean
   canViewReports?: boolean
 }
 
@@ -135,6 +136,7 @@ export function Layout({
   canManageInvites,
   canManageBalances,
   canManagePermissions,
+  canManageSupport,
   canViewReports,
 }: LayoutProps) {
   const { t, language, setLanguage, direction } = useI18n()
@@ -170,6 +172,7 @@ export function Layout({
     canManageInvites ? { title: t('admin_invites'), route: '/admin/invites' } : null,
     canManageBalances ? { title: t('admin_balances'), route: '/admin/balances' } : null,
     canManagePermissions ? { title: t('admin_permissions'), route: '/admin/permissions' } : null,
+    canManageSupport ? { title: t('support_page_title'), route: '/admin/support' } : null,
   ].filter(Boolean) as { title: string; route: string }[]
 
   const isOwner = user.role === 'owner'
@@ -189,6 +192,7 @@ export function Layout({
     canManageInvites ? { title: t('admin_invites'), route: '/admin/invites' } : null,
     canManageBalances ? { title: t('admin_balances'), route: '/admin/balances' } : null,
     canManagePermissions ? { title: t('admin_permissions'), route: '/admin/permissions' } : null,
+    canManageSupport ? { title: t('support_page_title'), route: '/admin/support' } : null,
   ].filter(Boolean) as { title: string; route: string }[]
   const managementShortcut = managementShortcuts.length > 0
     ? {

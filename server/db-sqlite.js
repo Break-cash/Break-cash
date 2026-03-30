@@ -941,6 +941,52 @@ async function ensureSchema(db) {
   )
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_user ON user_reward_payout_overrides(user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_reward_payout_overrides_source ON user_reward_payout_overrides(source_type)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS support_tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      conversation_enabled INTEGER NOT NULL DEFAULT 0,
+      conversation_approved_at TEXT,
+      conversation_approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      user_archived_at TEXT,
+      email_delivery_status TEXT,
+      email_delivery_error TEXT,
+      resolved_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS support_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+      sender_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      sender_role TEXT NOT NULL DEFAULT 'user',
+      body TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_support_messages_ticket_id ON support_messages(ticket_id, id DESC)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS support_message_attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+      file_url TEXT NOT NULL,
+      mime_type TEXT,
+      original_name TEXT,
+      byte_size INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_support_message_attachments_message_id ON support_message_attachments(message_id)`)
   await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_users_total_deposit ON users(total_deposit)`)
@@ -981,6 +1027,16 @@ async function ensureSchema(db) {
   } catch (_) {}
   await ensureWithdrawalCol('idempotency_key', `ALTER TABLE withdrawal_requests ADD COLUMN idempotency_key TEXT`)
   await ensureWithdrawalCol('updated_at', `ALTER TABLE withdrawal_requests ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`)
+  const supportTicketCols = await allAsync(db, `PRAGMA table_info(support_tickets)`)
+  const ensureSupportTicketCol = async (name, sql) => {
+    if (!supportTicketCols.some((row) => String(row.name) === name)) {
+      await runAsync(db, sql)
+    }
+  }
+  await ensureSupportTicketCol('conversation_enabled', `ALTER TABLE support_tickets ADD COLUMN conversation_enabled INTEGER NOT NULL DEFAULT 0`)
+  await ensureSupportTicketCol('conversation_approved_at', `ALTER TABLE support_tickets ADD COLUMN conversation_approved_at TEXT`)
+  await ensureSupportTicketCol('conversation_approved_by', `ALTER TABLE support_tickets ADD COLUMN conversation_approved_by INTEGER`)
+  await ensureSupportTicketCol('user_archived_at', `ALTER TABLE support_tickets ADD COLUMN user_archived_at TEXT`)
   const miningCols = await allAsync(db, `PRAGMA table_info(mining_profiles)`)
   const ensureMiningCol = async (name, sql) => {
     if (!miningCols.some((row) => String(row.name) === name)) {
