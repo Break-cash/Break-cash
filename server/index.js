@@ -243,9 +243,9 @@ async function bootstrap() {
 
   app.get('/manifest.json', async (_req, res) => {
     const defaults = {
-      name: 'Break cash',
-      short_name: 'Break cash',
-      description: 'Invite-only trading dashboard PWA',
+      name: 'Break Cash',
+      short_name: 'Break Cash',
+      description: 'Official Break Cash app for secure trading, wallet management, and live market tracking.',
       background_color: '#0A0E17',
       theme_color: '#00C853',
       icon_192: '/break-cash-logo-premium.png',
@@ -268,10 +268,17 @@ async function bootstrap() {
       name: config.name || defaults.name,
       short_name: config.short_name || defaults.short_name,
       description: config.description || defaults.description,
+      id: '/',
       start_url: '/',
+      scope: '/',
       display: 'standalone',
+      display_override: ['window-controls-overlay', 'standalone'],
+      orientation: 'portrait',
+      lang: 'ar',
+      dir: 'rtl',
       background_color: config.background_color || defaults.background_color,
       theme_color: config.theme_color || defaults.theme_color,
+      categories: ['finance', 'business', 'productivity'],
       icons: [
         {
           src: config.icon_192 || defaults.icon_192,
@@ -284,6 +291,23 @@ async function bootstrap() {
           sizes: '512x512',
           type: 'image/png',
           purpose: 'any maskable',
+        },
+      ],
+      shortcuts: [
+        {
+          name: 'المحفظة',
+          short_name: 'المحفظة',
+          url: '/wallet',
+        },
+        {
+          name: 'الأسواق',
+          short_name: 'الأسواق',
+          url: '/market',
+        },
+        {
+          name: 'الملف الشخصي',
+          short_name: 'الملف',
+          url: '/profile',
         },
       ],
     })

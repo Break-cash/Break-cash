@@ -1,132 +1,56 @@
-# دليل النشر للإنتاج | Production Deployment Guide
+# دليل النشر | Deployment Guide
 
-## مصدر النشر الوحيد
+هذا الملف مرجع تشغيلي فقط. لا ينفذ أي نشر تلقائيًا.
 
-- **المصدر الوحيد المعتمد للتعديل والنشر هو هذا المجلد نفسه فقط:**
-  - `C:\Users\bffh1\Desktop\تطبيق تداول\breakcash.cash`
-- **ممنوع النشر من أي نسخة أخرى** مثل:
-  - `C:\Users\bffh1\Desktop\النتاج النهائي`
-- إذا وُجدت نسخ أخرى من المشروع على سطح المكتب أو في مجلدات أرشيف، فهي **نسخ حفظ فقط** وليست مصدرًا للتشغيل أو النشر.
+## المسار المعتمد
 
-## Railway Production Path
+- اعتمد هذا المجلد فقط كمصدر العمل الحالي.
+- لا تنشر من نسخ أرشيفية أو مجلدات تجريبية أخرى.
 
-- Railway production is linked to GitHub repo `Break-cash/Break-cash`
-- Railway auto-deploys from branch `main`
-- Use `git push origin main` as the primary Railway deployment path
-- Do not rely on `railway up` as the primary deployment path for this project, because local snapshot uploads have been timing out during `Initialization > Snapshot code`
-
-## أوامر النشر الصحيحة من هذا المجلد فقط
+## أوامر أساسية
 
 ```bash
-# من داخل C:\Users\bffh1\Desktop\تطبيق تداول\breakcash.cash
+npm install
 npm run build
-vercel deploy --prod --yes
-railway up --service break-cash-api
+npm run start:prod
 ```
 
-## تحقق سريع بعد النشر
+## متغيرات الإنتاج المطلوبة
+
+- `NODE_ENV=production`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `OWNER_EMAIL`
+- `OWNER_PASSWORD`
+
+## متغيرات اختيارية
+
+- `SENTRY_DSN`
+- `SENTRY_TRACES_SAMPLE_RATE`
+- `VITE_SENTRY_DSN`
+- `VITE_SENTRY_TRACES_SAMPLE_RATE`
+- `UPTIME_PING_TOKEN`
+
+## فحص الصحة
+
+بعد تشغيل التطبيق، يمكن التحقق عبر:
 
 ```bash
-curl https://breakcash.cash/api/health/live
-curl https://break-cash.up.railway.app/api/health/live
+curl http://localhost:5174/api/health/live
+curl http://localhost:5174/api/health/ready
+curl http://localhost:5174/api/health
 ```
 
-## البنية الحالية
+## ملاحظات إنتاجية
 
-- **Frontend**: React + Vite (يُبنى في `dist/`)
-- **Backend**: Express API على نفس الخادم
-- **قواعد البيانات**: PostgreSQL (إنتاج) أو SQLite (تطوير)
+- استخدم PostgreSQL في الإنتاج.
+- لا تعتمد على SQLite في بيئة حقيقية.
+- فعّل مفاتيح Sentry عند الحاجة للمراقبة.
+- راجع ملف `vercel.json` وملف `railway.json` قبل أي نشر فعلي.
 
----
+## Deployment Notes
 
-## 1. النشر على Railway
-
-### المتطلبات
-- حساب [Railway](https://railway.app)
-- قاعدة بيانات PostgreSQL (Railway أو خارجية)
-
-### الخطوات
-
-1. **ربط المستودع**
-   - اربط مشروعك من GitHub إلى Railway
-   - أو استخدم `railway link` من CLI
-
-2. **إعداد المتغيرات البيئية** (في Railway Dashboard → Variables):
-
-   | المتغير | مطلوب | الوصف |
-   |---------|-------|-------|
-   | `NODE_ENV` | نعم | `production` |
-   | `PORT` | تلقائي | Railway يضبطه تلقائياً |
-   | `DATABASE_URL` | نعم | رابط PostgreSQL |
-   | `JWT_SECRET` | نعم | سري قوي (32+ حرف) |
-   | `ADMIN_EMAIL` | نعم | بريد المدير |
-   | `ADMIN_PASSWORD` | نعم | كلمة مرور المدير |
-   | `OWNER_EMAIL` | نعم | بريد المالك |
-   | `OWNER_PASSWORD` | نعم | كلمة مرور المالك |
-   | `SENTRY_DSN` | اختياري | لمراقبة الأخطاء |
-   | `UPTIME_PING_TOKEN` | اختياري | لفحص الصحة |
-
-3. **قاعدة البيانات**
-   - أنشئ خدمة PostgreSQL من Railway أو استخدم رابط خارجي
-   - انسخ `DATABASE_URL` إلى المتغيرات
-
-4. **النشر**
-   - Railway يبني المشروع بـ `npm run build` ثم يشغّل `npm start`
-   - Healthcheck: `/api/health`
-
----
-
-## 2. النشر على Vercel (Frontend فقط)
-
-إذا كان الـ API على `api.breakcash.cash`:
-
-1. اربط المستودع من Vercel
-2. Build Command: `npm run build`
-3. Output Directory: `dist`
-4. المتغيرات: `VITE_API_URL` إذا كان الـ API على دومين مختلف
-
-ملف `vercel.json` الحالي يعيد توجيه:
-- `/api/*` → `https://api.breakcash.cash/api/*`
-- `/uploads/*` → `https://api.breakcash.cash/uploads/*`
-
----
-
-## 3. النشر عبر Docker
-
-```bash
-# بناء الصورة
-docker build -t breakcash .
-
-# تشغيل (مع PostgreSQL خارجي)
-docker run -p 5174:5174 \
-  -e NODE_ENV=production \
-  -e DATABASE_URL=postgresql://... \
-  -e JWT_SECRET=... \
-  -e ADMIN_EMAIL=... \
-  -e ADMIN_PASSWORD=... \
-  -e OWNER_EMAIL=... \
-  -e OWNER_PASSWORD=... \
-  breakcash
-```
-
----
-
-## 4. التحقق بعد النشر
-
-```bash
-# فحص الصحة
-curl https://api.breakcash.cash/api/health
-
-# النتيجة المتوقعة:
-# {"ok":true,"db":"up","dbLatencyMs":...,"uptimeSec":...}
-```
-
----
-
-## 5. ملاحظات مهمة
-
-- **لا تستخدم** `USE_SQLITE=1` في الإنتاج
-- **استخدم** PostgreSQL مع `DATABASE_URL`
-- **فعّل** `PGSSL=true` عند الاتصال بقاعدة بيانات خارجية
-- **اضبط** `ALLOW_DEV_CODE=0` في الإنتاج
-- **احفظ** نسخة احتياطية من قاعدة البيانات بانتظام
+- Build output is generated in `dist/`.
+- The Express server serves the built frontend in production mode.
+- Validate environment variables before any real deployment.
+- This repository is now optimized for a cleaner production build with smaller frontend entry chunks.

@@ -303,14 +303,14 @@ export function Layout({
       return language === 'ar'
         ? `اليوم، ${timeOnly}`
         : language === 'tr'
-          ? `Bugun, ${timeOnly}`
+          ? `Bugün, ${timeOnly}`
           : `Today, ${timeOnly}`
     }
     if (diffDays === 1) {
       return language === 'ar'
         ? `أمس، ${timeOnly}`
         : language === 'tr'
-          ? `Dun, ${timeOnly}`
+          ? `Dün, ${timeOnly}`
           : `Yesterday, ${timeOnly}`
     }
     return date.toLocaleString(locale, {
@@ -718,13 +718,13 @@ export function Layout({
             </div>
 
             <div className="app-header-brand-wrap">
-              <Link to="/portfolio" className="app-header-brand-banner" aria-label="BreakCash" dir="ltr">
+              <Link to="/portfolio" className="app-header-brand-banner" aria-label="Break Cash" dir="ltr">
                 <span className="app-header-brand-mark" aria-hidden="true">
                   <span className="app-header-brand-mark-line app-header-brand-mark-line-lg" />
                   <span className="app-header-brand-mark-line app-header-brand-mark-line-md" />
                   <span className="app-header-brand-mark-line app-header-brand-mark-line-sm" />
                 </span>
-                <span className="app-header-brand-wordmark">BreakCash</span>
+                <span className="app-header-brand-wordmark">Break Cash</span>
                 <span className="app-header-brand-badge" aria-hidden="true">
                   <span className="app-header-brand-badge-check">✓</span>
                 </span>

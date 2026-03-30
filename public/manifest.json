@@ -1,11 +1,18 @@
 {
   "name": "Break Cash",
   "short_name": "Break Cash",
-  "description": "Invite-only trading dashboard PWA",
+  "description": "Official Break Cash app for secure trading, wallet management, and live market tracking.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
   "background_color": "#0A0E17",
   "theme_color": "#00C853",
+  "categories": ["finance", "business", "productivity"],
   "icons": [
     {
       "src": "/break-cash-logo-premium.png",
@@ -18,6 +25,23 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "المحفظة",
+      "short_name": "المحفظة",
+      "url": "/wallet"
+    },
+    {
+      "name": "الأسواق",
+      "short_name": "الأسواق",
+      "url": "/market"
+    },
+    {
+      "name": "الملف الشخصي",
+      "short_name": "الملف",
+      "url": "/profile"
     }
   ]
 }

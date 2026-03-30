@@ -8,6 +8,7 @@ import {
   getCurrentUser,
   getFaviconUrl,
   getMyPermissions,
+  getPwaConfig,
   getRecoveryCodeStatus,
   getThemeColor,
   getToken,
@@ -76,6 +77,22 @@ type SplashMode = 'always' | 'session'
 const SPLASH_MODE_KEY = 'breakcash_splash_mode'
 const SPLASH_SESSION_SEEN_KEY = 'breakcash_splash_seen_session'
 const DEFAULT_BRAND_LOGO_URL = '/break-cash-logo-premium.png'
+const LOCAL_AUTH_BYPASS_HOSTS = new Set(['127.0.0.1', 'localhost'])
+const LOCAL_PREVIEW_USER: AuthUser = {
+  id: 999001,
+  role: 'user',
+  email: 'local-preview@breakcash.local',
+  phone: null,
+  display_name: 'Local Preview',
+  bio: 'حساب معاينة محلي لتجاوز شاشة تسجيل الدخول فقط.',
+  verification_status: 'verified',
+  badge_color: 'blue',
+  blue_badge: 1,
+  vip_level: 2,
+  country: 'TR',
+  preferred_language: 'ar',
+  deposit_privacy_enabled: 1,
+}
 
 function resolveSplashMode(): SplashMode {
   const raw = String(localStorage.getItem(SPLASH_MODE_KEY) || '').trim().toLowerCase()
@@ -127,6 +144,18 @@ function applyIconLinkWithFallback(rel: 'icon' | 'apple-touch-icon', href: strin
     iconLink!.href = DEFAULT_BRAND_LOGO_URL
   }
   iconLink.href = nextHref
+}
+
+function applyMetaContent(name: string, content: string) {
+  const nextContent = String(content || '').trim()
+  if (!nextContent) return
+  let meta = document.querySelector(`meta[name='${name}']`) as HTMLMetaElement | null
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.name = name
+    document.head.appendChild(meta)
+  }
+  meta.content = nextContent
 }
 
 function LoginRouteWrapper({ onAuthSuccess }: LoginRouteWrapperProps) {
@@ -288,6 +317,8 @@ function App() {
   const [recoveryCountdown, setRecoveryCountdown] = useState(5)
   const [recoveryCopyDone, setRecoveryCopyDone] = useState(false)
   const [recoverySaving, setRecoverySaving] = useState(false)
+  const isLocalAuthBypassEnabled =
+    typeof window !== 'undefined' && LOCAL_AUTH_BYPASS_HOSTS.has(window.location.hostname) && !getToken()
 
   useEffect(() => {
     if (productionRefreshRequired) return
@@ -382,6 +413,23 @@ function App() {
   }, [])
 
   useEffect(() => {
+    getPwaConfig()
+      .then((res) => {
+        const appName = String(res.config?.name || '').trim()
+        const appDescription = String(res.config?.description || '').trim()
+        if (appName) {
+          document.title = appName
+          applyMetaContent('application-name', appName)
+          applyMetaContent('apple-mobile-web-app-title', appName)
+        }
+        if (appDescription) {
+          applyMetaContent('description', appDescription)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (!user) {
       Sentry.setUser(null)
       return
@@ -390,6 +438,10 @@ function App() {
   }, [user])
 
   useEffect(() => {
+    if (isLocalAuthBypassEnabled) {
+      setRecoveryModalOpen(false)
+      return
+    }
     if (!user) {
       setRecoveryModalOpen(false)
       setRecoveryCode('')
@@ -422,8 +474,9 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [recoveryModalOpen, recoveryCountdown])
 
-  const isAuthenticated = !!user
-  const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
+  const effectiveUser = user ?? (isLocalAuthBypassEnabled ? LOCAL_PREVIEW_USER : null)
+  const isAuthenticated = !!effectiveUser
+  const isOwner = effectiveUser?.role === 'owner' || Number(effectiveUser?.is_owner || 0) === 1
   const hasGrantedPermission = useMemo(
     () => (permission: string) => Boolean(isOwner || grantedPermissions.includes(permission)),
     [grantedPermissions, isOwner],
@@ -503,6 +556,7 @@ function App() {
   }
 
   async function refreshCurrentUser() {
+    if (isLocalAuthBypassEnabled) return
     const res = await getCurrentUser()
     setUser(res.user)
   }
@@ -523,7 +577,7 @@ function App() {
           path="/"
           element={
             isAuthenticated ? (
-              <Navigate to="/portfolio" replace />
+              <Navigate to={isLocalAuthBypassEnabled ? "/home" : "/portfolio"} replace />
             ) : (
               <LoginRouteWrapper onAuthSuccess={handleAuthSuccess} />
             )
@@ -567,7 +621,7 @@ function App() {
             <Navigate to="/" replace />
           ) : (
             <AnimatedAuthenticatedRoutes
-              user={user as AuthUser}
+              user={effectiveUser as AuthUser}
               canManageUsers={canManageUsers}
               canManageInvites={canManageInvites}
               canManageBalances={canManageBalances}

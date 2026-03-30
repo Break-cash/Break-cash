@@ -1,5 +1,5 @@
 export const appData = {
-  app_name: 'Break cash',
+  app_name: 'Break Cash',
   user_profile: {
     uid: '701928',
     email: 'bffh1331@gmail.com',
