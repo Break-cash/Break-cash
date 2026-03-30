@@ -421,6 +421,110 @@ button {
   margin-bottom: 8px;
 }
 
+.identity-badges-row {
+  flex-wrap: wrap;
+}
+
+.identity-badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.56);
+  color: #edf4ff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(2, 8, 20, 0.16);
+}
+
+.identity-badge-soft-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: #fff;
+}
+
+.identity-badge-soft-blue {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: linear-gradient(180deg, rgba(10, 18, 34, 0.88), rgba(11, 18, 31, 0.72));
+  color: #dcecff;
+}
+
+.identity-badge-soft-blue .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #4ba3ff 0%, #2563eb 100%);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
+}
+
+.identity-badge-soft-gold {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(180deg, rgba(28, 20, 8, 0.9), rgba(25, 18, 8, 0.72));
+  color: #f8e7bf;
+}
+
+.identity-badge-soft-gold .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #f4b94f 0%, #d97706 100%);
+  box-shadow: 0 8px 18px rgba(217, 119, 6, 0.22);
+}
+
+.profile-name-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-name-title {
+  margin: 0;
+}
+
+.profile-official-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  background: linear-gradient(180deg, rgba(12, 35, 28, 0.85), rgba(8, 29, 22, 0.66));
+  color: #d9fff0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(6, 95, 70, 0.14);
+}
+
+.profile-official-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(5, 150, 105, 0.22);
+}
+
+.profile-name-badges {
+  gap: 8px;
+}
+
+.profile-name-row .identity-vip-badge,
+.profile-name-row .identity-premium-badge {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 11px;
+  box-shadow: 0 10px 24px rgba(2, 8, 20, 0.16);
+}
+
 .home-overview {
   position: relative;
 }

@@ -118,7 +118,13 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   const [copiedRecoveryCode, setCopiedRecoveryCode] = useState(false)
   const [splashMode, setSplashMode] = useState<SplashMode>('always')
   const computedBadgeColor =
-    Number(user.blue_badge || 0) === 1 ? 'blue' : user.verification_status === 'verified' ? 'gold' : 'none'
+    user.badge_color === 'blue' || user.badge_color === 'gold' || user.badge_color === 'none'
+      ? user.badge_color
+      : Number(user.blue_badge || 0) === 1
+        ? 'blue'
+        : user.verification_status === 'verified'
+          ? 'gold'
+          : 'none'
   const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
 
   useEffect(() => {
@@ -280,11 +286,24 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
-                <BadgeCheck size={14} />
-                <span>الملف الرسمي</span>
+              <div className="profile-name-row">
+                <h1 className="profile-name-title text-2xl font-black tracking-tight text-white">{user.display_name || `#${user.id}`}</h1>
+                <span className="profile-official-pill">
+                  <span className="profile-official-mark">
+                    <BadgeCheck size={12} />
+                  </span>
+                  <span>{'\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0631\u0633\u0645\u064a'}</span>
+                </span>
+                <UserIdentityBadges
+                  badgeColor={computedBadgeColor}
+                  vipLevel={user.vip_level || 0}
+                  premiumBadge={user.profile_badge}
+                  mode="all"
+                  variant="profile-soft"
+                  verifiedLabel={'\u0645\u0648\u062b\u0642'}
+                  className="profile-name-badges"
+                />
               </div>
-              <h1 className="mt-3 text-2xl font-black tracking-tight text-white">{user.display_name || `#${user.id}`}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-300">{bioText}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85">
@@ -299,13 +318,6 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
                   <span>{copiedId ? 'تم النسخ' : 'نسخ المعرف'}</span>
                 </button>
               </div>
-              <UserIdentityBadges
-                badgeColor={computedBadgeColor}
-                vipLevel={user.vip_level || 0}
-                premiumBadge={user.profile_badge}
-                mode="verified"
-                className="mt-3"
-              />
             </div>
           </div>
 
