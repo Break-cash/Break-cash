@@ -25,6 +25,8 @@ import {
   verifyUnexpectedZeroBalances,
 } from '../services/wallet-reconciliation.js'
 import { createLocalizedNotification } from '../services/notifications.js'
+
+const DIRECT_REFERRAL_PERCENT_FLOOR = 20
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
 import { persistUploadedAsset } from '../services/uploaded-assets.js'
@@ -741,7 +743,8 @@ async function persistVipLevel(db, userId, totalDeposit) {
 
 async function resolveReferralPercentByVip(db, vipLevel) {
   const tierRules = await getVipRulesFromDb(db, vipLevel)
-  return Number(tierRules.referralPercent || getVipRuntimeRules(vipLevel).referralPercent || 3)
+  const configuredPercent = Number(tierRules.referralPercent || getVipRuntimeRules(vipLevel).referralPercent || 0)
+  return Math.max(DIRECT_REFERRAL_PERCENT_FLOOR, configuredPercent)
 }
 
 async function resolveReferralRewardRule(db, amount) {
@@ -768,7 +771,11 @@ async function resolveReferralRewardRule(db, amount) {
     if (maxDeposit != null && Number.isFinite(maxDeposit) && amount > maxDeposit) continue
 
     const rewardMode = normalizeRewardMode(reward.mode)
-    const rewardValue = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
+    const rawRewardValue = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
+    const rewardValue =
+      rewardMode === 'percent'
+        ? Math.max(DIRECT_REFERRAL_PERCENT_FLOOR, rawRewardValue)
+        : rawRewardValue
     if (!Number.isFinite(rewardValue) || rewardValue <= 0) continue
     const rewardAmount =
       rewardMode === 'fixed'

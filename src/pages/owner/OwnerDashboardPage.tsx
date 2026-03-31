@@ -942,16 +942,16 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     setStrategyUsages(refreshed.usages || [])
   }
 
-  function isStrategyUsageCompleted(usage: StrategyCodeUsageAdminItem) {
+  function isStrategyUsageRemovable(usage: StrategyCodeUsageAdminItem) {
     const normalizedStatus = String(usage.status || '').trim().toLowerCase()
-    if (['trade_settled', 'settled', 'completed', 'consumed'].includes(normalizedStatus)) return true
+    if (normalizedStatus && normalizedStatus !== 'trade_active') return true
     if (usage.settledAt) return true
     if (usage.exitPrice != null && Number.isFinite(Number(usage.exitPrice))) return true
     return false
   }
 
   async function handleDeleteStrategyUsage(usage: StrategyCodeUsageAdminItem) {
-    if (!isStrategyUsageCompleted(usage)) {
+    if (!isStrategyUsageRemovable(usage)) {
       setMessage({ type: 'error', text: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط.' })
       return
     }
@@ -3143,7 +3143,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                       <span>{usage.expertName || 'بدون خبير'}</span>
                       <span>{Number(usage.stakeAmount || 0).toFixed(2)} USDT</span>
                       <span>{usage.usedAt || usage.confirmedAt || '-'}</span>
-                      {isStrategyUsageCompleted(usage) ? (
+                      {isStrategyUsageRemovable(usage) ? (
                         <button
                           type="button"
                           className="wallet-action-btn wallet-action-withdraw"

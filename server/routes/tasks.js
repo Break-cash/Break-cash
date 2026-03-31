@@ -145,9 +145,9 @@ function enrichStrategyUsageRow(row) {
   }
 }
 
-function isStrategyUsageCompletedRecord(usage) {
+function isStrategyUsageRemovableRecord(usage) {
   const normalizedStatus = String(usage?.status || '').trim().toLowerCase()
-  if (['trade_settled', 'settled', 'completed', 'consumed'].includes(normalizedStatus)) return true
+  if (normalizedStatus && normalizedStatus !== 'trade_active') return true
   if (usage?.settled_at) return true
   if (usage?.wallet_credit_txn_id != null && Number(usage.wallet_credit_txn_id || 0) > 0) return true
   if (usage?.exit_price != null && Number.isFinite(Number(usage.exit_price))) return true
@@ -1215,7 +1215,7 @@ export function createTasksRouter(db) {
     )
     if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
     if (usage.admin_hidden_at) return res.json({ ok: true })
-    if (!isStrategyUsageCompletedRecord(usage)) {
+    if (!isStrategyUsageRemovableRecord(usage)) {
       return res.status(400).json({
         error: 'ONLY_SETTLED_TRADES_CAN_BE_REMOVED',
         message: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط دون المساس بمنطق الأصل والربح.',

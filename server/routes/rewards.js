@@ -3,6 +3,8 @@ import { all, get } from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
 import { normalizeVipTierConfig, resolveVipMetricsProgress } from '../services/vip-rules.js'
 
+const DIRECT_REFERRAL_PERCENT_FLOOR = 20
+
 function parsePerks(value) {
   if (!value) return []
   try {
@@ -77,9 +79,9 @@ async function resolveReferralPercent(db, vipLevel) {
      LIMIT 1`,
     [Number(vipLevel || 0)],
   )
-  if (row?.referral_percent != null) return toFiniteNumber(row.referral_percent, 3)
-  const fallback = { 0: 3, 1: 4, 2: 5, 3: 6, 4: 7, 5: 8 }
-  return toFiniteNumber(fallback[Math.max(0, Math.min(5, Number(vipLevel || 0)))], 3)
+  if (row?.referral_percent != null) return Math.max(DIRECT_REFERRAL_PERCENT_FLOOR, toFiniteNumber(row.referral_percent, 0))
+  const fallback = { 0: 20, 1: 20, 2: 20, 3: 20, 4: 20, 5: 20 }
+  return Math.max(DIRECT_REFERRAL_PERCENT_FLOOR, toFiniteNumber(fallback[Math.max(0, Math.min(5, Number(vipLevel || 0)))], 0))
 }
 
 async function getVipNetworkMetrics(db, userId) {
