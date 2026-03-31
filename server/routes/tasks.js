@@ -154,6 +154,130 @@ function isStrategyUsageRemovableRecord(usage) {
   return false
 }
 
+async function hideStrategyUsageRecord(db, usageId, actorUserId) {
+  const attempts = [
+    {
+      sql: `UPDATE strategy_code_usages
+            SET admin_hidden_at = CURRENT_TIMESTAMP,
+                admin_hidden_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+      params: [actorUserId, usageId],
+    },
+    {
+      sql: `UPDATE strategy_code_usages
+            SET admin_hidden_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+      params: [usageId],
+    },
+    {
+      sql: `UPDATE strategy_code_usages
+            SET status = 'admin_deleted',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+      params: [usageId],
+    },
+    {
+      sql: `UPDATE strategy_code_usages
+            SET status = 'admin_deleted'
+            WHERE id = ?`,
+      params: [usageId],
+    },
+  ]
+
+  let lastError = null
+  for (const attempt of attempts) {
+    try {
+      await run(db, attempt.sql, attempt.params)
+      return true
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError || new Error('STRATEGY_USAGE_HIDE_FAILED')
+}
+
+const strategyUsageColumnCache = new WeakMap()
+
+async function getStrategyUsageColumns(db) {
+  const cached = strategyUsageColumnCache.get(db)
+  if (cached) return cached
+
+  let rows = []
+  try {
+    rows = await all(
+      db,
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'strategy_code_usages'`,
+    )
+  } catch {
+    rows = []
+  }
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    try {
+      rows = await all(db, `PRAGMA table_info(strategy_code_usages)`)
+    } catch {
+      rows = []
+    }
+  }
+
+  const columns = new Set(
+    (rows || [])
+      .map((row) => String(row?.column_name || row?.name || '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+  strategyUsageColumnCache.set(db, columns)
+  return columns
+}
+
+function hasStrategyUsageColumn(columns, columnName) {
+  return columns instanceof Set && columns.has(String(columnName || '').trim().toLowerCase())
+}
+
+function buildStrategyUsageVisibilityClause(alias, columns) {
+  const normalizedAlias = String(alias || 'scu').trim() || 'scu'
+  const conditions = []
+  if (hasStrategyUsageColumn(columns, 'admin_hidden_at')) {
+    conditions.push(`${normalizedAlias}.admin_hidden_at IS NULL`)
+  }
+  if (hasStrategyUsageColumn(columns, 'status')) {
+    conditions.push(`COALESCE(${normalizedAlias}.status, '') <> 'admin_deleted'`)
+  }
+  return conditions.length > 0 ? conditions.join(' AND ') : '1=1'
+}
+
+async function getStrategyUsageVisibilityClause(db, alias) {
+  const columns = await getStrategyUsageColumns(db)
+  return buildStrategyUsageVisibilityClause(alias, columns)
+}
+
+async function getStrategyUsageAdminRecord(db, usageId) {
+  const columns = await getStrategyUsageColumns(db)
+  const selectParts = ['id']
+  selectParts.push(hasStrategyUsageColumn(columns, 'status') ? 'status' : `'' AS status`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'admin_hidden_at') ? 'admin_hidden_at' : `NULL AS admin_hidden_at`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'settled_at') ? 'settled_at' : `NULL AS settled_at`)
+  selectParts.push(
+    hasStrategyUsageColumn(columns, 'wallet_credit_txn_id')
+      ? 'wallet_credit_txn_id'
+      : `NULL AS wallet_credit_txn_id`,
+  )
+  selectParts.push(hasStrategyUsageColumn(columns, 'exit_price') ? 'exit_price' : `NULL AS exit_price`)
+
+  return get(
+    db,
+    `SELECT ${selectParts.join(', ')}
+     FROM strategy_code_usages
+     WHERE id = ?
+     LIMIT 1`,
+    [usageId],
+  )
+}
+
 function getStrategyTradeSourceDebits(usage) {
   const meta = parseJsonSafe(usage?.metadata_json, {})
   const configured = Array.isArray(meta?.balanceSourceDebits)
@@ -776,6 +900,7 @@ export function createTasksRouter(db) {
   router.get('/strategy-codes/my', async (req, res) => {
     await repairSettledStrategyTradeGaps(db, req.user.id)
     await autoSettleDueStrategyTrades(db, req.user.id)
+    const usageVisibilityClause = await getStrategyUsageVisibilityClause(db, 'scu')
     const codeRows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
@@ -788,7 +913,7 @@ export function createTasksRouter(db) {
         LEFT JOIN strategy_code_usages scu
           ON scu.code_id = sc.id
          AND scu.user_id = ?
-         AND scu.admin_hidden_at IS NULL
+         AND ${usageVisibilityClause}
         WHERE sc.feature_type = 'trial_trade'
          ORDER BY sc.id DESC`,
       [req.user.id],
@@ -1075,6 +1200,7 @@ export function createTasksRouter(db) {
   const requireStrategyCodeManager = requireAnyPermission(db, [TASK_PERMISSION, 'trades.manage'])
 
   router.get('/admin/strategy-codes', requireStrategyCodeManager, async (_req, res) => {
+    const usageVisibilityClause = await getStrategyUsageVisibilityClause(db, 'scu')
     const rows = await all(
       db,
       `SELECT sc.id, sc.code, sc.title, sc.description, sc.feature_type, sc.reward_mode, sc.reward_value,
@@ -1085,11 +1211,12 @@ export function createTasksRouter(db) {
        FROM strategy_codes sc
         LEFT JOIN users creator ON creator.id = sc.created_by
         LEFT JOIN strategy_code_usages scu ON scu.code_id = sc.id
-         AND scu.admin_hidden_at IS NULL
+         AND ${usageVisibilityClause}
        WHERE sc.feature_type = 'trial_trade'
        GROUP BY sc.id, creator.display_name
        ORDER BY sc.id DESC`,
     )
+    const adminUsageVisibilityClause = await getStrategyUsageVisibilityClause(db, 'scu')
     const usages = await all(
       db,
        `SELECT scu.id, scu.code_id, scu.user_id, scu.status, scu.selected_symbol, scu.balance_snapshot,
@@ -1099,7 +1226,7 @@ export function createTasksRouter(db) {
         FROM strategy_code_usages scu
         LEFT JOIN strategy_codes sc ON sc.id = scu.code_id
         LEFT JOIN users u ON u.id = scu.user_id
-        WHERE scu.admin_hidden_at IS NULL
+        WHERE ${adminUsageVisibilityClause}
           AND COALESCE(sc.feature_type, 'trial_trade') = 'trial_trade'
         ORDER BY scu.id DESC
         LIMIT 400`,
@@ -1205,14 +1332,7 @@ export function createTasksRouter(db) {
     const id = Number(req.params.id || 0)
     if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
 
-    const usage = await get(
-      db,
-      `SELECT id, status, admin_hidden_at, settled_at, wallet_credit_txn_id, exit_price
-       FROM strategy_code_usages
-       WHERE id = ?
-       LIMIT 1`,
-      [id],
-    )
+    const usage = await getStrategyUsageAdminRecord(db, id)
     if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
     if (usage.admin_hidden_at) return res.json({ ok: true })
     if (!isStrategyUsageRemovableRecord(usage)) {
@@ -1222,15 +1342,7 @@ export function createTasksRouter(db) {
       })
     }
 
-    await run(
-      db,
-      `UPDATE strategy_code_usages
-       SET admin_hidden_at = CURRENT_TIMESTAMP,
-           admin_hidden_by = ?,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [req.user.id, id],
-    )
+    await hideStrategyUsageRecord(db, id, req.user.id)
     return res.json({ ok: true })
   })
 
