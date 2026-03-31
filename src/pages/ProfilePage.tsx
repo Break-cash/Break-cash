@@ -118,7 +118,13 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
   const [copiedRecoveryCode, setCopiedRecoveryCode] = useState(false)
   const [splashMode, setSplashMode] = useState<SplashMode>('always')
   const computedBadgeColor =
-    user.badge_color === 'blue' || user.badge_color === 'gold' || user.badge_color === 'none'
+    user.badge_color === 'blue' ||
+    user.badge_color === 'gold' ||
+    user.badge_color === 'red' ||
+    user.badge_color === 'green' ||
+    user.badge_color === 'purple' ||
+    user.badge_color === 'silver' ||
+    user.badge_color === 'none'
       ? user.badge_color
       : Number(user.blue_badge || 0) === 1
         ? 'blue'

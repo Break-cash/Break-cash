@@ -85,6 +85,7 @@ async function ensureSchema(db) {
       identity_submitted INTEGER NOT NULL DEFAULT 0,
       verification_ready_at TIMESTAMP,
       blue_badge INTEGER NOT NULL DEFAULT 0,
+      badge_style TEXT NOT NULL DEFAULT 'none',
       vip_level INTEGER NOT NULL DEFAULT 0,
       profile_color TEXT,
       profile_badge TEXT,
@@ -753,6 +754,7 @@ async function ensureSchema(db) {
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_blob_base64 TEXT`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_blob_mime_type TEXT`)
+  await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS badge_style TEXT NOT NULL DEFAULT 'none'`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_color TEXT`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_badge TEXT`)
   await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER NOT NULL DEFAULT 0`)

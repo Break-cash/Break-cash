@@ -14,13 +14,29 @@ const asyncRoute = (handler) => async (req, res) => {
 }
 
 function toFriendUserPayload(row) {
+  const rawBadgeStyle = String(row.badge_style || '').trim().toLowerCase()
+  const badgeColor =
+    rawBadgeStyle === 'none' ||
+    rawBadgeStyle === 'blue' ||
+    rawBadgeStyle === 'gold' ||
+    rawBadgeStyle === 'red' ||
+    rawBadgeStyle === 'green' ||
+    rawBadgeStyle === 'purple' ||
+    rawBadgeStyle === 'silver'
+      ? rawBadgeStyle
+      : Number(row.blue_badge || 0) === 1
+        ? 'blue'
+        : String(row.verification_status || 'unverified') === 'verified'
+          ? 'gold'
+          : 'none'
   return {
     id: row.id,
     displayName: row.display_name || `#${row.id}`,
     bio: String(row.bio || '').slice(0, 120),
-    avatarUrl: buildUserAvatarUrl(row.id, row.avatar_path),
+    avatarUrl: buildUserAvatarUrl(row.id, row.avatar_path, row.has_avatar_blob),
     verificationStatus: String(row.verification_status || 'unverified'),
     blueBadge: Number(row.blue_badge || 0),
+    badgeColor,
     vipLevel: Number(row.vip_level || 0),
     premiumBadge: String(row.profile_badge || '').trim() || null,
     country: String(row.country || '').trim() || null,
@@ -39,7 +55,9 @@ export function createFriendsRouter(db) {
 
     const row = await get(
       db,
-      `SELECT u.id, u.display_name, u.bio, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.profile_badge, u.country, u.deposit_privacy_enabled,
+      `SELECT u.id, u.display_name, u.bio, u.avatar_path,
+              CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
+              u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_badge, u.country, u.deposit_privacy_enabled,
               COALESCE(bal.total_balance, 0) AS trading_balance
        FROM users u
        LEFT JOIN (
@@ -64,7 +82,9 @@ export function createFriendsRouter(db) {
     const me = req.user.id
     const rows = await all(
       db,
-      `SELECT u.id, u.display_name, u.bio, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.profile_badge, u.country, u.deposit_privacy_enabled,
+      `SELECT u.id, u.display_name, u.bio, u.avatar_path,
+              CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
+              u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_badge, u.country, u.deposit_privacy_enabled,
               COALESCE(bal.total_balance, 0) AS trading_balance
        FROM users u
        LEFT JOIN (
@@ -121,7 +141,9 @@ export function createFriendsRouter(db) {
       db,
       `SELECT fr.id, fr.from_user_id, fr.to_user_id, fr.status, fr.created_at,
               u.display_name AS from_display_name, u.avatar_path AS from_avatar_path,
-              v.display_name AS to_display_name, v.avatar_path AS to_avatar_path
+              CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS from_has_avatar_blob,
+              v.display_name AS to_display_name, v.avatar_path AS to_avatar_path,
+              CASE WHEN v.avatar_blob_base64 IS NOT NULL AND v.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS to_has_avatar_blob
        FROM friend_requests fr
        LEFT JOIN users u ON u.id = fr.from_user_id
        LEFT JOIN users v ON v.id = fr.to_user_id
@@ -137,11 +159,12 @@ export function createFriendsRouter(db) {
       const otherId = r.from_user_id === me ? r.to_user_id : r.from_user_id
       const displayName = r.from_user_id === me ? r.to_display_name : r.from_display_name
       const avatarPath = r.from_user_id === me ? r.to_avatar_path : r.from_avatar_path
+      const hasAvatarBlob = r.from_user_id === me ? r.to_has_avatar_blob : r.from_has_avatar_blob
       const item = {
         id: r.id,
         userId: otherId,
         displayName: displayName || `#${otherId}`,
-        avatarUrl: buildUserAvatarUrl(otherId, avatarPath),
+        avatarUrl: buildUserAvatarUrl(otherId, avatarPath, hasAvatarBlob),
         status: r.status,
         createdAt: r.created_at,
       }

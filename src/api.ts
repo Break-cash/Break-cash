@@ -14,7 +14,7 @@ export type AuthUser = {
   verification_status?: 'unverified' | 'pending' | 'verified'
   is_frozen?: number
   blue_badge?: number
-  badge_color?: 'none' | 'gold' | 'blue'
+  badge_color?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
   vip_level?: number
   profile_color?: PremiumProfileColor | null
   profile_badge?: PremiumProfileBadge | null
@@ -704,6 +704,7 @@ export type FriendUser = {
   avatarUrl: string | null
   verificationStatus?: 'unverified' | 'pending' | 'verified' | string
   blueBadge?: number
+  badgeColor?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
   vipLevel?: number
   premiumBadge?: PremiumProfileBadge | string | null
   country?: string | null
@@ -1360,7 +1361,10 @@ export async function updateUserFreeze(userId: number, isFrozen: boolean) {
   }) as Promise<{ ok: boolean }>
 }
 
-export async function updateUserBadgeStyle(userId: number, style: 'none' | 'gold' | 'blue') {
+export async function updateUserBadgeStyle(
+  userId: number,
+  style: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver',
+) {
   return apiFetch('/api/profile/badge/style', {
     method: 'POST',
     body: JSON.stringify({ userId, style }),
@@ -1408,6 +1412,7 @@ export type AdminUserRow = {
   avatar_path?: string | null
   verification_status?: 'unverified' | 'pending' | 'verified'
   blue_badge?: number
+  badge_color?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
   vip_level?: number
   profile_color?: PremiumProfileColor | null
   profile_badge?: PremiumProfileBadge | null

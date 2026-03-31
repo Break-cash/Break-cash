@@ -616,11 +616,20 @@ export function Layout({
       { id: 'notifications', visible: true },
       { id: 'profile', visible: true },
     ]
-  const computedBadgeColor = Number(user.blue_badge || 0) === 1
-    ? 'blue'
-    : user.verification_status === 'verified'
-      ? 'gold'
-      : 'none'
+  const computedBadgeColor =
+    user.badge_color === 'blue' ||
+    user.badge_color === 'gold' ||
+    user.badge_color === 'red' ||
+    user.badge_color === 'green' ||
+    user.badge_color === 'purple' ||
+    user.badge_color === 'silver' ||
+    user.badge_color === 'none'
+      ? user.badge_color
+      : Number(user.blue_badge || 0) === 1
+        ? 'blue'
+        : user.verification_status === 'verified'
+          ? 'gold'
+          : 'none'
   const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
   const profileIconVisible = effectiveHeaderIcons.some((item) => item.id === 'profile' && item.visible)
   const showUtilityLinksInHeader = utilityLinks.length > 0 && location.pathname !== '/portfolio'

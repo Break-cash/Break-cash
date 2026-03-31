@@ -21,10 +21,26 @@ const asyncRoute = (handler) => async (req, res) => {
 
 function toSafeUser(user) {
   const isOwner = user.role === 'owner'
+  const rawBadgeStyle = String(user.badge_style || '').trim().toLowerCase()
+  const badgeColor =
+    rawBadgeStyle === 'none' ||
+    rawBadgeStyle === 'blue' ||
+    rawBadgeStyle === 'gold' ||
+    rawBadgeStyle === 'red' ||
+    rawBadgeStyle === 'green' ||
+    rawBadgeStyle === 'purple' ||
+    rawBadgeStyle === 'silver'
+      ? rawBadgeStyle
+      : Number(user.blue_badge || 0) === 1
+        ? 'blue'
+        : user.verification_status === 'verified'
+          ? 'gold'
+          : 'none'
   return {
     ...user,
     is_owner: Number(user.is_owner ?? (isOwner ? 1 : 0)),
-    avatar_url: buildUserAvatarUrl(user.id, user.avatar_path),
+    avatar_url: buildUserAvatarUrl(user.id, user.avatar_path, user.has_avatar_blob),
+    badge_color: badgeColor,
     email: isOwner ? user.email : null,
     phone: isOwner ? user.phone : null,
   }
@@ -261,7 +277,8 @@ export function createAuthRouter(db) {
       db,
       `SELECT
         id, role, email, phone, is_approved, is_banned, is_frozen, banned_until, created_at,
-        display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+        display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
+        CASE WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
         phone_verified, identity_submitted, verification_ready_at,
         country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
         invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
@@ -305,14 +322,16 @@ export function createAuthRouter(db) {
       isEmail
         ? `SELECT
             id, email, phone, password_hash, role, is_approved, is_banned, is_frozen, banned_until, created_at,
-            display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+            display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
+            CASE WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
             phone_verified, identity_submitted, verification_ready_at,
             country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
             invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
            FROM users WHERE email=? LIMIT 1`
         : `SELECT
             id, email, phone, password_hash, role, is_approved, is_banned, is_frozen, banned_until, created_at,
-            display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+            display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
+            CASE WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
             phone_verified, identity_submitted, verification_ready_at,
             country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
             invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
@@ -397,7 +416,8 @@ export function createAuthRouter(db) {
       db,
       `SELECT
         id, role, email, phone, is_approved, is_banned, is_frozen, banned_until, created_at,
-        display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+        display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
+        CASE WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
         phone_verified, identity_submitted, verification_ready_at,
         country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
         invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent
@@ -499,7 +519,8 @@ export function createAuthRouter(db) {
       db,
       `SELECT
         id, role, email, phone, is_approved, is_banned, is_frozen, banned_until, created_at,
-        display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+        display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
+        CASE WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
         phone_verified, identity_submitted, verification_ready_at,
         country, preferred_language, preferred_currency, deposit_privacy_enabled, referral_code, total_deposit, points,
         invited_by, referred_by, is_owner, last_login_at, last_ip, last_user_agent

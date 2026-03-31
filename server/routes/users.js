@@ -170,7 +170,8 @@ export function createUsersRouter(db) {
 
     const rows = await all(db, `SELECT
       u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
-      u.display_name, u.avatar_path, u.verification_status, u.blue_badge, u.vip_level, u.profile_color, u.profile_badge,
+      u.display_name, u.avatar_path, u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_color, u.profile_badge,
+      CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
       u.phone_verified, u.identity_submitted, u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled,
       u.referral_code, u.invited_by, u.referred_by, u.total_deposit, u.points, u.is_owner, u.last_login_at, u.last_ip, u.last_user_agent,
       COALESCE(bal.total_balance, 0) AS wallet_balance,
@@ -214,10 +215,22 @@ export function createUsersRouter(db) {
     LIMIT ${limit}
     OFFSET ${offset}`, params)
 
-    const normalizedRows = rows.map((row) => ({
-      ...row,
-        avatar_path: buildUserAvatarUrl(row.id, row.avatar_path),
-    }))
+    const normalizedRows = rows.map((row) => {
+      const rawBadgeStyle = String(row.badge_style || '').trim().toLowerCase()
+      const badge_color =
+        ['none', 'blue', 'gold', 'red', 'green', 'purple', 'silver'].includes(rawBadgeStyle)
+          ? rawBadgeStyle
+          : Number(row.blue_badge || 0) === 1
+            ? 'blue'
+            : row.verification_status === 'verified'
+              ? 'gold'
+              : 'none'
+      return {
+        ...row,
+        badge_color,
+        avatar_path: buildUserAvatarUrl(row.id, row.avatar_path, row.has_avatar_blob),
+      }
+    })
     const isOwner = req.user.role === 'owner'
     const users = isOwner ? normalizedRows : normalizedRows.map((u) => ({ ...u, email: null, phone: null }))
     return res.json({ users })
@@ -231,7 +244,7 @@ export function createUsersRouter(db) {
       db,
       `SELECT
         u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
-        u.display_name, u.verification_status, u.blue_badge, u.vip_level, u.profile_color, u.profile_badge, u.phone_verified, u.identity_submitted,
+        u.display_name, u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_color, u.profile_badge, u.phone_verified, u.identity_submitted,
         u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled, u.referral_code, u.invited_by, u.referred_by,
         u.total_deposit, u.points, u.is_owner,
         u.last_login_at, u.last_ip, u.last_user_agent,

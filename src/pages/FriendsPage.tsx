@@ -155,7 +155,14 @@ export function FriendsPage() {
   const isPendingSent = (userId: number) => pendingSent.some((p) => p.userId === userId)
   const isFriend = (userId: number) => friends.some((f) => f.userId === userId)
   const selectedBadgeColor =
-    selectedUser && Number(selectedUser.blueBadge || 0) === 1
+    selectedUser?.badgeColor === 'blue' ||
+    selectedUser?.badgeColor === 'gold' ||
+    selectedUser?.badgeColor === 'red' ||
+    selectedUser?.badgeColor === 'green' ||
+    selectedUser?.badgeColor === 'purple' ||
+    selectedUser?.badgeColor === 'silver'
+      ? selectedUser.badgeColor
+      : selectedUser && Number(selectedUser.blueBadge || 0) === 1
       ? 'blue'
       : selectedUser?.verificationStatus === 'verified'
         ? 'gold'
@@ -237,7 +244,14 @@ export function FriendsPage() {
                     ) : null}
                     <UserIdentityBadges
                       badgeColor={
-                        Number(user.blueBadge || 0) === 1
+                        user.badgeColor === 'blue' ||
+                        user.badgeColor === 'gold' ||
+                        user.badgeColor === 'red' ||
+                        user.badgeColor === 'green' ||
+                        user.badgeColor === 'purple' ||
+                        user.badgeColor === 'silver'
+                          ? user.badgeColor
+                          : Number(user.blueBadge || 0) === 1
                           ? 'blue'
                           : user.verificationStatus === 'verified'
                             ? 'gold'
@@ -254,7 +268,14 @@ export function FriendsPage() {
                     <div className="friends-public-titles">
                       <UserIdentityBadges
                         badgeColor={
-                          Number(user.blueBadge || 0) === 1
+                          user.badgeColor === 'blue' ||
+                          user.badgeColor === 'gold' ||
+                          user.badgeColor === 'red' ||
+                          user.badgeColor === 'green' ||
+                          user.badgeColor === 'purple' ||
+                          user.badgeColor === 'silver'
+                            ? user.badgeColor
+                            : Number(user.blueBadge || 0) === 1
                             ? 'blue'
                             : user.verificationStatus === 'verified'
                               ? 'gold'

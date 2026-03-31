@@ -18,7 +18,7 @@ export function requireAuth(db) {
         db,
         `SELECT
           id, email, phone, role, is_approved, is_banned, is_frozen, banned_until, created_at,
-          display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+          display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
           phone_verified, identity_submitted, verification_ready_at, is_owner,
           two_factor_enabled, two_factor_for_admin_actions
          FROM users

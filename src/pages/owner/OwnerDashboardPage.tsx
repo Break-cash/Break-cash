@@ -307,7 +307,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     is_banned: number
     is_frozen: number
     vip_level: number
-    badge_color: 'none' | 'gold' | 'blue'
+    badge_color: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
   } | null>(null)
   const [flagsSaving, setFlagsSaving] = useState(false)
   const [strategyCodes, setStrategyCodes] = useState<StrategyCodeAdminItem[]>([])
@@ -664,6 +664,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           is_banned: number
           is_frozen?: number
           blue_badge?: number
+          badge_color?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
           verification_status?: 'verified' | 'pending' | 'unverified'
           vip_level?: number
         }> }).users || []
@@ -672,8 +673,16 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           setUserFlags(null)
           return
         }
-        const badgeColor: 'none' | 'gold' | 'blue' =
-          Number(found.blue_badge || 0) === 1
+        const badgeColor: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver' =
+          found.badge_color === 'blue' ||
+          found.badge_color === 'gold' ||
+          found.badge_color === 'red' ||
+          found.badge_color === 'green' ||
+          found.badge_color === 'purple' ||
+          found.badge_color === 'silver' ||
+          found.badge_color === 'none'
+            ? found.badge_color
+            : Number(found.blue_badge || 0) === 1
             ? 'blue'
             : found.verification_status === 'verified'
               ? 'gold'
@@ -2881,13 +2890,29 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     value={userFlags.badge_color}
                     onChange={(e) =>
                       setUserFlags((v) =>
-                        v ? { ...v, badge_color: e.target.value as 'none' | 'gold' | 'blue' } : v,
+                        v
+                          ? {
+                              ...v,
+                              badge_color: e.target.value as
+                                | 'none'
+                                | 'gold'
+                                | 'blue'
+                                | 'red'
+                                | 'green'
+                                | 'purple'
+                                | 'silver',
+                            }
+                          : v,
                       )
                     }
                   >
                     <option value="none">بدون توثيق</option>
                     <option value="gold">توثيق ذهبي ☑️</option>
                     <option value="blue">توثيق أزرق ☑️</option>
+                    <option value="red">توثيق أحمر</option>
+                    <option value="green">توثيق أخضر</option>
+                    <option value="purple">توثيق بنفسجي</option>
+                    <option value="silver">توثيق فضي</option>
                   </select>
                   <select
                     className="field-input owner-image-key"

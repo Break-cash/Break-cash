@@ -30,6 +30,16 @@ const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
 const avatarsDir = path.join(uploadsRoot, 'avatars')
 const kycDir = path.join(uploadsRoot, 'kyc')
 
+const BADGE_STYLE_VALUES = ['none', 'blue', 'gold', 'red', 'green', 'purple', 'silver']
+
+function resolveBadgeStyle(row) {
+  const raw = String(row?.badge_style || '').trim().toLowerCase()
+  if (BADGE_STYLE_VALUES.includes(raw)) return raw
+  if (Number(row?.blue_badge || 0) === 1) return 'blue'
+  if (String(row?.verification_status || '').trim().toLowerCase() === 'verified') return 'gold'
+  return 'none'
+}
+
 fs.mkdirSync(avatarsDir, { recursive: true })
 fs.mkdirSync(kycDir, { recursive: true })
 
@@ -69,8 +79,8 @@ function normalizeProfile(row) {
   if (!row) return null
   return {
     ...row,
-    avatar_url: buildUserAvatarUrl(row.id, row.avatar_path),
-    badge_color: Number(row.blue_badge) === 1 ? 'blue' : row.verification_status === 'verified' ? 'gold' : 'none',
+    avatar_url: buildUserAvatarUrl(row.id, row.avatar_path, row.has_avatar_blob),
+    badge_color: resolveBadgeStyle(row),
   }
 }
 
@@ -84,7 +94,8 @@ async function fetchProfile(db, userId) {
     db,
     `SELECT
       id, email, phone, role, is_approved, is_banned, is_frozen, created_at,
-     display_name, bio, avatar_path, verification_status, blue_badge, vip_level, profile_color, profile_badge,
+     display_name, bio, avatar_path, verification_status, blue_badge, badge_style, vip_level, profile_color, profile_badge,
+      CASE WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
       phone_verified, identity_submitted, verification_ready_at,
       country, preferred_language, preferred_currency, deposit_privacy_enabled,
       referral_code, invited_by, referred_by, total_deposit, points, is_owner
@@ -325,15 +336,15 @@ export function createProfileRouter(db) {
     const userId = Number(req.body?.userId)
     const style = String(req.body?.style || 'none').trim().toLowerCase()
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
-    if (!['none', 'blue', 'gold'].includes(style)) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (!BADGE_STYLE_VALUES.includes(style)) return res.status(400).json({ error: 'INVALID_INPUT' })
     if (await blockProtectedOwnerAction(db, res, userId)) return
 
     if (style === 'blue') {
-      await run(db, `UPDATE users SET blue_badge = 1, verification_status = 'verified' WHERE id = ?`, [userId])
-    } else if (style === 'gold') {
-      await run(db, `UPDATE users SET blue_badge = 0, verification_status = 'verified' WHERE id = ?`, [userId])
+      await run(db, `UPDATE users SET blue_badge = 1, badge_style = ?, verification_status = 'verified' WHERE id = ?`, [style, userId])
+    } else if (style === 'none') {
+      await run(db, `UPDATE users SET blue_badge = 0, badge_style = ?, verification_status = 'unverified' WHERE id = ?`, [style, userId])
     } else {
-      await run(db, `UPDATE users SET blue_badge = 0, verification_status = 'unverified' WHERE id = ?`, [userId])
+      await run(db, `UPDATE users SET blue_badge = 0, badge_style = ?, verification_status = 'verified' WHERE id = ?`, [style, userId])
     }
 
     const row = await fetchProfile(db, userId)

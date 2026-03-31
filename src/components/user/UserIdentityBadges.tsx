@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react'
 
 type UserIdentityBadgesProps = {
-  badgeColor?: 'none' | 'gold' | 'blue' | null
+  badgeColor?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver' | null
   vipLevel?: number | null
   premiumBadge?: string | null
   className?: string
@@ -19,10 +19,17 @@ export function UserIdentityBadges({
   variant = 'default',
   verifiedLabel = null,
 }: UserIdentityBadgesProps) {
-  const showGold = badgeColor === 'gold'
-  const showBlue = badgeColor === 'blue'
+  const resolvedBadgeColor =
+    badgeColor === 'blue' ||
+    badgeColor === 'gold' ||
+    badgeColor === 'red' ||
+    badgeColor === 'green' ||
+    badgeColor === 'purple' ||
+    badgeColor === 'silver'
+      ? badgeColor
+      : 'none'
   const showVip = Number(vipLevel || 0) > 0
-  const showVerified = mode !== 'secondary' && (showGold || showBlue)
+  const showVerified = mode !== 'secondary' && resolvedBadgeColor !== 'none'
   const showSecondary = mode !== 'verified' && showVip
   const showPremiumBadge = mode !== 'secondary' && String(premiumBadge || '').trim().length > 0
 
@@ -33,18 +40,20 @@ export function UserIdentityBadges({
       {showVerified ? (
         variant === 'profile-soft' ? (
           <span
-            className={`identity-badge-soft ${showBlue ? 'identity-badge-soft-blue' : 'identity-badge-soft-gold'}`}
-            title={showBlue ? 'Blue verified' : 'Gold verified'}
+            className={`identity-badge-soft identity-badge-soft-${resolvedBadgeColor}`}
+            title={`${resolvedBadgeColor} verified`}
           >
             <span className="identity-badge-soft-icon">
-              <Check size={11} strokeWidth={3} />
+              <span className="identity-badge-soft-icon-ring">
+                <Check size={10} strokeWidth={3} />
+              </span>
             </span>
             <span>{verifiedLabel || 'Verified'}</span>
           </span>
         ) : (
           <span
-            className={`identity-badge ${showBlue ? 'identity-badge-blue' : 'identity-badge-gold'}`}
-            title={showBlue ? 'Blue verified' : 'Gold verified'}
+            className={`identity-badge identity-badge-${resolvedBadgeColor}`}
+            title={`${resolvedBadgeColor} verified`}
           >
             <Check size={11} strokeWidth={3} />
           </span>

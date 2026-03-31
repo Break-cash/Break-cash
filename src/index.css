@@ -426,51 +426,144 @@ button {
 }
 
 .identity-badge-soft {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
-  padding: 4px 10px 4px 6px;
+  min-height: 30px;
+  padding: 4px 11px 4px 7px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.56);
-  color: #edf4ff;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.56));
+  color: #f3f8ff;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   line-height: 1;
-  box-shadow: 0 10px 24px rgba(2, 8, 20, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(2, 8, 20, 0.16);
+}
+
+.identity-badge-soft::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 55%);
+  pointer-events: none;
 }
 
 .identity-badge-soft-icon {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   border-radius: 999px;
   color: #fff;
 }
 
+.identity-badge-soft-icon-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
 .identity-badge-soft-blue {
-  border-color: rgba(96, 165, 250, 0.24);
-  background: linear-gradient(180deg, rgba(10, 18, 34, 0.88), rgba(11, 18, 31, 0.72));
-  color: #dcecff;
+  border-color: rgba(96, 165, 250, 0.2);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(96, 165, 250, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(10, 18, 34, 0.9), rgba(11, 18, 31, 0.76));
+  color: #deeeff;
 }
 
 .identity-badge-soft-blue .identity-badge-soft-icon {
-  background: linear-gradient(180deg, #4ba3ff 0%, #2563eb 100%);
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
+  background: linear-gradient(180deg, #6ab6ff 0%, #2563eb 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 8px 18px rgba(37, 99, 235, 0.28);
 }
 
 .identity-badge-soft-gold {
-  border-color: rgba(245, 158, 11, 0.24);
-  background: linear-gradient(180deg, rgba(28, 20, 8, 0.9), rgba(25, 18, 8, 0.72));
+  border-color: rgba(245, 158, 11, 0.22);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(245, 158, 11, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(32, 22, 8, 0.9), rgba(26, 18, 8, 0.76));
   color: #f8e7bf;
 }
 
 .identity-badge-soft-gold .identity-badge-soft-icon {
-  background: linear-gradient(180deg, #f4b94f 0%, #d97706 100%);
-  box-shadow: 0 8px 18px rgba(217, 119, 6, 0.22);
+  background: linear-gradient(180deg, #f7c869 0%, #d97706 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 8px 18px rgba(217, 119, 6, 0.24);
+}
+
+.identity-badge-soft-red {
+  border-color: rgba(248, 113, 113, 0.22);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(248, 113, 113, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(37, 10, 10, 0.92), rgba(28, 10, 10, 0.76));
+  color: #ffe3e3;
+}
+
+.identity-badge-soft-red .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #fb7185 0%, #dc2626 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(220, 38, 38, 0.26);
+}
+
+.identity-badge-soft-green {
+  border-color: rgba(74, 222, 128, 0.22);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(74, 222, 128, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(9, 34, 18, 0.92), rgba(9, 28, 16, 0.76));
+  color: #dcffe8;
+}
+
+.identity-badge-soft-green .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(22, 163, 74, 0.25);
+}
+
+.identity-badge-soft-purple {
+  border-color: rgba(192, 132, 252, 0.22);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(192, 132, 252, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(28, 12, 42, 0.92), rgba(22, 10, 35, 0.76));
+  color: #f4e6ff;
+}
+
+.identity-badge-soft-purple .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #c084fc 0%, #7c3aed 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(124, 58, 237, 0.24);
+}
+
+.identity-badge-soft-silver {
+  border-color: rgba(203, 213, 225, 0.24);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(226, 232, 240, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(28, 33, 44, 0.92), rgba(20, 26, 37, 0.78));
+  color: #eff4fb;
+}
+
+.identity-badge-soft-silver .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #e2e8f0 0%, #94a3b8 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 8px 18px rgba(148, 163, 184, 0.24);
 }
 
 .profile-name-row {

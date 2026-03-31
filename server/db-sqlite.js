@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS users (
   identity_submitted INTEGER NOT NULL DEFAULT 0,
   verification_ready_at TEXT,
   blue_badge INTEGER NOT NULL DEFAULT 0,
+  badge_style TEXT NOT NULL DEFAULT 'none',
   vip_level INTEGER NOT NULL DEFAULT 0,
   profile_color TEXT,
   profile_badge TEXT,
@@ -891,6 +892,7 @@ async function ensureSchema(db) {
   await ensureCol('last_ip', `ALTER TABLE users ADD COLUMN last_ip TEXT`)
   await ensureCol('last_user_agent', `ALTER TABLE users ADD COLUMN last_user_agent TEXT`)
   await ensureCol('bio', `ALTER TABLE users ADD COLUMN bio TEXT`)
+  await ensureCol('badge_style', `ALTER TABLE users ADD COLUMN badge_style TEXT NOT NULL DEFAULT 'none'`)
   await ensureCol('profile_color', `ALTER TABLE users ADD COLUMN profile_color TEXT`)
   await ensureCol('profile_badge', `ALTER TABLE users ADD COLUMN profile_badge TEXT`)
   await ensureCol('two_factor_enabled', `ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0`)
