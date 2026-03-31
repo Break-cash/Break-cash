@@ -14,6 +14,53 @@ type LoginProps = {
   onAuthSuccess?: () => void
 }
 
+function resolveAuthErrorMessage(rawMessage: string, language: Language, isRegister: boolean) {
+  const normalized = String(rawMessage || '').trim()
+  const code = normalized.toUpperCase()
+
+  const dictionary = {
+    ar: {
+      INVALID_INPUT: isRegister
+        ? 'تحقق من البريد أو رقم الهاتف، وتأكد أن كلمة المرور لا تقل عن 6 أحرف.'
+        : 'تحقق من بيانات الدخول المدخلة ثم أعد المحاولة.',
+      ALREADY_EXISTS: 'هذا البريد أو رقم الهاتف مستخدم بالفعل. جرّب تسجيل الدخول أو استخدم بيانات أخرى.',
+      INVALID_INVITE: 'كود الدعوة غير صحيح أو غير صالح للاستخدام.',
+      INVALID_CREDENTIALS: 'بيانات الدخول غير صحيحة. تحقق من البريد أو الهاتف وكلمة المرور.',
+      USER_BANNED: 'هذا الحساب موقوف حاليًا. يرجى التواصل مع الدعم.',
+      USER_FROZEN: 'هذا الحساب مجمّد مؤقتًا. يرجى التواصل مع الدعم.',
+      AUTH_REQUIRED: 'يجب تسجيل الدخول أولًا للمتابعة.',
+      SERVER_ERROR: 'حدث خطأ من الخادم أثناء تنفيذ الطلب. حاول مرة أخرى بعد قليل.',
+    },
+    en: {
+      INVALID_INPUT: isRegister
+        ? 'Check your email or phone and make sure the password has at least 6 characters.'
+        : 'Check your login details and try again.',
+      ALREADY_EXISTS: 'This email or phone number is already in use. Try signing in or use different details.',
+      INVALID_INVITE: 'The invite code is invalid or can no longer be used.',
+      INVALID_CREDENTIALS: 'Incorrect login details. Check your email/phone and password.',
+      USER_BANNED: 'This account is currently suspended. Please contact support.',
+      USER_FROZEN: 'This account is temporarily frozen. Please contact support.',
+      AUTH_REQUIRED: 'You need to sign in first to continue.',
+      SERVER_ERROR: 'The server could not complete the request. Please try again shortly.',
+    },
+    tr: {
+      INVALID_INPUT: isRegister
+        ? 'E-posta veya telefonu kontrol edin ve sifrenin en az 6 karakter oldugundan emin olun.'
+        : 'Giris bilgilerini kontrol edip tekrar deneyin.',
+      ALREADY_EXISTS: 'Bu e-posta veya telefon numarasi zaten kullaniliyor. Giris yapin veya farkli bilgiler kullanin.',
+      INVALID_INVITE: 'Davet kodu gecersiz veya artik kullanilamiyor.',
+      INVALID_CREDENTIALS: 'Giris bilgileri hatali. E-posta/telefon ve sifreyi kontrol edin.',
+      USER_BANNED: 'Bu hesap su anda engellenmis. Lutfen destek ile iletisim kurun.',
+      USER_FROZEN: 'Bu hesap gecici olarak dondurulmus. Lutfen destek ile iletisim kurun.',
+      AUTH_REQUIRED: 'Devam etmek icin once giris yapmaniz gerekiyor.',
+      SERVER_ERROR: 'Sunucu istegi tamamlayamadi. Lutfen biraz sonra tekrar deneyin.',
+    },
+  } as const
+
+  const selected = dictionary[language] || dictionary.en
+  return selected[code as keyof typeof selected] || normalized
+}
+
 export function Login({ onAuthSuccess }: LoginProps) {
   const { t, language, setLanguage } = useI18n()
   const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
@@ -33,6 +80,24 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
   const brandLabel = 'BREAK CASH'
+  const registerCommonIssues =
+    language === 'ar'
+      ? [
+          'استخدم بريدًا إلكترونيًا أو رقم هاتف غير مستخدم من قبل.',
+          'تأكد أن كلمة المرور لا تقل عن 6 أحرف.',
+          'إذا استخدمت كود دعوة، فتأكد أنه صحيح وما زال صالحًا.',
+        ]
+      : language === 'tr'
+        ? [
+            'Daha once kullanilmamis bir e-posta veya telefon numarasi kullanin.',
+            'Sifrenin en az 6 karakter oldugundan emin olun.',
+            'Davet kodu kullaniyorsaniz dogru ve gecerli oldugunu kontrol edin.',
+          ]
+        : [
+            'Use an email or phone number that has not been used before.',
+            'Make sure the password is at least 6 characters long.',
+            'If you use an invite code, make sure it is correct and still valid.',
+          ]
 
   useEffect(() => {
     let mounted = true
@@ -74,7 +139,11 @@ export function Login({ onAuthSuccess }: LoginProps) {
       const isNetworkError =
         err instanceof Error && (err.message === 'Failed to fetch' || err.name === 'TypeError')
       setError(
-        isNetworkError ? t('login_network_error') : err instanceof Error ? err.message : t('login_unknown_error'),
+        isNetworkError
+          ? t('login_network_error')
+          : err instanceof Error
+            ? resolveAuthErrorMessage(err.message, language, isRegister)
+            : t('login_unknown_error'),
       )
     } finally {
       setLoading(false)
@@ -212,6 +281,22 @@ export function Login({ onAuthSuccess }: LoginProps) {
           ) : null}
 
           {error ? <div className="login-error">{error}</div> : null}
+          {isRegister ? (
+            <div className="glass-panel-soft rounded-xl border border-white/8 px-3 py-3 text-xs leading-6 text-white/75">
+              <div className="mb-1 font-semibold text-white/90">
+                {language === 'ar'
+                  ? 'أخطاء التسجيل الشائعة'
+                  : language === 'tr'
+                    ? 'Yaygin kayit hatalari'
+                    : 'Common registration issues'}
+              </div>
+              <ul className="space-y-1">
+                {registerCommonIssues.map((issue) => (
+                  <li key={issue}>• {issue}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {successMsg ? <div className="login-success">{successMsg}</div> : null}
 
           <button type="submit" className="login-submit" disabled={loading}>
