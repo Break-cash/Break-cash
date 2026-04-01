@@ -425,6 +425,64 @@ button {
   flex-wrap: wrap;
 }
 
+/* Compact verified check (Layout, Friends, Home profile strip) — must match UserIdentityBadges default variant */
+.identity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 6px 14px rgba(2, 8, 20, 0.22);
+}
+
+.identity-badge-blue {
+  background: linear-gradient(180deg, #6ab6ff 0%, #2563eb 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 8px 18px rgba(37, 99, 235, 0.28);
+}
+
+.identity-badge-gold {
+  background: linear-gradient(180deg, #f7c869 0%, #d97706 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 8px 18px rgba(217, 119, 6, 0.24);
+}
+
+.identity-badge-red {
+  background: linear-gradient(180deg, #fb7185 0%, #dc2626 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(220, 38, 38, 0.26);
+}
+
+.identity-badge-green {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(22, 163, 74, 0.25);
+}
+
+.identity-badge-purple {
+  background: linear-gradient(180deg, #c084fc 0%, #7c3aed 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 18px rgba(124, 58, 237, 0.24);
+}
+
+.identity-badge-silver {
+  background: linear-gradient(180deg, #e2e8f0 0%, #94a3b8 100%);
+  color: #0f172a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 8px 18px rgba(148, 163, 184, 0.24);
+}
+
 .identity-badge-soft {
   position: relative;
   display: inline-flex;

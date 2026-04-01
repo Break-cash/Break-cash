@@ -7,6 +7,8 @@ import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import { sendSupportTicketEmail } from '../services/email.js'
 import { persistUploadedAsset } from '../services/uploaded-assets.js'
+import { logSensitiveAssetAudit } from '../services/sensitive-asset-audit.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const USER_ARCHIVE_AFTER_HOURS = 72
 const MAX_SUPPORT_ATTACHMENTS = 4
@@ -98,7 +100,12 @@ async function createSupportMessage(db, { ticketId, senderUserId = null, senderR
   return result.rows?.[0] || null
 }
 
-async function createSupportAttachments(db, messageId, files) {
+function clientIp(req) {
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+  return xff || String(req.ip || '').trim() || null
+}
+
+async function createSupportAttachments(db, messageId, files, audit = null) {
   const attachments = []
   for (const file of files || []) {
     const publicUrl = `/uploads/support/${path.basename(String(file.path || '')).replaceAll('\\', '/')}`
@@ -115,7 +122,25 @@ async function createSupportAttachments(db, messageId, files) {
        RETURNING id, message_id, file_url, mime_type, original_name, byte_size, created_at`,
       [messageId, publicUrl, file.mimetype || null, file.originalname || null, Number(file.size || 0)],
     )
-    attachments.push(result.rows?.[0] || null)
+    const row = result.rows?.[0] || null
+    attachments.push(row)
+    if (audit && row?.id) {
+      await logSensitiveAssetAudit(db, {
+        actorUserId: audit.actorUserId,
+        subjectUserId: audit.subjectUserId,
+        resourceType: 'support_attachment',
+        resourceId: String(row.id),
+        action: 'upload',
+        metadata: {
+          ticket_id: audit.ticketId,
+          message_id: messageId,
+          file_url: publicUrl,
+          original_name: file.originalname || null,
+          byte_size: Number(file.size || 0),
+        },
+        ipAddress: audit.ip || null,
+      })
+    }
   }
   return attachments.filter(Boolean)
 }
@@ -228,7 +253,7 @@ export function createSupportRouter(db) {
   const router = Router()
   router.use(requireAuth(db))
 
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const supportDir = path.join(uploadsRoot, 'support')
   fs.mkdirSync(supportDir, { recursive: true })
   const upload = multer({
@@ -300,7 +325,12 @@ export function createSupportRouter(db) {
       senderRole: 'user',
       body: message,
     })
-    await createSupportAttachments(db, Number(supportMessage?.id || 0), req.files || [])
+    await createSupportAttachments(db, Number(supportMessage?.id || 0), req.files || [], {
+      actorUserId: req.user.id,
+      subjectUserId: req.user.id,
+      ticketId: Number(item.id),
+      ip: clientIp(req),
+    })
 
     let deliveryStatus = 'mock'
     let deliveryError = null
@@ -356,7 +386,12 @@ export function createSupportRouter(db) {
       senderRole: 'user',
       body,
     })
-    await createSupportAttachments(db, Number(messageRow?.id || 0), files)
+    await createSupportAttachments(db, Number(messageRow?.id || 0), files, {
+      actorUserId: req.user.id,
+      subjectUserId: Number(ticket.user_id || 0),
+      ticketId,
+      ip: clientIp(req),
+    })
     await run(db, `UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [ticketId])
     publishLiveUpdate({ type: 'support_ticket_updated', scope: 'user', userId: req.user.id, source: 'support', key: `ticket:${ticketId}` })
     publishLiveUpdate({ type: 'support_queue_updated', scope: 'global', source: 'support', key: 'tickets' })
@@ -461,7 +496,12 @@ export function createSupportRouter(db) {
       senderRole: 'support',
       body,
     })
-    await createSupportAttachments(db, Number(messageRow?.id || 0), files)
+    await createSupportAttachments(db, Number(messageRow?.id || 0), files, {
+      actorUserId: req.user.id,
+      subjectUserId: Number(ticket.user_id || 0),
+      ticketId,
+      ip: clientIp(req),
+    })
     await run(db, `UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [ticketId])
     await createUserSupportNotification(
       db,

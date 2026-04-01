@@ -22,6 +22,7 @@ import {
 } from '../../api'
 import type { PremiumProfileBadge, PremiumProfileColor } from '../../premiumIdentity'
 import { useI18n } from '../../i18nCore'
+import { AdminUserKycDepositsPanel } from '../../components/admin/AdminUserKycDepositsPanel'
 
 type ToggleFilter = '' | '1' | '0'
 
@@ -239,6 +240,11 @@ export function AdminUsersPage() {
                 <div className="text-xs text-app-muted">{t('admin_users_last_ip')}: {selectedUser.last_ip || '—'}</div>
                 <div className="text-xs text-app-muted">{t('admin_users_device')}: {selectedUser.last_user_agent || '—'}</div>
               </div>
+
+              <AdminUserKycDepositsPanel
+                kycSubmissions={selected?.kyc_submissions}
+                depositRequests={selected?.deposit_requests}
+              />
 
               <div className="owner-buttons">
                 <button className="wallet-action-btn owner-set-btn" type="button" disabled={saving} onClick={() => runAction(() => updateUserFreeze(selectedUser.id, Number(selectedUser.is_frozen) !== 1), t('admin_users_msg_freeze_updated'))}>

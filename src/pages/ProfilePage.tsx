@@ -155,6 +155,20 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
     setBio(user.bio || '')
   }, [user.bio])
 
+  const verificationStatus = String(user.verification_status || 'unverified').toLowerCase()
+  const isKycVerified = verificationStatus === 'verified'
+  const isKycPending = verificationStatus === 'pending'
+  const identityFormLocked = isKycVerified || isKycPending
+  const canResubmitKyc = !isKycVerified && !isKycPending && Number(user.identity_submitted ?? 0) === 1
+
+  useEffect(() => {
+    if (!identityFormLocked) return
+    setIdCardFile(null)
+    setSelfieFile(null)
+    setIdCardPreview(null)
+    setSelfiePreview(null)
+  }, [identityFormLocked, user.verification_status])
+
   useEffect(() => {
     setLoadingRecoveryCode(true)
     getRecoveryCodeStatus()
@@ -230,7 +244,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
         setAvatarPreview(res.profile.avatar_url || null)
       }
 
-      if (idCardFile && selfieFile) {
+      if (idCardFile && selfieFile && !identityFormLocked) {
         await uploadKyc(idCardFile, selfieFile)
       }
 
@@ -334,7 +348,13 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
                 <span>الحالة</span>
               </div>
               <div className="mt-2 text-sm font-semibold text-white">
-                {user.verification_status === 'verified' ? 'موثق ومعتمد' : 'بانتظار الاعتماد'}
+                {isKycVerified
+                  ? 'موثق ومعتمد'
+                  : isKycPending
+                    ? 'قيد مراجعة الإدارة'
+                    : Number(user.identity_submitted ?? 0) === 1
+                      ? 'يمكن إعادة إرسال التحقق'
+                      : 'غير موثّق'}
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -552,12 +572,39 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
         <SectionCard
           icon={<ShieldCheck size={18} />}
           title="رفع التحقق والاعتماد"
-          subtitle="إرسال بيانات الهوية وصور التحقق لطلب الاعتماد."
+          subtitle={
+            isKycVerified
+              ? 'تم اعتماد بيانات التحقق — لا حاجة لإرسال طلب جديد.'
+              : isKycPending
+                ? 'طلبك قيد المراجعة لدى الإدارة.'
+                : canResubmitKyc
+                  ? 'يمكنك تحديث البيانات وإعادة إرسال طلب التحقق.'
+                  : 'إرسال بيانات الهوية وصور التحقق لطلب الاعتماد.'
+          }
           isOpen={openSection === 'identity'}
           onToggle={() => setOpenSection((key) => (key === 'identity' ? null : 'identity'))}
         >
+          {isKycVerified ? (
+            <div className="login-success rounded-2xl px-4 py-3 text-sm leading-7">
+              تم التحقق من حسابك بنجاح واعتماد بياناتك من قبل الإدارة. تم قفل هذه الخانة ولن تحتاج لإعادة الإرسال.
+            </div>
+          ) : null}
+          {isKycPending ? (
+            <div className="rounded-2xl border border-amber-400/35 bg-amber-500/10 px-4 py-3 text-sm leading-7 text-amber-100">
+              تم استلام طلب التحقق وهو قيد المراجعة. لا يمكن تعديل البيانات أو إعادة الرفع حتى تنتهي المراجعة.
+            </div>
+          ) : null}
+          {canResubmitKyc ? (
+            <div className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm leading-7 text-sky-100">
+              لم يُعتمد طلب التحقق السابق. يمكنك تصحيح البيانات وإرفاق صور جديدة ثم الحفظ لإعادة الإرسال.
+            </div>
+          ) : null}
           <p className="profile-settings-sub">
-            أدخل بياناتك القانونية وأرفق صورة الهوية وصورة شخصية للتحقق.
+            {identityFormLocked
+              ? isKycVerified
+                ? 'عرض للاطلاع فقط — الحقول معطّلة بعد نجاح التحقق.'
+                : 'عرض للاطلاع فقط — الحقول معطّلة أثناء مراجعة الإدارة.'
+              : 'أدخل بياناتك القانونية وأرفق صورة الهوية وصورة شخصية للتحقق.'}
           </p>
           <div className="profile-settings-fields">
             <input
@@ -565,30 +612,36 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
               placeholder="الاسم القانوني الكامل"
               value={identity.legalName}
               onChange={(e) => setIdentity((v) => ({ ...v, legalName: e.target.value }))}
+              disabled={identityFormLocked}
             />
             <input
               className="field-input"
               placeholder="الرقم الوطني"
               value={identity.nationalId}
               onChange={(e) => setIdentity((v) => ({ ...v, nationalId: e.target.value }))}
+              disabled={identityFormLocked}
             />
             <input
               className="field-input"
               placeholder="رقم الهاتف"
               value={identity.phone}
               onChange={(e) => setIdentity((v) => ({ ...v, phone: e.target.value }))}
+              disabled={identityFormLocked}
             />
             <input
               className="field-input"
               placeholder="الدولة"
               value={identity.country}
               onChange={(e) => setIdentity((v) => ({ ...v, country: e.target.value }))}
+              disabled={identityFormLocked}
             />
           </div>
           <div className="profile-settings-upload-row">
-            <label className="profile-settings-upload-btn">
+            <label
+              className={`profile-settings-upload-btn ${identityFormLocked ? 'pointer-events-none cursor-not-allowed opacity-50' : ''}`}
+            >
               بطاقة الهوية
-              <input type="file" accept="image/*" onChange={handleIdCardChange} />
+              <input type="file" accept="image/*" onChange={handleIdCardChange} disabled={identityFormLocked} />
             </label>
             {idCardPreview ? (
               <div className="profile-settings-upload-preview">
@@ -597,9 +650,11 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
             ) : null}
           </div>
           <div className="profile-settings-upload-row">
-            <label className="profile-settings-upload-btn">
+            <label
+              className={`profile-settings-upload-btn ${identityFormLocked ? 'pointer-events-none cursor-not-allowed opacity-50' : ''}`}
+            >
               صورة شخصية
-              <input type="file" accept="image/*" onChange={handleSelfieChange} />
+              <input type="file" accept="image/*" onChange={handleSelfieChange} disabled={identityFormLocked} />
             </label>
             {selfiePreview ? (
               <div className="profile-settings-upload-preview">

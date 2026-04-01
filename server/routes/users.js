@@ -244,10 +244,11 @@ export function createUsersRouter(db) {
       db,
       `SELECT
         u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
-        u.display_name, u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_color, u.profile_badge, u.phone_verified, u.identity_submitted,
+        u.display_name, u.avatar_path, u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_color, u.profile_badge, u.phone_verified, u.identity_submitted,
         u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled, u.referral_code, u.invited_by, u.referred_by,
         u.total_deposit, u.points, u.is_owner,
         u.last_login_at, u.last_ip, u.last_user_agent,
+        CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
         COALESCE(bal.total_balance, 0) AS wallet_balance,
         COALESCE(dep.total_deposits, 0) AS deposits_total,
         COALESCE(wd.total_withdrawals, 0) AS withdrawals_total,
@@ -297,7 +298,53 @@ export function createUsersRouter(db) {
       [userId],
     )
 
-    return res.json({ user, activity, notes })
+    const kyc_submissions = await all(
+      db,
+      `SELECT id, user_id, id_document_path, selfie_path, review_status, rejection_reason,
+              reviewed_at, reviewed_note, reviewed_by, created_at, purged_at, purged_reason
+       FROM kyc_submissions
+       WHERE user_id = ?
+       ORDER BY id DESC
+       LIMIT 25`,
+      [userId],
+    )
+
+    const deposit_requests = await all(
+      db,
+      `SELECT id, amount, currency, method, transfer_ref, user_notes, proof_image_path,
+              request_status, admin_note, reviewed_at, completed_at, created_at
+       FROM deposit_requests
+       WHERE user_id = ?
+       ORDER BY id DESC
+       LIMIT 30`,
+      [userId],
+    )
+
+    const rawBadgeStyle = String(user.badge_style || '').trim().toLowerCase()
+    const badge_color = ['none', 'blue', 'gold', 'red', 'green', 'purple', 'silver'].includes(rawBadgeStyle)
+      ? rawBadgeStyle
+      : Number(user.blue_badge || 0) === 1
+        ? 'blue'
+        : user.verification_status === 'verified'
+          ? 'gold'
+          : 'none'
+    const normalizedUser = {
+      ...user,
+      badge_color,
+      avatar_path: buildUserAvatarUrl(user.id, user.avatar_path, user.has_avatar_blob),
+    }
+    delete normalizedUser.has_avatar_blob
+
+    const isOwner = req.user.role === 'owner'
+    const userOut = isOwner ? normalizedUser : { ...normalizedUser, email: null, phone: null }
+
+    return res.json({
+      user: userOut,
+      activity,
+      notes,
+      kyc_submissions,
+      deposit_requests,
+    })
   })
 
   router.post('/approve', requirePermission(db, 'manage_users'), async (req, res) => {

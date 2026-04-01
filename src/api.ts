@@ -1436,6 +1436,36 @@ export type AdminUserRow = {
   pending_withdrawals?: number
 }
 
+export type AdminKycSubmissionRow = {
+  id: number
+  user_id: number
+  id_document_path: string | null
+  selfie_path: string | null
+  review_status: string
+  rejection_reason?: string | null
+  reviewed_at?: string | null
+  reviewed_note?: string | null
+  reviewed_by?: number | null
+  created_at: string
+  purged_at?: string | null
+  purged_reason?: string | null
+}
+
+export type AdminDepositRequestRow = {
+  id: number
+  amount: number
+  currency: string
+  method: string
+  transfer_ref: string
+  user_notes?: string | null
+  proof_image_path?: string | null
+  request_status: string
+  admin_note?: string | null
+  reviewed_at?: string | null
+  completed_at?: string | null
+  created_at: string
+}
+
 export type AdminUserProfilePayload = {
   user: AdminUserRow
   activity: Array<{
@@ -1452,6 +1482,8 @@ export type AdminUserProfilePayload = {
     admin_id: number | null
     created_at: string
   }>
+  kyc_submissions?: AdminKycSubmissionRow[]
+  deposit_requests?: AdminDepositRequestRow[]
 }
 
 export async function getAdminUsersList(params: Record<string, string | number | boolean | undefined>) {
@@ -2380,6 +2412,69 @@ export async function runUnusualActivityDetection() {
     method: 'POST',
     body: JSON.stringify({}),
   }) as Promise<{ ok: boolean; alertsCreated: number }>
+}
+
+export type DataRetentionSettings = {
+  kyc_rejected_retention_days: number
+  kyc_approved_retention_days: number
+  support_closed_attachment_retention_days: number
+  auto_purge_enabled: number
+  last_purge_run_at?: string | null
+  last_purge_summary?: string | null
+  updated_at?: string | null
+  updated_by?: number | null
+}
+
+export type DataRetentionPreview = {
+  settings: DataRetentionSettings
+  cutoffs: { rejectedCutoff: string; approvedCutoff: string | null; supportCutoff: string }
+  counts: { kyc_rejected: number; kyc_approved: number; support_attachments: number }
+}
+
+export type SensitiveAssetAuditItem = {
+  id: number
+  actor_user_id?: number | null
+  subject_user_id?: number | null
+  resource_type: string
+  resource_id?: string | null
+  action: string
+  metadata?: string | null
+  ip_address?: string | null
+  created_at: string
+}
+
+export type DataRetentionPurgeSummary = {
+  dryRun: boolean
+  kyc_purged: number
+  support_attachments_removed: number
+  errors: Array<Record<string, unknown>>
+}
+
+export async function getDataRetentionSettings() {
+  return apiFetch('/api/owner-growth/data-retention/settings') as Promise<{ settings: DataRetentionSettings }>
+}
+
+export async function updateDataRetentionSettings(payload: Partial<DataRetentionSettings>) {
+  return apiFetch('/api/owner-growth/data-retention/settings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<{ settings: DataRetentionSettings }>
+}
+
+export async function getDataRetentionPreview() {
+  return apiFetch('/api/owner-growth/data-retention/preview') as Promise<{ preview: DataRetentionPreview }>
+}
+
+export async function getSensitiveAssetAudit(limit = 150, offset = 0) {
+  const q = `?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`
+  return apiFetch(`/api/owner-growth/data-retention/sensitive-audit${q}`) as Promise<{ items: SensitiveAssetAuditItem[] }>
+}
+
+export async function runDataRetentionPurge(dryRun: boolean) {
+  return apiFetch('/api/owner-growth/data-retention/purge', {
+    method: 'POST',
+    body: JSON.stringify({ dryRun: dryRun ? 1 : 0 }),
+  }) as Promise<{ summary: DataRetentionPurgeSummary }>
 }
 
 export async function getAdminStaffList() {

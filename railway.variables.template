@@ -1,0 +1,25 @@
+# انسخ هذه المتغيرات إلى Railway → خدمة الـ API → Variables
+# (لا ترفع هذا الملف مع القيم السرية إلى مستودع عام)
+
+NODE_ENV=production
+
+# PostgreSQL من Railway أو خارجي
+DATABASE_URL=
+
+JWT_SECRET=
+PGSSL=true
+
+# قرص مؤقت للملفات قبل الرفع إلى R2 (Linux على Railway)
+UPLOADS_ROOT=/tmp
+
+# Cloudflare R2 (S3-compatible) — من R2 → Manage R2 API Tokens + endpoint من لوحة الحساب
+OBJECT_STORAGE_ENDPOINT=https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+OBJECT_STORAGE_REGION=auto
+OBJECT_STORAGE_BUCKET=YOUR_BUCKET_NAME
+OBJECT_STORAGE_ACCESS_KEY=
+OBJECT_STORAGE_SECRET_KEY=
+# رابط عام للقراءة (R2 public bucket أو نطاق مخصص)، بدون / في النهاية
+OBJECT_STORAGE_PUBLIC_URL=https://pub-xxxxx.r2.dev
+
+# اختياري: لـ MinIO وبعض المزودين
+# OBJECT_STORAGE_FORCE_PATH_STYLE=1
