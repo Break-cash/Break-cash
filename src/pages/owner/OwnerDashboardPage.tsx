@@ -681,9 +681,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
             ? found.badge_color
             : Number(found.blue_badge || 0) === 1
             ? 'blue'
-            : found.verification_status === 'verified'
-              ? 'gold'
-              : 'none'
+            : 'none'
         setUserFlags({
           is_banned: Number(found.is_banned || 0),
           is_frozen: Number(found.is_frozen || 0),

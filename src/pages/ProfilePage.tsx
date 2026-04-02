@@ -129,9 +129,7 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
       ? user.badge_color
       : Number(user.blue_badge || 0) === 1
         ? 'blue'
-        : user.verification_status === 'verified'
-          ? 'gold'
-          : 'none'
+        : 'none'
   const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
 
   useEffect(() => {

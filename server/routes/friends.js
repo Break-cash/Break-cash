@@ -26,9 +26,7 @@ function toFriendUserPayload(row) {
       ? rawBadgeStyle
       : Number(row.blue_badge || 0) === 1
         ? 'blue'
-        : String(row.verification_status || 'unverified') === 'verified'
-          ? 'gold'
-          : 'none'
+        : 'none'
   return {
     id: row.id,
     displayName: row.display_name || `#${row.id}`,

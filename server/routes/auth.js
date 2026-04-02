@@ -33,9 +33,7 @@ function toSafeUser(user) {
       ? rawBadgeStyle
       : Number(user.blue_badge || 0) === 1
         ? 'blue'
-        : user.verification_status === 'verified'
-          ? 'gold'
-          : 'none'
+        : 'none'
   return {
     ...user,
     is_owner: Number(user.is_owner ?? (isOwner ? 1 : 0)),

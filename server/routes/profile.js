@@ -36,7 +36,6 @@ function resolveBadgeStyle(row) {
   const raw = String(row?.badge_style || '').trim().toLowerCase()
   if (BADGE_STYLE_VALUES.includes(raw)) return raw
   if (Number(row?.blue_badge || 0) === 1) return 'blue'
-  if (String(row?.verification_status || '').trim().toLowerCase() === 'verified') return 'gold'
   return 'none'
 }
 
@@ -340,11 +339,11 @@ export function createProfileRouter(db) {
     if (await blockProtectedOwnerAction(db, res, userId)) return
 
     if (style === 'blue') {
-      await run(db, `UPDATE users SET blue_badge = 1, badge_style = ?, verification_status = 'verified' WHERE id = ?`, [style, userId])
+      await run(db, `UPDATE users SET blue_badge = 1, badge_style = ? WHERE id = ?`, [style, userId])
     } else if (style === 'none') {
-      await run(db, `UPDATE users SET blue_badge = 0, badge_style = ?, verification_status = 'unverified' WHERE id = ?`, [style, userId])
+      await run(db, `UPDATE users SET blue_badge = 0, badge_style = ? WHERE id = ?`, [style, userId])
     } else {
-      await run(db, `UPDATE users SET blue_badge = 0, badge_style = ?, verification_status = 'verified' WHERE id = ?`, [style, userId])
+      await run(db, `UPDATE users SET blue_badge = 0, badge_style = ? WHERE id = ?`, [style, userId])
     }
 
     const row = await fetchProfile(db, userId)

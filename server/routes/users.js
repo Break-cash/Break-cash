@@ -66,9 +66,7 @@ function normalizeAdminProfileUser(row, isOwner) {
       ? rawBadgeStyle
       : Number(row.blue_badge || 0) === 1
         ? 'blue'
-        : row.verification_status === 'verified'
-          ? 'gold'
-          : 'none'
+        : 'none'
   const normalized = {
     ...row,
     badge_color,
@@ -243,9 +241,7 @@ export function createUsersRouter(db) {
           ? rawBadgeStyle
           : Number(row.blue_badge || 0) === 1
             ? 'blue'
-            : row.verification_status === 'verified'
-              ? 'gold'
-              : 'none'
+            : 'none'
       return {
         ...row,
         badge_color,
