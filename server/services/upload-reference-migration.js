@@ -60,7 +60,11 @@ async function ensureStoredUploadAsset(db, value) {
 async function normalizeUserAvatarReferences(db) {
   const rows = await all(
     db,
-    `SELECT id, avatar_path
+    `SELECT id, avatar_path,
+            CASE
+              WHEN avatar_blob_base64 IS NOT NULL AND avatar_blob_base64 <> '' THEN 1
+              ELSE 0
+            END AS has_avatar_blob
      FROM users
      WHERE avatar_path IS NOT NULL
        AND avatar_path <> ''`,
@@ -71,6 +75,9 @@ async function normalizeUserAvatarReferences(db) {
   for (const row of rows) {
     const ensured = await ensureStoredUploadAsset(db, row.avatar_path)
     if (!ensured.exists) {
+      if (Number(row.has_avatar_blob || 0) === 1) {
+        continue
+      }
       await run(db, `UPDATE users SET avatar_path = NULL WHERE id = ?`, [row.id])
       cleared += 1
       continue

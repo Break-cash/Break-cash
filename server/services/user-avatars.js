@@ -26,9 +26,12 @@ async function readLocalFileAsBase64(absPath) {
   }
 }
 
-export function buildUserAvatarUrl(userId, avatarPath) {
+export function buildUserAvatarUrl(userId, avatarPath, hasStoredAvatar = false) {
   const id = Number(userId || 0)
-  if (!id || !String(avatarPath || '').trim()) return null
+  if (!id) return null
+  const hasPath = Boolean(String(avatarPath || '').trim())
+  const hasBlob = Number(hasStoredAvatar || 0) === 1 || hasStoredAvatar === true
+  if (!hasPath && !hasBlob) return null
   return `/api/profile/avatar-file/${id}`
 }
 

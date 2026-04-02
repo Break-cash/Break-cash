@@ -1862,7 +1862,8 @@ export function createOwnerGrowthRouter(db) {
       `SELECT k.id, k.user_id, k.id_document_path, k.selfie_path, k.review_status, k.rejection_reason,
               k.full_name_match_score, k.face_match_score, k.aml_risk_level, k.auto_review_at, k.reviewed_note,
               k.reviewed_by, k.reviewed_at, k.created_at,
-              u.display_name, u.email, u.phone, u.verification_status, u.is_approved, u.avatar_path
+              u.display_name, u.email, u.phone, u.verification_status, u.is_approved, u.avatar_path,
+              CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob
        FROM kyc_submissions k
        LEFT JOIN users u ON u.id = k.user_id
        ${sqlWhere}
@@ -1874,7 +1875,7 @@ export function createOwnerGrowthRouter(db) {
       ...row,
       id_document_url: toPublicUploadUrl(row.id_document_path),
       selfie_url: toPublicUploadUrl(row.selfie_path),
-        avatar_url: buildUserAvatarUrl(row.id, row.avatar_path),
+      avatar_url: buildUserAvatarUrl(row.user_id, row.avatar_path, row.has_avatar_blob),
     }))
     return res.json({ items })
   })
