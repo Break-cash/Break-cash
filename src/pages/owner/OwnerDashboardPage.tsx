@@ -123,6 +123,7 @@ import {
   updateUserVipLevel,
 } from '../../api'
 import { AdminUserKycDepositsPanel } from '../../components/admin/AdminUserKycDepositsPanel'
+import { UserIdentityBadges } from '../../components/user/UserIdentityBadges'
 import { AD_DESCRIPTION_MAX, AD_PLACEMENTS, AD_TITLE_MAX, validateAdForm } from '../../components/ads/adConstants'
 import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../../components/home/LeaderboardSection'
 import { useI18n } from '../../i18nCore'
@@ -2976,6 +2977,21 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                     <option value={4}>VIP 4</option>
                     <option value={5}>VIP 5</option>
                   </select>
+                </div>
+
+                <div className="owner-badge-preview-card">
+                  <div className="owner-badge-preview-header">
+                    <span className="owner-badge-preview-label">معاينة شارة التوثيق</span>
+                    <span className="owner-badge-preview-value">
+                      {userFlags.badge_color === 'none' ? 'بدون شارة' : `اللون الحالي: ${userFlags.badge_color}`}
+                    </span>
+                  </div>
+                  <div className="owner-badge-preview-body">
+                    <span className="owner-badge-preview-name">
+                      {selectedAdminProfile?.user?.display_name || `#${selectedAdminProfile?.user?.id || targetUserId}`}
+                    </span>
+                    <UserIdentityBadges badgeColor={userFlags.badge_color} vipLevel={0} mode="verified" />
+                  </div>
                 </div>
 
                 <button
