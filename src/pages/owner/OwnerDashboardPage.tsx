@@ -878,6 +878,66 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     }
   }
 
+  void handleUserFlagsSave
+
+  async function handleUserFlagsSaveRobust() {
+    const uid = Number(targetUserId)
+    if (!uid || !userFlags) {
+      setMessage({ type: 'error', text: 'Ø£Ø¯Ø®Ù„ Ø±Ù‚Ù… Ù…Ø³ØªØ®Ø¯Ù… ØµØ­ÙŠØ­ Ø£ÙˆÙ„Ø§Ù‹.' })
+      return
+    }
+    setFlagsSaving(true)
+    setMessage(null)
+    try {
+      const results = await Promise.allSettled([
+        updateUserBan(uid, userFlags.is_banned === 1),
+        updateUserFreeze(uid, userFlags.is_frozen === 1),
+        updateUserBadgeStyle(uid, userFlags.badge_color),
+        updateUserVipLevel(uid, userFlags.vip_level),
+      ])
+
+      const refreshedProfile = await getAdminUserProfile(uid)
+      setSelectedAdminProfile(refreshedProfile)
+      const refreshedUser = refreshedProfile?.user
+      if (refreshedUser) {
+        const refreshedBadgeColor: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver' =
+          refreshedUser.badge_color === 'blue' ||
+          refreshedUser.badge_color === 'gold' ||
+          refreshedUser.badge_color === 'red' ||
+          refreshedUser.badge_color === 'green' ||
+          refreshedUser.badge_color === 'purple' ||
+          refreshedUser.badge_color === 'silver' ||
+          refreshedUser.badge_color === 'none'
+            ? refreshedUser.badge_color
+            : Number(refreshedUser.blue_badge || 0) === 1
+            ? 'blue'
+            : 'none'
+        setUserFlags({
+          is_banned: Number(refreshedUser.is_banned || 0),
+          is_frozen: Number(refreshedUser.is_frozen || 0),
+          vip_level: Number(refreshedUser.vip_level || 0),
+          badge_color: refreshedBadgeColor,
+        })
+      }
+
+      const failed = results.filter((result) => result.status === 'rejected')
+      if (failed.length === 0) {
+        setMessage({ type: 'success', text: 'ØªÙ… ØªØ­Ø¯ÙŠØ« ØµÙ„Ø§Ø­ÙŠØ§Øª ÙˆØ­Ø§Ù„Ø© Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø¨Ù†Ø¬Ø§Ø­.' })
+      } else {
+        const firstError = failed[0]
+        const messageText =
+          firstError.status === 'rejected' && firstError.reason instanceof Error
+            ? firstError.reason.message
+            : 'ÙØ´Ù„ ØªØ­Ø¯ÙŠØ« Ø¨Ø¹Ø¶ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù….'
+        setMessage({ type: 'error', text: messageText })
+      }
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'ÙØ´Ù„ ØªØ­Ø¯ÙŠØ« ØµÙ„Ø§Ø­ÙŠØ§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù….' })
+    } finally {
+      setFlagsSaving(false)
+    }
+  }
+
   async function handleAdjustUserProfit() {
     const uid = Number(targetUserId)
     const amount = Number(userProfitAdjustDraft.amount || 0)
@@ -2921,7 +2981,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 <button
                   type="button"
                   className="wallet-action-btn owner-set-btn"
-                  onClick={handleUserFlagsSave}
+                  onClick={handleUserFlagsSaveRobust}
                   disabled={flagsSaving}
                 >
                   {flagsSaving ? 'جارٍ الحفظ...' : 'حفظ إعدادات المستخدم'}
