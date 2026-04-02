@@ -12,6 +12,7 @@ import {
   getBalanceRules,
   getAdminUnlockOverride,
   getAdminStaffList,
+  getAdminUserProfile,
   getAdminUsersList,
   getAdminUserWallet,
   deleteBonusRule,
@@ -78,6 +79,7 @@ import {
   uploadMiningMediaAdmin,
   type AdItem,
   type AdminAccountHealthScan,
+  type AdminUserProfilePayload,
   type AdminStaffItem,
   type AdminUserRow,
   type AuthUser,
@@ -120,6 +122,7 @@ import {
   updateUserFreeze,
   updateUserVipLevel,
 } from '../../api'
+import { AdminUserKycDepositsPanel } from '../../components/admin/AdminUserKycDepositsPanel'
 import { AD_DESCRIPTION_MAX, AD_PLACEMENTS, AD_TITLE_MAX, validateAdForm } from '../../components/ads/adConstants'
 import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../../components/home/LeaderboardSection'
 import { useI18n } from '../../i18nCore'
@@ -303,6 +306,7 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [attractionTargets, setAttractionTargets] = useState<IconAttractionTarget[]>([])
   const [attractionAssignments, setAttractionAssignments] = useState<IconAttractionAssignments>({})
   const [attractionSaving, setAttractionSaving] = useState(false)
+  const [selectedAdminProfile, setSelectedAdminProfile] = useState<AdminUserProfilePayload | null>(null)
   const [userFlags, setUserFlags] = useState<{
     is_banned: number
     is_frozen: number
@@ -654,21 +658,14 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   useEffect(() => {
     const uid = Number(targetUserId)
     if (!Number.isFinite(uid) || uid <= 0) {
+      setSelectedAdminProfile(null)
       setUserFlags(null)
       return
     }
-    apiFetch(`/api/users/list?q=${uid}`)
-      .then((res) => {
-        const users = (res as { users: Array<{
-          id: number
-          is_banned: number
-          is_frozen?: number
-          blue_badge?: number
-          badge_color?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
-          verification_status?: 'verified' | 'pending' | 'unverified'
-          vip_level?: number
-        }> }).users || []
-        const found = users.find((u) => Number(u.id) === uid)
+    getAdminUserProfile(uid)
+      .then((profile) => {
+        setSelectedAdminProfile(profile)
+        const found = profile?.user
         if (!found) {
           setUserFlags(null)
           return
@@ -694,7 +691,10 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           badge_color: badgeColor,
         })
       })
-      .catch(() => setUserFlags(null))
+      .catch(() => {
+        setSelectedAdminProfile(null)
+        setUserFlags(null)
+      })
   }, [targetUserId])
 
   async function handleOwnerAvatarUpload() {
@@ -2936,6 +2936,22 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 >
                   {flagsSaving ? 'جارٍ الحفظ...' : 'حفظ إعدادات المستخدم'}
                 </button>
+
+                {selectedAdminProfile?.user ? (
+                  <div className="mt-3 rounded-xl border border-app-border bg-app-elevated p-3 text-xs text-white/75">
+                    <div className="text-sm font-semibold text-white">
+                      {selectedAdminProfile.user.display_name || `#${selectedAdminProfile.user.id}`}
+                    </div>
+                    <div className="mt-1">البريد: {selectedAdminProfile.user.email || '—'}</div>
+                    <div className="mt-1">الهاتف: {selectedAdminProfile.user.phone || '—'}</div>
+                    <div className="mt-1">الرصيد: {Number(selectedAdminProfile.user.wallet_balance || 0).toFixed(2)}</div>
+                    <div className="mt-1">إجمالي الإيداع: {Number(selectedAdminProfile.user.deposits_total || 0).toFixed(2)}</div>
+                    <div className="mt-1">السحب: {Number(selectedAdminProfile.user.withdrawals_total || 0).toFixed(2)}</div>
+                    <div className="mt-1">التحقق: {selectedAdminProfile.user.verification_status || 'unverified'}</div>
+                  </div>
+                ) : null}
+
+                <AdminUserKycDepositsPanel profile={selectedAdminProfile} className="mt-3" />
 
                 <div className="owner-section-divider" />
                 <h3 className="owner-wallet-heading">خصم الأرباح العامة والخاصة</h3>

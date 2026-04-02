@@ -8,6 +8,8 @@ import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { sendPushToUser } from '../services/push-notifications.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
 import { buildUserAvatarUrl } from '../services/user-avatars.js'
+import { createLocalizedNotification } from '../services/notifications.js'
+import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 
 async function withTransaction(db, fn) {
   if (typeof db.connect === 'function') {
@@ -54,6 +56,25 @@ async function logAdminAction(db, actorUserId, section, action, targetUserId = n
      VALUES (?, ?, ?, ?, ?)`,
     [actorUserId, targetUserId, section, action, JSON.stringify(metadata || {})],
   )
+}
+
+function normalizeAdminProfileUser(row, isOwner) {
+  if (!row) return null
+  const rawBadgeStyle = String(row.badge_style || '').trim().toLowerCase()
+  const badge_color =
+    ['none', 'blue', 'gold', 'red', 'green', 'purple', 'silver'].includes(rawBadgeStyle)
+      ? rawBadgeStyle
+      : Number(row.blue_badge || 0) === 1
+        ? 'blue'
+        : row.verification_status === 'verified'
+          ? 'gold'
+          : 'none'
+  const normalized = {
+    ...row,
+    badge_color,
+    avatar_path: buildUserAvatarUrl(row.id, row.avatar_path, row.has_avatar_blob),
+  }
+  return isOwner ? normalized : { ...normalized, email: null, phone: null }
 }
 
 async function getPendingProfitTotal(db, userId, sourceType = 'all') {
@@ -239,12 +260,15 @@ export function createUsersRouter(db) {
   router.get('/:id/profile', requirePermission(db, 'manage_users'), async (req, res) => {
     const userId = Number(req.params.id)
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).json({ error: 'INVALID_USER' })
+    const isOwner = req.user.role === 'owner'
 
     const user = await get(
       db,
       `SELECT
         u.id, u.email, u.phone, u.role, u.is_approved, u.is_banned, u.is_frozen, u.banned_until, u.created_at,
         u.display_name, u.verification_status, u.blue_badge, u.badge_style, u.vip_level, u.profile_color, u.profile_badge, u.phone_verified, u.identity_submitted,
+        u.avatar_path,
+        CASE WHEN u.avatar_blob_base64 IS NOT NULL AND u.avatar_blob_base64 <> '' THEN 1 ELSE 0 END AS has_avatar_blob,
         u.country, u.preferred_language, u.preferred_currency, u.deposit_privacy_enabled, u.referral_code, u.invited_by, u.referred_by,
         u.total_deposit, u.points, u.is_owner,
         u.last_login_at, u.last_ip, u.last_user_agent,
@@ -297,7 +321,70 @@ export function createUsersRouter(db) {
       [userId],
     )
 
-    return res.json({ user, activity, notes })
+    const kycSubmissions = await all(
+      db,
+      `SELECT
+         id,
+         user_id,
+         id_document_path,
+         selfie_path,
+         review_status,
+         rejection_reason,
+         full_name_match_score,
+         face_match_score,
+         aml_risk_level,
+         auto_review_at,
+         reviewed_note,
+         reviewed_by,
+         reviewed_at,
+         created_at
+       FROM kyc_submissions
+       WHERE user_id = ?
+       ORDER BY id DESC
+       LIMIT 25`,
+      [userId],
+    )
+
+    const depositRequests = await all(
+      db,
+      `SELECT
+         id,
+         user_id,
+         amount,
+         currency,
+         method,
+         transfer_ref,
+         user_notes,
+         proof_image_path,
+         request_status,
+         admin_note,
+         reviewed_by,
+         reviewed_at,
+         completed_at,
+         idempotency_key,
+         created_at,
+         updated_at
+       FROM deposit_requests
+       WHERE user_id = ?
+       ORDER BY id DESC
+       LIMIT 30`,
+      [userId],
+    )
+
+    return res.json({
+      user: normalizeAdminProfileUser(user, isOwner),
+      activity,
+      notes,
+      kyc_submissions: kycSubmissions.map((row) => ({
+        ...row,
+        id_document_url: toUploadPublicUrl(row.id_document_path),
+        selfie_url: toUploadPublicUrl(row.selfie_path),
+      })),
+      deposit_requests: depositRequests.map((row) => ({
+        ...row,
+        proof_image_url: toUploadPublicUrl(row.proof_image_path),
+      })),
+    })
   })
 
   router.post('/approve', requirePermission(db, 'manage_users'), async (req, res) => {
@@ -349,6 +436,7 @@ export function createUsersRouter(db) {
     )
     if (approved === 1) {
       await markReferralAsVerifiedIfDeposited(db, userId)
+      await createLocalizedNotification(db, userId, 'verification_approved')
     }
     await logAdminAction(db, req.user.id, 'users', approved ? 'verification_approved' : 'verification_rejected', userId, {})
     return res.json({ ok: true })

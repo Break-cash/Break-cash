@@ -20,6 +20,7 @@ import {
   type PremiumIdentityOptions,
   type AdminUserRow,
 } from '../../api'
+import { AdminUserKycDepositsPanel } from '../../components/admin/AdminUserKycDepositsPanel'
 import type { PremiumProfileBadge, PremiumProfileColor } from '../../premiumIdentity'
 import { useI18n } from '../../i18nCore'
 
@@ -431,6 +432,8 @@ export function AdminUsersPage() {
                   ))}
                 </div>
               </div>
+
+              <AdminUserKycDepositsPanel profile={selected} />
             </div>
           )}
         </div>

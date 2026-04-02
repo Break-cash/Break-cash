@@ -1452,6 +1452,43 @@ export type AdminUserProfilePayload = {
     admin_id: number | null
     created_at: string
   }>
+  kyc_submissions: Array<{
+    id: number
+    user_id: number
+    id_document_path: string | null
+    selfie_path: string | null
+    id_document_url?: string | null
+    selfie_url?: string | null
+    review_status: string
+    rejection_reason?: string | null
+    full_name_match_score?: number | null
+    face_match_score?: number | null
+    aml_risk_level?: string | null
+    auto_review_at?: string | null
+    reviewed_note?: string | null
+    reviewed_by?: number | null
+    reviewed_at?: string | null
+    created_at: string
+  }>
+  deposit_requests: Array<{
+    id: number
+    user_id: number
+    amount: number
+    currency: string
+    method: string
+    transfer_ref: string
+    user_notes?: string | null
+    proof_image_path?: string | null
+    proof_image_url?: string | null
+    request_status: string
+    admin_note?: string | null
+    reviewed_by?: number | null
+    reviewed_at?: string | null
+    completed_at?: string | null
+    idempotency_key?: string | null
+    created_at: string
+    updated_at?: string | null
+  }>
 }
 
 export async function getAdminUsersList(params: Record<string, string | number | boolean | undefined>) {
