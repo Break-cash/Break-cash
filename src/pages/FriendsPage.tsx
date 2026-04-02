@@ -10,7 +10,7 @@ import {
 } from '../api'
 import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { SafeAvatar } from '../components/ui/SafeAvatar'
-import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
+import { UserIdentityBadges, resolveIdentityBadgeColor } from '../components/user/UserIdentityBadges'
 import { useI18n } from '../i18nCore'
 
 const COUNTRY_FLAG_ALIASES: Record<string, string> = {
@@ -154,19 +154,11 @@ export function FriendsPage() {
 
   const isPendingSent = (userId: number) => pendingSent.some((p) => p.userId === userId)
   const isFriend = (userId: number) => friends.some((f) => f.userId === userId)
-  const selectedBadgeColor =
-    selectedUser?.badgeColor === 'blue' ||
-    selectedUser?.badgeColor === 'gold' ||
-    selectedUser?.badgeColor === 'red' ||
-    selectedUser?.badgeColor === 'green' ||
-    selectedUser?.badgeColor === 'purple' ||
-    selectedUser?.badgeColor === 'silver'
-      ? selectedUser.badgeColor
-      : selectedUser && Number(selectedUser.blueBadge || 0) === 1
-      ? 'blue'
-      : selectedUser?.verificationStatus === 'verified'
-        ? 'gold'
-        : 'none'
+  const selectedBadgeColor = resolveIdentityBadgeColor(
+    selectedUser?.badgeColor,
+    selectedUser?.blueBadge,
+    selectedUser?.verificationStatus,
+  )
   const selectedVerified = selectedUser?.verificationStatus === 'verified'
   const selectedHasPublicTitles = Boolean(
     selectedUser &&
@@ -243,20 +235,7 @@ export function FriendsPage() {
                       </span>
                     ) : null}
                     <UserIdentityBadges
-                      badgeColor={
-                        user.badgeColor === 'blue' ||
-                        user.badgeColor === 'gold' ||
-                        user.badgeColor === 'red' ||
-                        user.badgeColor === 'green' ||
-                        user.badgeColor === 'purple' ||
-                        user.badgeColor === 'silver'
-                          ? user.badgeColor
-                          : Number(user.blueBadge || 0) === 1
-                          ? 'blue'
-                          : user.verificationStatus === 'verified'
-                            ? 'gold'
-                            : 'none'
-                      }
+                      badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
                       vipLevel={user.vipLevel || 0}
                       premiumBadge={user.premiumBadge}
                       mode="verified"
@@ -267,20 +246,7 @@ export function FriendsPage() {
                     Number(user.blueBadge || 0) === 1) ? (
                     <div className="friends-public-titles">
                       <UserIdentityBadges
-                        badgeColor={
-                          user.badgeColor === 'blue' ||
-                          user.badgeColor === 'gold' ||
-                          user.badgeColor === 'red' ||
-                          user.badgeColor === 'green' ||
-                          user.badgeColor === 'purple' ||
-                          user.badgeColor === 'silver'
-                            ? user.badgeColor
-                            : Number(user.blueBadge || 0) === 1
-                            ? 'blue'
-                            : user.verificationStatus === 'verified'
-                              ? 'gold'
-                              : 'none'
-                        }
+                        badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
                         vipLevel={user.vipLevel || 0}
                         mode="secondary"
                       />
@@ -452,10 +418,12 @@ export function FriendsPage() {
             </div>
 
             <div className="friends-profile-status-row">
-              <span className={`friends-verify-dot ${selectedVerified ? 'verified' : 'unverified'}`} />
-              <span className="friends-verify-text">
-                {selectedVerified ? t('friends_verified') : t('friends_not_verified')}
-              </span>
+              <UserIdentityBadges
+                badgeColor={selectedBadgeColor}
+                mode="verified"
+                variant="profile-soft"
+                verifiedLabel={selectedVerified ? t('friends_verified') : t('friends_not_verified')}
+              />
             </div>
 
             <div className="friends-profile-balance">

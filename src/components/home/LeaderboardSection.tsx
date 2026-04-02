@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { getPublicFriendProfile, type FriendUser, type HomeLeaderboardCompetitor, type HomeLeaderboardConfig } from '../../api'
 import { AppModalPortal } from '../ui/AppModalPortal'
 import { SafeAvatar } from '../ui/SafeAvatar'
-import { UserIdentityBadges } from '../user/UserIdentityBadges'
+import { UserIdentityBadges, resolveIdentityBadgeColor } from '../user/UserIdentityBadges'
 
 export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
   enabled: false,
@@ -227,12 +227,11 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
     return String.fromCodePoint(...code.split('').map((char) => 127397 + char.charCodeAt(0)))
   }
 
-  const selectedBadgeColor =
-    selectedUser && Number(selectedUser.blueBadge || 0) === 1
-      ? 'blue'
-      : selectedUser?.verificationStatus === 'verified'
-        ? 'gold'
-        : 'none'
+  const selectedBadgeColor = resolveIdentityBadgeColor(
+    selectedUser?.badgeColor,
+    selectedUser?.blueBadge,
+    selectedUser?.verificationStatus,
+  )
   const selectedVerified = selectedUser?.verificationStatus === 'verified'
   const selectedHasPublicTitles = Boolean(
     selectedUser &&
@@ -447,10 +446,12 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
             </div>
 
             <div className="friends-profile-status-row">
-              <span className={`friends-verify-dot ${selectedVerified ? 'verified' : 'unverified'}`} />
-              <span className="friends-verify-text">
-                {selectedVerified ? 'حساب موثّق' : 'الحساب غير موثّق'}
-              </span>
+              <UserIdentityBadges
+                badgeColor={selectedBadgeColor}
+                mode="verified"
+                variant="profile-soft"
+                verifiedLabel={selectedVerified ? 'حساب موثق' : 'غير موثق'}
+              />
             </div>
 
             <div className="friends-profile-balance">

@@ -1,7 +1,9 @@
 import { Check } from 'lucide-react'
 
+export type IdentityBadgeColor = 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
+
 type UserIdentityBadgesProps = {
-  badgeColor?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver' | null
+  badgeColor?: IdentityBadgeColor | null
   vipLevel?: number | null
   premiumBadge?: string | null
   className?: string
@@ -10,24 +12,37 @@ type UserIdentityBadgesProps = {
   verifiedLabel?: string | null
 }
 
+export function resolveIdentityBadgeColor(
+  badgeColor?: string | null,
+  blueBadge?: number | null,
+  verificationStatus?: string | null,
+): IdentityBadgeColor {
+  if (
+    badgeColor === 'blue' ||
+    badgeColor === 'gold' ||
+    badgeColor === 'red' ||
+    badgeColor === 'green' ||
+    badgeColor === 'purple' ||
+    badgeColor === 'silver' ||
+    badgeColor === 'none'
+  ) {
+    return badgeColor
+  }
+  if (Number(blueBadge || 0) === 1) return 'blue'
+  if (String(verificationStatus || '').trim().toLowerCase() === 'verified') return 'gold'
+  return 'none'
+}
+
 export function UserIdentityBadges({
   badgeColor,
   vipLevel = 0,
   premiumBadge,
   className = '',
   mode = 'all',
-  variant = 'default',
+  variant = 'profile-soft',
   verifiedLabel = null,
 }: UserIdentityBadgesProps) {
-  const resolvedBadgeColor =
-    badgeColor === 'blue' ||
-    badgeColor === 'gold' ||
-    badgeColor === 'red' ||
-    badgeColor === 'green' ||
-    badgeColor === 'purple' ||
-    badgeColor === 'silver'
-      ? badgeColor
-      : 'none'
+  const resolvedBadgeColor = resolveIdentityBadgeColor(badgeColor)
   const showVip = Number(vipLevel || 0) > 0
   const showVerified = mode !== 'secondary' && resolvedBadgeColor !== 'none'
   const showSecondary = mode !== 'verified' && showVip
