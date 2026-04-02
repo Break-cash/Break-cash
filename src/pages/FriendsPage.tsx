@@ -230,7 +230,7 @@ export function FriendsPage() {
                       badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge)}
                       vipLevel={user.vipLevel || 0}
                       premiumBadge={user.premiumBadge}
-                      mode="secondary"
+                      mode="all"
                     />
                   </div>
                   <span className="friends-item-id">ID: {user.id}</span>
@@ -378,7 +378,7 @@ export function FriendsPage() {
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
                     premiumBadge={selectedUser.premiumBadge}
-                    mode="secondary"
+                    mode="all"
                   />
                 </div>
                 <div className="friends-profile-id">ID: {selectedUser.id}</div>

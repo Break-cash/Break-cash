@@ -417,7 +417,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
                     premiumBadge={selectedUser.premiumBadge}
-                    mode="secondary"
+                    mode="all"
                   />
                 </div>
                 <div className="friends-profile-id">ID: {selectedUser.id}</div>
