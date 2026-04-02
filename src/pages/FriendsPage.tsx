@@ -160,11 +160,6 @@ export function FriendsPage() {
     selectedUser?.blueBadge,
     selectedUser?.verificationStatus,
   )
-  const selectedHasPublicTitles = Boolean(
-    selectedUser &&
-      ((selectedUser.vipLevel || 0) > 0 || String(selectedUser.premiumBadge || '').trim().length > 0),
-  )
-
   function getCountryFlagEmoji(value?: string | null) {
     const raw = String(value || '').trim()
     if (!raw) return ''
@@ -236,19 +231,9 @@ export function FriendsPage() {
                       badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
                       vipLevel={user.vipLevel || 0}
                       premiumBadge={user.premiumBadge}
-                      mode="all"
+                      mode="secondary"
                     />
                   </div>
-                  {(Number(user.vipLevel || 0) > 0 ||
-                    String(user.premiumBadge || '').trim().length > 0) ? (
-                    <div className="friends-public-titles">
-                      <UserIdentityBadges
-                        badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
-                        vipLevel={user.vipLevel || 0}
-                        mode="secondary"
-                      />
-                    </div>
-                  ) : null}
                   <span className="friends-item-id">ID: {user.id}</span>
                 </div>
                 <button
@@ -394,18 +379,9 @@ export function FriendsPage() {
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
                     premiumBadge={selectedUser.premiumBadge}
-                    mode="all"
+                    mode="secondary"
                   />
                 </div>
-                {selectedHasPublicTitles ? (
-                  <div className="friends-profile-public-titles">
-                    <UserIdentityBadges
-                      badgeColor={selectedBadgeColor}
-                      vipLevel={selectedUser.vipLevel || 0}
-                      mode="secondary"
-                    />
-                  </div>
-                ) : null}
                 <div className="friends-profile-id">ID: {selectedUser.id}</div>
               </div>
             </div>

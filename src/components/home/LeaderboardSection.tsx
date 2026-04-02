@@ -233,11 +233,6 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
     selectedUser?.blueBadge,
     selectedUser?.verificationStatus,
   )
-  const selectedHasPublicTitles = Boolean(
-    selectedUser &&
-      ((selectedUser.vipLevel || 0) > 0 || String(selectedUser.premiumBadge || '').trim().length > 0),
-  )
-
   const podium = [
     { competitor: rankedCompetitors[1], style: podiumStyles[1] },
     { competitor: rankedCompetitors[0], style: podiumStyles[0] },
@@ -423,18 +418,9 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
                     premiumBadge={selectedUser.premiumBadge}
-                    mode="all"
+                    mode="secondary"
                   />
                 </div>
-                {selectedHasPublicTitles ? (
-                  <div className="friends-profile-public-titles">
-                    <UserIdentityBadges
-                      badgeColor={selectedBadgeColor}
-                      vipLevel={selectedUser.vipLevel || 0}
-                      mode="secondary"
-                    />
-                  </div>
-                ) : null}
                 <div className="friends-profile-id">ID: {selectedUser.id}</div>
               </div>
             </div>
