@@ -158,7 +158,6 @@ export function FriendsPage() {
   const selectedBadgeColor = resolveIdentityBadgeColor(
     selectedUser?.badgeColor,
     selectedUser?.blueBadge,
-    selectedUser?.verificationStatus,
   )
   function getCountryFlagEmoji(value?: string | null) {
     const raw = String(value || '').trim()
@@ -228,7 +227,7 @@ export function FriendsPage() {
                       </span>
                     ) : null}
                     <UserIdentityBadges
-                      badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
+                      badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge)}
                       vipLevel={user.vipLevel || 0}
                       premiumBadge={user.premiumBadge}
                       mode="secondary"

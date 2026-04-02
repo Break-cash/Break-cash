@@ -231,7 +231,6 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
   const selectedBadgeColor = resolveIdentityBadgeColor(
     selectedUser?.badgeColor,
     selectedUser?.blueBadge,
-    selectedUser?.verificationStatus,
   )
   const podium = [
     { competitor: rankedCompetitors[1], style: podiumStyles[1] },
