@@ -16,6 +16,8 @@ import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../se
 import { persistUploadedAsset, toStoredUploadReference } from '../services/uploaded-assets.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { buildUserAvatarUrl, persistUserAvatarUpload, resolveUserAvatarAsset } from '../services/user-avatars.js'
+import { logSensitiveAssetAudit } from '../services/sensitive-asset-audit.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -26,7 +28,12 @@ const asyncRoute = (handler) => async (req, res) => {
   }
 }
 
-const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+function clientIp(req) {
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+  return xff || String(req.ip || '').trim() || null
+}
+
+const uploadsRoot = getUploadsRoot()
 const avatarsDir = path.join(uploadsRoot, 'avatars')
 const kycDir = path.join(uploadsRoot, 'kyc')
 
@@ -112,6 +119,10 @@ export function createProfileRouter(db) {
     const userId = Number(req.params?.userId || 0)
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).send('INVALID_USER')
     const avatar = await resolveUserAvatarAsset(db, userId)
+    if (avatar?.redirectUrl) {
+      res.setHeader('Cache-Control', 'public, max-age=300')
+      return res.redirect(302, avatar.redirectUrl)
+    }
     if (!avatar?.contentBase64) return res.status(404).send('UPLOAD_NOT_FOUND')
     const buffer = Buffer.from(String(avatar.contentBase64), 'base64')
     res.setHeader('Content-Type', String(avatar.mimeType || 'image/jpeg'))
@@ -241,12 +252,25 @@ export function createProfileRouter(db) {
         originalName: selfie.originalname,
       })
 
-      await run(
+      const idRef = toStoredUploadReference(idDoc.path)
+      const selfieRef = toStoredUploadReference(selfie.path)
+      const kycIns = await run(
         db,
         `INSERT INTO kyc_submissions (user_id, id_document_path, selfie_path, review_status, auto_review_at)
-         VALUES (?, ?, ?, 'pending', NULL)`,
-        [req.user.id, toStoredUploadReference(idDoc.path), toStoredUploadReference(selfie.path)],
+         VALUES (?, ?, ?, 'pending', NULL)
+         RETURNING id`,
+        [req.user.id, idRef, selfieRef],
       )
+      const submissionId = Number(kycIns.rows?.[0]?.id || kycIns.lastID || 0)
+      await logSensitiveAssetAudit(db, {
+        actorUserId: req.user.id,
+        subjectUserId: req.user.id,
+        resourceType: 'kyc_submission',
+        resourceId: submissionId ? String(submissionId) : null,
+        action: 'upload',
+        metadata: { id_document_path: idRef, selfie_path: selfieRef },
+        ipAddress: clientIp(req),
+      })
       await run(
         db,
         `UPDATE users

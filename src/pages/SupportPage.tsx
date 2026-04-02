@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { BadgeCheck, Clock3, Headset, ImagePlus, LifeBuoy, Mail, MessageSquareText, Paperclip, ShieldCheck, Trash2 } from 'lucide-react'
+import { BadgeCheck, Clock3, Headset, LifeBuoy, Mail, MessageSquareText, Paperclip, ShieldCheck, Trash2 } from 'lucide-react'
 import {
   archiveSupportTicket,
   createSupportTicket,
   getMySupportTickets,
   getSupportTicketDetail,
   sendSupportTicketMessage,
-  type SupportMessageAttachment,
   type SupportTicketDetail,
   type SupportTicketItem,
 } from '../api'
+import { SupportMessageAttachments } from '../components/support/SupportMessageAttachments'
 import { useI18n } from '../i18nCore'
 
 const SUPPORT_EMAIL = 'support@breakcash.cash'
@@ -25,38 +25,6 @@ function formatLocalDate(value?: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleString()
-}
-
-function fileSizeLabel(bytes?: number) {
-  const value = Number(bytes || 0)
-  if (!Number.isFinite(value) || value <= 0) return ''
-  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`
-  if (value >= 1024) return `${Math.round(value / 1024)} KB`
-  return `${value} B`
-}
-
-function AttachmentList({ attachments }: { attachments: SupportMessageAttachment[] }) {
-  if (!attachments.length) return null
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {attachments.map((file) => {
-        const isImage = String(file.mime_type || '').startsWith('image/')
-        return (
-          <a
-            key={file.id}
-            href={file.file_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 transition hover:bg-white/10"
-          >
-            {isImage ? <ImagePlus size={14} /> : <Paperclip size={14} />}
-            <span>{file.original_name || 'attachment'}</span>
-            <span className="text-white/45">{fileSizeLabel(file.byte_size)}</span>
-          </a>
-        )
-      })}
-    </div>
-  )
 }
 
 export function SupportPage() {
@@ -395,7 +363,7 @@ export function SupportPage() {
                       {item.body ? (
                         <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-white/90">{item.body}</div>
                       ) : null}
-                      <AttachmentList attachments={item.attachments || []} />
+                      <SupportMessageAttachments attachments={item.attachments || []} />
                     </div>
                   )
                 })}

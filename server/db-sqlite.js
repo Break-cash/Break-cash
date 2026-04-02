@@ -910,6 +910,8 @@ async function ensureSchema(db) {
   await ensureKycCol('aml_risk_level', `ALTER TABLE kyc_submissions ADD COLUMN aml_risk_level TEXT NOT NULL DEFAULT 'low'`)
   await ensureKycCol('auto_review_at', `ALTER TABLE kyc_submissions ADD COLUMN auto_review_at TEXT`)
   await ensureKycCol('reviewed_note', `ALTER TABLE kyc_submissions ADD COLUMN reviewed_note TEXT`)
+  await ensureKycCol('purged_at', `ALTER TABLE kyc_submissions ADD COLUMN purged_at TEXT`)
+  await ensureKycCol('purged_reason', `ALTER TABLE kyc_submissions ADD COLUMN purged_reason TEXT`)
   const vipTierCols = await allAsync(db, `PRAGMA table_info(vip_tiers)`)
   if (!vipTierCols.some((row) => String(row.name) === 'referral_percent')) {
     await runAsync(db, `ALTER TABLE vip_tiers ADD COLUMN referral_percent REAL NOT NULL DEFAULT 3`)
@@ -1198,6 +1200,57 @@ async function ensureSchema(db) {
       await runAsync(db, `INSERT OR IGNORE INTO earning_sources (code, name, description, is_active, sort_order) VALUES (?, ?, ?, 1, ?)`, [code, name, desc, sortOrder])
     }
   } catch (_) {}
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS uploaded_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      storage_key TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      original_name TEXT,
+      content_base64 TEXT NOT NULL DEFAULT '',
+      byte_size INTEGER NOT NULL DEFAULT 0,
+      external_url TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_uploaded_assets_storage_key ON uploaded_assets(storage_key)`)
+  try {
+    const uaCols = await allAsync(db, `PRAGMA table_info(uploaded_assets)`)
+    if (uaCols.length && !uaCols.some((row) => String(row.name) === 'external_url')) {
+      await runAsync(db, `ALTER TABLE uploaded_assets ADD COLUMN external_url TEXT`)
+    }
+  } catch (_) {}
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS data_retention_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      kyc_rejected_retention_days INTEGER NOT NULL DEFAULT 730,
+      kyc_approved_retention_days INTEGER NOT NULL DEFAULT 0,
+      support_closed_attachment_retention_days INTEGER NOT NULL DEFAULT 1095,
+      auto_purge_enabled INTEGER NOT NULL DEFAULT 0,
+      last_purge_run_at TEXT,
+      last_purge_summary TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_by INTEGER REFERENCES users(id)
+    )`,
+  )
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS sensitive_asset_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_user_id INTEGER REFERENCES users(id),
+      subject_user_id INTEGER REFERENCES users(id),
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      action TEXT NOT NULL,
+      metadata TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_sensitive_asset_audit_created ON sensitive_asset_audit_log(created_at DESC)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_sensitive_asset_audit_subject ON sensitive_asset_audit_log(subject_user_id, created_at DESC)`)
   // IMPORTANT: first 3000 IDs are reserved. New auto IDs start from 3001+.
   await reserveFirst3000IdsSqlite(db)
 }

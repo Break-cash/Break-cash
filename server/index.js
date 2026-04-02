@@ -30,9 +30,12 @@ import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-
 import { backfillUploadedAssets } from './services/upload-backfill.js'
 import { migrateUploadReferences } from './services/upload-reference-migration.js'
 import { cleanupOldNotifications } from './services/notifications.js'
+import { maybeAutoRetentionPurge } from './services/data-retention.js'
 import { backfillUserAvatarBlobs } from './services/user-avatars.js'
 import { reapplyRewardPoliciesToPendingEntries } from './services/wallet-service.js'
 import { syncSeededProfileAvatars } from './services/seed-profile-avatars.js'
+import { getUploadsRoot } from './services/uploads-root.js'
+import { isObjectStorageConfigured } from './services/object-storage.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
@@ -49,6 +52,7 @@ if (SENTRY_DSN) {
 let dbRef = null
 let strategyTradeSweepRunning = false
 let notificationsCleanupRunning = false
+let dataRetentionPurgeRunning = false
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
@@ -58,6 +62,11 @@ app.use('/uploads', async (req, res, next) => {
     const storageKey = getUploadStorageKey(`/uploads${String(req.path || '')}`)
     if (!storageKey) return next()
     const asset = await getUploadedAssetByKey(dbRef, storageKey)
+    const remote = String(asset?.external_url || '').trim()
+    if (remote) {
+      res.setHeader('Cache-Control', 'public, max-age=300')
+      return res.redirect(302, remote)
+    }
     if (!asset?.content_base64) return next()
     const buffer = Buffer.from(String(asset.content_base64), 'base64')
     res.setHeader('Content-Type', String(asset.mime_type || 'application/octet-stream'))
@@ -72,7 +81,7 @@ app.use('/uploads', async (req, res, next) => {
 })
 app.use(
   '/uploads',
-  express.static(path.join(process.cwd(), 'server', 'uploads'), {
+  express.static(getUploadsRoot(), {
     etag: false,
     lastModified: false,
     setHeaders: (res, filePath) => {
@@ -152,6 +161,10 @@ app.get('/api/health', async (_req, res) => {
 async function bootstrap() {
   const db = await openDb()
   dbRef = db
+  console.log('[uploads] disk root:', getUploadsRoot(), process.env.UPLOADS_ROOT ? '(UPLOADS_ROOT)' : '(default server/uploads)')
+  if (isObjectStorageConfigured()) {
+    console.log('[uploads] object storage: R2/S3 uploads enabled')
+  }
   await ensureBaseSeed(db)
   try {
     const migration = await migrateUploadReferences(db)
@@ -250,6 +263,28 @@ async function bootstrap() {
       notificationsCleanupRunning = false
     }
   }, notificationsCleanupIntervalMs)
+
+  const dataRetentionIntervalMs = Math.max(
+    60 * 60 * 1000,
+    Number(process.env.DATA_RETENTION_INTERVAL_MS || 24 * 60 * 60 * 1000),
+  )
+  setInterval(async () => {
+    if (!dbRef || dataRetentionPurgeRunning) return
+    dataRetentionPurgeRunning = true
+    try {
+      const summary = await maybeAutoRetentionPurge(dbRef)
+      if (summary && (summary.kyc_purged > 0 || summary.support_attachments_removed > 0)) {
+        console.log(
+          `[data-retention] auto-purge kyc=${summary.kyc_purged} support_attachments=${summary.support_attachments_removed} errors=${summary.errors?.length || 0}`,
+        )
+      }
+    } catch (error) {
+      if (SENTRY_DSN) Sentry.captureException(error)
+      console.warn('[data-retention] auto-purge failed', error instanceof Error ? error.message : String(error))
+    } finally {
+      dataRetentionPurgeRunning = false
+    }
+  }, dataRetentionIntervalMs)
 
   app.use('/api/auth', createAuthRouter(db))
   app.use('/api/invites', createInvitesRouter(db))

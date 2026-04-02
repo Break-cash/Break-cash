@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Crown, Eye, EyeOff, Medal, Sparkles } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
+import { AdminUserKycDepositsPanel } from '../../components/admin/AdminUserKycDepositsPanel'
 import {
   apiFetch,
   adjustUserProfit,
@@ -13,6 +14,7 @@ import {
   getAdminUnlockOverride,
   getAdminStaffList,
   getAdminUsersList,
+  getAdminUserProfile,
   getAdminUserWallet,
   deleteBonusRule,
   deleteDailyTradeCampaign,
@@ -41,10 +43,14 @@ import {
   reorderAds,
   revokeAllUserSessions,
   runAdminAccountHealthScan,
+  runDataRetentionPurge,
   runUnusualActivityDetection,
   setAdminSensitiveAccess,
+  getDataRetentionPreview,
+  getDataRetentionSettings,
   getSecurityOverview,
   getSecuritySessions,
+  getSensitiveAssetAudit,
   getStrategyTradeDisplayConfig,
   getStrategyCodesAdmin,
   getVipTiers,
@@ -64,6 +70,7 @@ import {
   getRecoveryCodeReviewRequests,
   updateMiningAdminConfig,
   updateBalanceRules,
+  updateDataRetentionSettings,
   updateHomeLeaderboardConfig,
   updateOwnerFinancialGuardConfig,
   updateRewardPayoutRulesOwner,
@@ -79,11 +86,14 @@ import {
   type AdItem,
   type AdminAccountHealthScan,
   type AdminStaffItem,
+  type AdminUserProfilePayload,
   type AdminUserRow,
   type AuthUser,
   type BalanceRules,
   type BonusRule,
   type ContentCampaign,
+  type DataRetentionPreview,
+  type DataRetentionSettings,
   type DailyTradeCampaign,
   type EarningEntry,
   type HomeLeaderboardConfig,
@@ -103,6 +113,7 @@ import {
   type RecoveryCodeReviewRequestItem,
   type RewardTierRule,
   type SecurityOverview,
+  type SensitiveAssetAuditItem,
   type StrategyCodeAdminItem,
   type StrategyTradeDisplayConfig,
   type StrategyCodeUsageAdminItem,
@@ -309,6 +320,10 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     vip_level: number
     badge_color: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
   } | null>(null)
+  const [ownerUserProfileDetail, setOwnerUserProfileDetail] = useState<AdminUserProfilePayload | null>(null)
+  const [ownerAccountDirQ, setOwnerAccountDirQ] = useState('')
+  const [ownerAccountDirRows, setOwnerAccountDirRows] = useState<AdminUserRow[]>([])
+  const [ownerAccountDirLoading, setOwnerAccountDirLoading] = useState(false)
   const [flagsSaving, setFlagsSaving] = useState(false)
   const [strategyCodes, setStrategyCodes] = useState<StrategyCodeAdminItem[]>([])
   const [strategyUsages, setStrategyUsages] = useState<StrategyCodeUsageAdminItem[]>([])
@@ -483,6 +498,16 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const [securitySessions, setSecuritySessions] = useState<UserSessionItem[]>([])
   const [securityUserId, setSecurityUserId] = useState('')
   const [securityActionLoading, setSecurityActionLoading] = useState<number | string | null>(null)
+  const [retentionSettings, setRetentionSettings] = useState<DataRetentionSettings | null>(null)
+  const [retentionPreview, setRetentionPreview] = useState<DataRetentionPreview | null>(null)
+  const [retentionAudit, setRetentionAudit] = useState<SensitiveAssetAuditItem[]>([])
+  const [retentionForm, setRetentionForm] = useState({
+    kyc_rejected_retention_days: 730,
+    kyc_approved_retention_days: 0,
+    support_closed_attachment_retention_days: 1095,
+    auto_purge_enabled: 0,
+  })
+  const [retentionBusy, setRetentionBusy] = useState(false)
   const [staffItems, setStaffItems] = useState<AdminStaffItem[]>([])
   const [staffDraft, setStaffDraft] = useState({
     identifier: '',
@@ -522,6 +547,35 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
   const isOwner = user?.role === 'owner' || Number(user?.is_owner || 0) === 1
   const firstDepositBonusRules = bonusRules.filter((rule) => rule.rule_type === 'first_deposit')
   const referralBonusRules = bonusRules.filter((rule) => rule.rule_type === 'referral')
+
+  useEffect(() => {
+    if (!isOwner) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [s, p, a] = await Promise.all([
+          getDataRetentionSettings(),
+          getDataRetentionPreview(),
+          getSensitiveAssetAudit(120),
+        ])
+        if (cancelled) return
+        setRetentionSettings(s.settings)
+        setRetentionPreview(p.preview)
+        setRetentionAudit(a.items || [])
+        setRetentionForm({
+          kyc_rejected_retention_days: s.settings.kyc_rejected_retention_days,
+          kyc_approved_retention_days: s.settings.kyc_approved_retention_days,
+          support_closed_attachment_retention_days: s.settings.support_closed_attachment_retention_days,
+          auto_purge_enabled: s.settings.auto_purge_enabled,
+        })
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isOwner])
 
   useEffect(() => {
     getAssetImages()
@@ -655,46 +709,45 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     const uid = Number(targetUserId)
     if (!Number.isFinite(uid) || uid <= 0) {
       setUserFlags(null)
+      setOwnerUserProfileDetail(null)
       return
     }
-    apiFetch(`/api/users/list?q=${uid}`)
-      .then((res) => {
-        const users = (res as { users: Array<{
-          id: number
-          is_banned: number
-          is_frozen?: number
-          blue_badge?: number
-          badge_color?: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver'
-          verification_status?: 'verified' | 'pending' | 'unverified'
-          vip_level?: number
-        }> }).users || []
-        const found = users.find((u) => Number(u.id) === uid)
-        if (!found) {
-          setUserFlags(null)
-          return
-        }
+    let cancelled = false
+    getAdminUserProfile(uid)
+      .then((profile) => {
+        if (cancelled) return
+        setOwnerUserProfileDetail(profile)
+        const u = profile.user
         const badgeColor: 'none' | 'gold' | 'blue' | 'red' | 'green' | 'purple' | 'silver' =
-          found.badge_color === 'blue' ||
-          found.badge_color === 'gold' ||
-          found.badge_color === 'red' ||
-          found.badge_color === 'green' ||
-          found.badge_color === 'purple' ||
-          found.badge_color === 'silver' ||
-          found.badge_color === 'none'
-            ? found.badge_color
-            : Number(found.blue_badge || 0) === 1
-            ? 'blue'
-            : found.verification_status === 'verified'
-              ? 'gold'
-              : 'none'
+          u.badge_color === 'blue' ||
+          u.badge_color === 'gold' ||
+          u.badge_color === 'red' ||
+          u.badge_color === 'green' ||
+          u.badge_color === 'purple' ||
+          u.badge_color === 'silver' ||
+          u.badge_color === 'none'
+            ? u.badge_color
+            : Number(u.blue_badge || 0) === 1
+              ? 'blue'
+              : u.verification_status === 'verified'
+                ? 'gold'
+                : 'none'
         setUserFlags({
-          is_banned: Number(found.is_banned || 0),
-          is_frozen: Number(found.is_frozen || 0),
-          vip_level: Number(found.vip_level || 0),
+          is_banned: Number(u.is_banned || 0),
+          is_frozen: Number(u.is_frozen || 0),
+          vip_level: Number(u.vip_level || 0),
           badge_color: badgeColor,
         })
       })
-      .catch(() => setUserFlags(null))
+      .catch(() => {
+        if (!cancelled) {
+          setUserFlags(null)
+          setOwnerUserProfileDetail(null)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
   }, [targetUserId])
 
   async function handleOwnerAvatarUpload() {
@@ -873,10 +926,28 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
         updateUserVipLevel(uid, userFlags.vip_level),
       ])
       setMessage({ type: 'success', text: 'تم تحديث صلاحيات وحالة المستخدم بنجاح.' })
+      getAdminUserProfile(uid).then(setOwnerUserProfileDetail).catch(() => {})
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل تحديث صلاحيات المستخدم.' })
     } finally {
       setFlagsSaving(false)
+    }
+  }
+
+  async function loadOwnerAccountDirectory() {
+    setOwnerAccountDirLoading(true)
+    try {
+      const res = await getAdminUsersList({
+        q: ownerAccountDirQ.trim() || undefined,
+        limit: 300,
+        sortBy: 'created_at',
+        sortDir: 'desc',
+      })
+      setOwnerAccountDirRows(res.users || [])
+    } catch {
+      setOwnerAccountDirRows([])
+    } finally {
+      setOwnerAccountDirLoading(false)
     }
   }
 
@@ -1941,6 +2012,78 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     }
   }
 
+  async function handleSaveRetentionSettings() {
+    setRetentionBusy(true)
+    setMessage(null)
+    try {
+      const res = await updateDataRetentionSettings(retentionForm)
+      setRetentionSettings(res.settings)
+      setRetentionForm({
+        kyc_rejected_retention_days: res.settings.kyc_rejected_retention_days,
+        kyc_approved_retention_days: res.settings.kyc_approved_retention_days,
+        support_closed_attachment_retention_days: res.settings.support_closed_attachment_retention_days,
+        auto_purge_enabled: res.settings.auto_purge_enabled,
+      })
+      const p = await getDataRetentionPreview()
+      setRetentionPreview(p.preview)
+      setMessage({ type: 'success', text: 'تم حفظ سياسة الاحتفاظ بالمرفقات الحساسة.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل حفظ السياسة.' })
+    } finally {
+      setRetentionBusy(false)
+    }
+  }
+
+  async function handleRetentionDryRun() {
+    setRetentionBusy(true)
+    setMessage(null)
+    try {
+      await runDataRetentionPurge(true)
+      const [a, p] = await Promise.all([getSensitiveAssetAudit(150), getDataRetentionPreview()])
+      setRetentionAudit(a.items || [])
+      setRetentionPreview(p.preview)
+      setMessage({ type: 'success', text: 'تم تسجيل معاينة التنظيف (dry run) في سجل التدقيق.' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل المعاينة.' })
+    } finally {
+      setRetentionBusy(false)
+    }
+  }
+
+  async function handleRetentionPurgeNow() {
+    if (!window.confirm('سيتم حذف الملفات من القرص وفق السياسة الحالية. المتابعة؟')) return
+    setRetentionBusy(true)
+    setMessage(null)
+    try {
+      const { summary } = await runDataRetentionPurge(false)
+      const [a, p, s] = await Promise.all([getSensitiveAssetAudit(150), getDataRetentionPreview(), getDataRetentionSettings()])
+      setRetentionAudit(a.items || [])
+      setRetentionPreview(p.preview)
+      setRetentionSettings(s.settings)
+      setMessage({
+        type: 'success',
+        text: `اكتمل التنظيف: KYC=${summary.kyc_purged} مرفقات دعم=${summary.support_attachments_removed} أخطاء=${summary.errors?.length || 0}`,
+      })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'فشل التنظيف.' })
+    } finally {
+      setRetentionBusy(false)
+    }
+  }
+
+  async function handleRefreshRetentionAudit() {
+    setRetentionBusy(true)
+    try {
+      const [a, p] = await Promise.all([getSensitiveAssetAudit(200), getDataRetentionPreview()])
+      setRetentionAudit(a.items || [])
+      setRetentionPreview(p.preview)
+    } catch {
+      /* ignore */
+    } finally {
+      setRetentionBusy(false)
+    }
+  }
+
   async function handleCreateStaffMember() {
     setOwnerExtraSaving(true)
     setMessage(null)
@@ -2855,6 +2998,52 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
           <section className="owner-balance-section">
             <h2 className="owner-section-title">إدارة المستخدم المتقدمة</h2>
             <p className="owner-hint">حظر، تجميد، خصم، توثيق ذهبي/أزرق، وتحديد مستوى VIP (1-5).</p>
+            <div className="owner-actions-card mb-3">
+              <h3 className="owner-wallet-heading">دليل الحسابات</h3>
+              <p className="owner-hint text-xs">
+                حمّل قائمةً (حتى 300 حساب) وابحث بالاسم أو البريد أو رقم الحساب، ثم اضغط على صف لتحميل بيانات التحقق وآخر الإيداعات أدناه.
+              </p>
+              <div className="owner-search-row">
+                <input
+                  type="search"
+                  className="field-input owner-user-id-input"
+                  placeholder="بحث (اسم، بريد، ID، كود إحالة…)"
+                  value={ownerAccountDirQ}
+                  onChange={(e) => setOwnerAccountDirQ(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="wallet-action-btn owner-set-btn"
+                  onClick={() => loadOwnerAccountDirectory()}
+                  disabled={ownerAccountDirLoading}
+                >
+                  {ownerAccountDirLoading ? '...' : 'تحديث القائمة'}
+                </button>
+              </div>
+              <div className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-app-border">
+                {ownerAccountDirRows.length === 0 ? (
+                  <div className="p-3 text-xs text-app-muted">اضغط «تحديث القائمة» لعرض الحسابات.</div>
+                ) : (
+                  ownerAccountDirRows.map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      className={`flex w-full flex-col gap-0.5 border-b border-app-border/60 px-3 py-2 text-start text-xs last:border-b-0 hover:bg-app-elevated/80 ${
+                        String(targetUserId) === String(u.id) ? 'bg-app-elevated' : ''
+                      }`}
+                      onClick={() => setTargetUserId(String(u.id))}
+                    >
+                      <span className="font-medium">
+                        #{u.id} · {u.display_name || u.email || u.phone || '—'}
+                      </span>
+                      <span className="text-app-muted">
+                        تحقق: {u.verification_status || '—'} · رصيد: {Number(u.wallet_balance || 0).toFixed(2)}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
             <div className="owner-search-row">
               <input
                 type="text"
@@ -2936,6 +3125,13 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                 >
                   {flagsSaving ? 'جارٍ الحفظ...' : 'حفظ إعدادات المستخدم'}
                 </button>
+
+                {ownerUserProfileDetail ? (
+                  <AdminUserKycDepositsPanel
+                    kycSubmissions={ownerUserProfileDetail.kyc_submissions}
+                    depositRequests={ownerUserProfileDetail.deposit_requests}
+                  />
+                ) : null}
 
                 <div className="owner-section-divider" />
                 <h3 className="owner-wallet-heading">خصم الأرباح العامة والخاصة</h3>
@@ -4713,6 +4909,115 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
                         <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => handleToggleTwoFactorAction(item.user_id, false, false)} disabled={securityActionLoading !== null}>
                           تعطيل 2FA
                         </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          <section className="owner-balance-section">
+            <h2 className="owner-section-title">سياسة الاحتفاظ وسجل تدقيق المرفقات</h2>
+            <p className="owner-hint">
+              احتفاظ بسجلات رفع KYC ومرفقات الدعم، مع معاينة عدد السجلات المؤهلة للتنظيف. التنظيف التلقائي من الخادم يعمل فقط عند تفعيل الخيار أدناه (يفحص كل 24 ساعة افتراضيًا، يُضبط بـ DATA_RETENTION_INTERVAL_MS).
+            </p>
+            <div className="owner-actions-card">
+              <div className="owner-form-row">
+                <label className="owner-hint flex flex-col gap-1 text-xs">
+                  أيام احتفاظ طلبات KYC المرفوضة
+                  <input
+                    type="number"
+                    className="field-input"
+                    min={30}
+                    max={3650}
+                    value={retentionForm.kyc_rejected_retention_days}
+                    onChange={(e) =>
+                      setRetentionForm((prev) => ({ ...prev, kyc_rejected_retention_days: Number(e.target.value) || 730 }))
+                    }
+                  />
+                </label>
+                <label className="owner-hint flex flex-col gap-1 text-xs">
+                  أيام احتفاظ KYC المعتمد (0 = لا يُنظَّف تلقائيًا)
+                  <input
+                    type="number"
+                    className="field-input"
+                    min={0}
+                    max={36500}
+                    value={retentionForm.kyc_approved_retention_days}
+                    onChange={(e) =>
+                      setRetentionForm((prev) => ({ ...prev, kyc_approved_retention_days: Number(e.target.value) || 0 }))
+                    }
+                  />
+                </label>
+                <label className="owner-hint flex flex-col gap-1 text-xs">
+                  أيام احتفاظ مرفقات الدعم (تذاكر مغلقة/محلولة)
+                  <input
+                    type="number"
+                    className="field-input"
+                    min={30}
+                    max={3650}
+                    value={retentionForm.support_closed_attachment_retention_days}
+                    onChange={(e) =>
+                      setRetentionForm((prev) => ({
+                        ...prev,
+                        support_closed_attachment_retention_days: Number(e.target.value) || 1095,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <label className="owner-checkbox">
+                <input
+                  type="checkbox"
+                  checked={retentionForm.auto_purge_enabled === 1}
+                  onChange={(e) =>
+                    setRetentionForm((prev) => ({ ...prev, auto_purge_enabled: e.target.checked ? 1 : 0 }))
+                  }
+                />
+                <span>تفعيل التنظيف التلقائي من الخادم (خطير — يحذف الملفات فعليًا)</span>
+              </label>
+              <div className="owner-buttons flex flex-wrap gap-2">
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleSaveRetentionSettings} disabled={retentionBusy}>
+                  {retentionBusy ? '...' : 'حفظ السياسة'}
+                </button>
+                <button type="button" className="wallet-action-btn wallet-action-withdraw" onClick={handleRetentionDryRun} disabled={retentionBusy}>
+                  {retentionBusy ? '...' : 'معاينة (dry run)'}
+                </button>
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleRetentionPurgeNow} disabled={retentionBusy}>
+                  {retentionBusy ? '...' : 'تنظيف الآن'}
+                </button>
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={handleRefreshRetentionAudit} disabled={retentionBusy}>
+                  تحديث المعاينة والسجل
+                </button>
+              </div>
+              {retentionPreview ? (
+                <div className="owner-hint mt-2 space-y-1 text-xs leading-6">
+                  <div>
+                    مؤهل للتنظيف — مرفوض: {retentionPreview.counts.kyc_rejected} | معتمد (إن فُعّل العمر):{' '}
+                    {retentionPreview.counts.kyc_approved} | مرفقات دعم: {retentionPreview.counts.support_attachments}
+                  </div>
+                  {retentionSettings?.last_purge_run_at ? (
+                    <div>آخر تشغيل: {formatOwnerDateTime(retentionSettings.last_purge_run_at)}</div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="owner-history-card max-h-[420px] overflow-y-auto">
+              <h3 className="mb-2 text-sm font-semibold text-white">سجل تدقيق المرفقات الحساسة</h3>
+              {retentionAudit.length === 0 ? (
+                <p className="owner-empty">لا توجد أحداث مسجّلة بعد.</p>
+              ) : (
+                <ul className="owner-history-list text-xs">
+                  {retentionAudit.map((item) => (
+                    <li key={item.id} className="owner-history-item border-white/10">
+                      <div className="owner-history-main">
+                        <strong>{`${item.action} · ${item.resource_type}`}</strong>
+                        <small>
+                          {`#${item.id} | فاعل: ${item.actor_user_id ?? '—'} | مستهدف: ${item.subject_user_id ?? '—'} | ${formatOwnerDateTime(item.created_at)}`}
+                        </small>
+                        <small className="break-all text-white/60">{item.ip_address || '—'}</small>
+                        <small className="break-all text-white/50">{item.metadata || ''}</small>
                       </div>
                     </li>
                   ))}

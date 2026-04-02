@@ -5,7 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "NODE_ENV=production node server/index.js",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/api/health/live"

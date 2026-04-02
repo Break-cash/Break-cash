@@ -7,6 +7,7 @@ import {
   persistUploadedAsset,
   toStoredUploadReference,
 } from './uploaded-assets.js'
+import { getUploadsRoot } from './uploads-root.js'
 
 async function fileExists(absPath) {
   if (!absPath) return false
@@ -21,7 +22,7 @@ async function fileExists(absPath) {
 function toAbsoluteUploadPath(value) {
   const storageKey = getUploadStorageKey(value)
   if (!storageKey) return null
-  return path.join(process.cwd(), 'server', 'uploads', storageKey)
+  return path.join(getUploadsRoot(), storageKey)
 }
 
 async function ensureStoredUploadAsset(db, value) {
@@ -30,7 +31,7 @@ async function ensureStoredUploadAsset(db, value) {
   if (!normalized || !storageKey) return { normalized: null, exists: false }
 
   const existing = await getUploadedAssetByKey(db, storageKey)
-  if (existing?.content_base64) {
+  if (existing?.content_base64 || String(existing?.external_url || '').trim()) {
     return { normalized, exists: true }
   }
 

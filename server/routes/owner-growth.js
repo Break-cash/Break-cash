@@ -28,6 +28,8 @@ import {
 } from '../services/owner-financial-approvals.js'
 import { toUploadPublicUrl } from '../services/uploaded-assets.js'
 import { buildUserAvatarUrl } from '../services/user-avatars.js'
+import { getRetentionSettings, updateRetentionSettings, previewRetentionPurge, runRetentionPurge } from '../services/data-retention.js'
+import { listSensitiveAssetAudit } from '../services/sensitive-asset-audit.js'
 
 function toIso(value) {
   const raw = String(value || '').trim()
@@ -1199,6 +1201,34 @@ export function createOwnerGrowthRouter(db) {
        LIMIT 300`,
     )
     return res.json({ items })
+  })
+
+  router.get('/data-retention/settings', async (_req, res) => {
+    const settings = await getRetentionSettings(db)
+    return res.json({ settings })
+  })
+
+  router.post('/data-retention/settings', async (req, res) => {
+    const settings = await updateRetentionSettings(db, req.user.id, req.body || {})
+    return res.json({ settings })
+  })
+
+  router.get('/data-retention/preview', async (_req, res) => {
+    const preview = await previewRetentionPurge(db)
+    return res.json({ preview })
+  })
+
+  router.get('/data-retention/sensitive-audit', async (req, res) => {
+    const limit = Number(req.query?.limit || 200)
+    const offset = Number(req.query?.offset || 0)
+    const items = await listSensitiveAssetAudit(db, { limit, offset })
+    return res.json({ items })
+  })
+
+  router.post('/data-retention/purge', async (req, res) => {
+    const dryRun = req.body?.dryRun === true || Number(req.body?.dryRun) === 1
+    const summary = await runRetentionPurge(db, { dryRun, actorUserId: req.user.id })
+    return res.json({ summary })
   })
 
   router.get('/staff/list', async (_req, res) => {

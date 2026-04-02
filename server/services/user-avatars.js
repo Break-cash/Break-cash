@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { get, run, all } from '../db.js'
 import { getUploadStorageKey, getUploadedAssetByKey, persistUploadedAsset, toStoredUploadReference } from './uploaded-assets.js'
+import { getUploadsRoot } from './uploads-root.js'
 
 function guessMimeType(filePath, fallback = 'image/jpeg') {
   const ext = path.extname(String(filePath || '')).toLowerCase()
@@ -15,7 +16,7 @@ function guessMimeType(filePath, fallback = 'image/jpeg') {
 function toAbsoluteUploadPath(value) {
   const storageKey = getUploadStorageKey(value)
   if (!storageKey) return null
-  return path.join(process.cwd(), 'server', 'uploads', storageKey)
+  return path.join(getUploadsRoot(), storageKey)
 }
 
 async function readLocalFileAsBase64(absPath) {
@@ -81,6 +82,13 @@ export async function resolveUserAvatarAsset(db, userId) {
   if (!storageKey) return null
 
   const uploadedAsset = await getUploadedAssetByKey(db, storageKey)
+  const remote = String(uploadedAsset?.external_url || '').trim()
+  if (remote) {
+    return {
+      mimeType: String(uploadedAsset.mime_type || 'image/jpeg').trim() || 'image/jpeg',
+      redirectUrl: remote,
+    }
+  }
   if (uploadedAsset?.content_base64) {
     await run(
       db,

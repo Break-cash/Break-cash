@@ -382,6 +382,7 @@ async function ensureSchema(db) {
       original_name TEXT,
       content_base64 TEXT NOT NULL,
       byte_size INTEGER NOT NULL DEFAULT 0,
+      external_url TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -1168,6 +1169,38 @@ async function ensureSchema(db) {
       ('deposits', 'Deposits', 'Deposit-based bonuses', 1, 4)
     ON CONFLICT(code) DO NOTHING
   `).catch(() => {})
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS data_retention_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      kyc_rejected_retention_days INTEGER NOT NULL DEFAULT 730,
+      kyc_approved_retention_days INTEGER NOT NULL DEFAULT 0,
+      support_closed_attachment_retention_days INTEGER NOT NULL DEFAULT 1095,
+      auto_purge_enabled INTEGER NOT NULL DEFAULT 0,
+      last_purge_run_at TIMESTAMP,
+      last_purge_summary TEXT,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    )
+  `)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS sensitive_asset_audit_log (
+      id SERIAL PRIMARY KEY,
+      actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      subject_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      action TEXT NOT NULL,
+      metadata TEXT,
+      ip_address TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_sensitive_asset_audit_created ON sensitive_asset_audit_log(created_at DESC)`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_sensitive_asset_audit_subject ON sensitive_asset_audit_log(subject_user_id, created_at DESC)`)
+  await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS purged_at TIMESTAMP`)
+  await db.query(`ALTER TABLE kyc_submissions ADD COLUMN IF NOT EXISTS purged_reason TEXT`)
+  await db.query(`ALTER TABLE uploaded_assets ADD COLUMN IF NOT EXISTS external_url TEXT`)
 
   // IMPORTANT: first 3000 IDs are reserved. New auto IDs start from 3001+.
   await reserveFirst3000IdsPg(db)

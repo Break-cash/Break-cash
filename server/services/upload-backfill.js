@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { all, get } from '../db.js'
 import { getUploadedAssetByKey, getUploadStorageKey, persistUploadedAsset } from './uploaded-assets.js'
+import { getUploadsRoot } from './uploads-root.js'
 
 function toPublicUploadPath(value) {
   const raw = String(value || '').trim()
@@ -30,7 +31,7 @@ function toAbsoluteUploadPath(value) {
   if (!publicPath) return null
   const storageKey = getUploadStorageKey(publicPath)
   if (!storageKey) return null
-  return path.join(process.cwd(), 'server', 'uploads', storageKey)
+  return path.join(getUploadsRoot(), storageKey)
 }
 
 async function fileExists(absPath) {
@@ -49,7 +50,7 @@ async function persistCandidate(db, value, stats) {
   const storageKey = getUploadStorageKey(publicUrl)
   if (!storageKey) return
   const existing = await getUploadedAssetByKey(db, storageKey)
-  if (existing?.content_base64) {
+  if (existing?.content_base64 || String(existing?.external_url || '').trim()) {
     stats.skipped += 1
     return
   }

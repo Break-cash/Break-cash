@@ -9,6 +9,7 @@ import {
   type SupportAdminTicketListItem,
   type SupportTicketDetail,
 } from '../../api'
+import { SupportMessageAttachments } from '../../components/support/SupportMessageAttachments'
 
 function statusTone(status: string) {
   if (status === 'resolved' || status === 'closed') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
@@ -271,16 +272,7 @@ export function AdminSupportPage() {
                         <div className="text-[11px] text-white/45">{formatLocalDate(message.created_at)}</div>
                       </div>
                       {message.body ? <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-white/90">{message.body}</div> : null}
-                      {message.attachments?.length ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {message.attachments.map((file) => (
-                            <a key={file.id} href={file.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/85 hover:bg-white/10">
-                              <Paperclip size={14} />
-                              <span>{file.original_name || 'attachment'}</span>
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
+                      <SupportMessageAttachments attachments={message.attachments || []} />
                     </div>
                   )
                 })}

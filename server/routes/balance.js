@@ -30,6 +30,7 @@ const DIRECT_REFERRAL_PERCENT_FLOOR = 20
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
 import { persistUploadedAsset } from '../services/uploaded-assets.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const PRINCIPAL_UNLOCK_RATIO = 0.5
@@ -1342,7 +1343,7 @@ function buildUserPrincipalLockItems(items, options = {}) {
 export function createBalanceRouter(db) {
   const router = Router()
   schedulePrincipalLockBackfill(db)
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const proofsDir = path.join(uploadsRoot, 'payment-proofs')
   fs.mkdirSync(proofsDir, { recursive: true })
   const uploadProof = multer({
