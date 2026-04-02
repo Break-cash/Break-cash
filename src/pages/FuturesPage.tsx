@@ -35,6 +35,13 @@ function formatUnlockDate(value?: string | null) {
   })
 }
 
+function isStrategyCodeExpired(expiresAt?: string | null) {
+  const raw = String(expiresAt || '').trim()
+  if (!raw) return false
+  const parsed = Date.parse(raw)
+  return !Number.isNaN(parsed) && parsed < Date.now()
+}
+
 export function FuturesPage() {
   const { t } = useI18n()
   const { quotes, loading: quotesLoading, usingFallback } = useMarketBoard(3000)
@@ -71,7 +78,14 @@ export function FuturesPage() {
     [codes],
   )
   const publishedStrategyTrades = useMemo(
-    () => codes.filter((item) => item.featureType === 'trial_trade' && item.isActive && !item.alreadyUsed),
+    () =>
+      codes.filter(
+        (item) =>
+          item.featureType === 'trial_trade' &&
+          item.isActive &&
+          !item.alreadyUsed &&
+          !isStrategyCodeExpired(item.expiresAt),
+      ),
     [codes],
   )
   const latestSettledTrade = useMemo(() => {

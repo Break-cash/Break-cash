@@ -6194,6 +6194,17 @@ button:focus-visible,
   object-position: center;
 }
 
+.deposit-promo-banner {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  margin-bottom: 22px;
+}
+
+.deposit-promo-banner + section {
+  margin-top: 2px;
+}
+
 @media (max-width: 640px) {
   .app-icon-hero-shell {
     max-height: 148px;

@@ -73,6 +73,10 @@ export function AdminDashboardPage() {
   const canManageNotifications = grantedPermissions.includes('notifications.manage') || grantedPermissions.includes('manage_users')
   const canEditStrategyDisplay = grantedPermissions.includes('settings.manage')
 
+  function isStrategyUsageRemovable(_item?: StrategyCodeUsageAdminItem) {
+    return true
+  }
+
   useEffect(() => {
     let active = true
 
@@ -183,7 +187,7 @@ export function AdminDashboardPage() {
         assetSymbol: strategyDraft.assetSymbol.trim().toUpperCase() || 'BTCUSDT',
         purchasePercent: Number(strategyDraft.purchasePercent || 0),
         tradeReturnPercent: Number(strategyDraft.tradeReturnPercent || 0),
-        expiresAt: strategyDraft.expiresAt ? new Date(strategyDraft.expiresAt).toISOString() : null,
+        expiresAt: strategyDraft.expiresAt || null,
         isActive: strategyDraft.isActive,
       })
       await reloadStrategyCodes()
@@ -196,21 +200,9 @@ export function AdminDashboardPage() {
     }
   }
 
-  function isStrategyUsageRemovable(item: StrategyCodeUsageAdminItem) {
-    const normalizedStatus = String(item.status || '').trim().toLowerCase()
-    if (normalizedStatus && normalizedStatus !== 'trade_active') return true
-    if (item.settledAt) return true
-    if (item.exitPrice != null && Number.isFinite(Number(item.exitPrice))) return true
-    return false
-  }
-
   async function handleDeleteStrategyUsage(item: StrategyCodeUsageAdminItem) {
-    if (!isStrategyUsageRemovable(item)) {
-      setMessage({ type: 'error', text: 'يمكن حذف الصفقات الاستراتيجية القديمة المكتملة فقط.' })
-      return
-    }
     const confirmed = window.confirm(
-      `هل تريد حذف الصفقة المكتملة #${item.id} من السجل الظاهر فقط؟ سيبقى الربح اليومي المقفل أسبوعًا كما هو دون تغيير.`,
+      `هل تريد حذف سجل الصفقة الاستراتيجية #${item.id} من العرض الإداري فقط؟ لن يؤدي هذا إلى إعادة إتاحة الصفقة للمستخدم.`,
     )
     if (!confirmed) return
 
@@ -219,9 +211,9 @@ export function AdminDashboardPage() {
     try {
       await deleteStrategyUsageAdmin(item.id)
       await reloadStrategyCodes()
-      setMessage({ type: 'success', text: 'تم حذف الصفقة المكتملة من السجل دون المساس بالربح المقفل.' })
+      setMessage({ type: 'success', text: 'تم حذف سجل الصفقة من العرض الإداري دون إعادة إتاحته للمستخدم.' })
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف الصفقة المكتملة.' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف سجل الصفقة.' })
     } finally {
       setDeletingStrategyUsageId(null)
     }

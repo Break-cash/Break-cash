@@ -527,7 +527,7 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         <div className="deposit-network-note" role="note" aria-label="Deposit network">
           <span className="deposit-network-note-label">Network</span>
           <span className="deposit-network-note-value">USDT BNB Chain</span>
-          <span className="deposit-network-note-hint">ÙŠØ±Ø¬Ù‰ Ø§Ù„ØªØ­ÙˆÙŠÙ„ Ø¹Ø¨Ø± Ù‡Ø°Ù‡ Ø§Ù„Ø´Ø¨ÙƒØ© ÙÙ‚Ø· Ù„ØªØ¬Ù†Ø¨ ÙÙ‚Ø¯Ø§Ù† Ø§Ù„Ø¥ÙŠØ¯Ø§Ø¹.</span>
+          <span className="deposit-network-note-hint">يرجى التحويل عبر هذه الشبكة فقط لتجنب فقدان الإيداع.</span>
         </div>
         </section>
       ) : null}

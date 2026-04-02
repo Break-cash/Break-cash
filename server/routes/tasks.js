@@ -70,6 +70,7 @@ async function resolveLiveQuote(symbol) {
 
 const STRATEGY_TRADE_MIN_SETTLE_DELAY_MS = 90 * 1000
 const STRATEGY_TRADE_MAX_SETTLE_DELAY_MS = 7 * 60 * 1000
+const STRATEGY_USAGE_STALE_HIDE_GRACE_MS = STRATEGY_TRADE_MAX_SETTLE_DELAY_MS + 15 * 60 * 1000
 
 function getStrategyTradeDelayMs() {
   const span = STRATEGY_TRADE_MAX_SETTLE_DELAY_MS - STRATEGY_TRADE_MIN_SETTLE_DELAY_MS
@@ -152,6 +153,68 @@ function isStrategyUsageRemovableRecord(usage) {
   if (usage?.wallet_credit_txn_id != null && Number(usage.wallet_credit_txn_id || 0) > 0) return true
   if (usage?.exit_price != null && Number.isFinite(Number(usage.exit_price))) return true
   return false
+}
+
+function isLegacyStaleStrategyUsageRecord(usage) {
+  const normalizedStatus = String(usage?.status || '').trim().toLowerCase()
+  if (normalizedStatus !== 'trade_active') return false
+
+  const meta = parseJsonSafe(usage?.metadata_json, {})
+  const hasHistoricalUsageEvidence =
+    Number(usage?.wallet_debit_txn_id || 0) > 0 ||
+    Number(usage?.stake_amount || 0) > 0 ||
+    Boolean(String(usage?.selected_symbol || '').trim()) ||
+    Boolean(String(meta?.code || '').trim()) ||
+    Boolean(String(meta?.expertName || '').trim())
+
+  if (!hasHistoricalUsageEvidence) return false
+
+  const now = Date.now()
+  const autoSettleAt = Date.parse(String(meta?.autoSettleAt || ''))
+  if (!Number.isNaN(autoSettleAt) && autoSettleAt + 5 * 60 * 1000 < now) return true
+
+  const confirmedAt = Date.parse(String(usage?.confirmed_at || ''))
+  const createdAt = Date.parse(String(usage?.created_at || ''))
+  const baseline = !Number.isNaN(confirmedAt) ? confirmedAt : createdAt
+  return !Number.isNaN(baseline) && baseline + STRATEGY_USAGE_STALE_HIDE_GRACE_MS < now
+}
+
+async function prepareLegacyStrategyUsageForAdminHide(db, usage) {
+  if (!usage || isStrategyUsageRemovableRecord(usage) || !isLegacyStaleStrategyUsageRecord(usage)) {
+    return usage
+  }
+
+  const columns = await getStrategyUsageColumns(db)
+  const assignments = []
+  const params = []
+
+  if (hasStrategyUsageColumn(columns, 'status')) {
+    assignments.push(`status = ?`)
+    params.push('legacy_consumed')
+  }
+  if (hasStrategyUsageColumn(columns, 'settled_at')) {
+    assignments.push(`settled_at = COALESCE(settled_at, confirmed_at, created_at, CURRENT_TIMESTAMP)`)
+  }
+  if (hasStrategyUsageColumn(columns, 'updated_at')) {
+    assignments.push(`updated_at = CURRENT_TIMESTAMP`)
+  }
+
+  if (assignments.length > 0) {
+    params.push(Number(usage.id || 0))
+    await run(
+      db,
+      `UPDATE strategy_code_usages
+       SET ${assignments.join(', ')}
+       WHERE id = ?`,
+      params,
+    )
+  }
+
+  return {
+    ...usage,
+    status: 'legacy_consumed',
+    settled_at: usage?.settled_at || usage?.confirmed_at || usage?.created_at || new Date().toISOString(),
+  }
 }
 
 async function hideStrategyUsageRecord(db, usageId, actorUserId) {
@@ -261,12 +324,22 @@ async function getStrategyUsageAdminRecord(db, usageId) {
   selectParts.push(hasStrategyUsageColumn(columns, 'status') ? 'status' : `'' AS status`)
   selectParts.push(hasStrategyUsageColumn(columns, 'admin_hidden_at') ? 'admin_hidden_at' : `NULL AS admin_hidden_at`)
   selectParts.push(hasStrategyUsageColumn(columns, 'settled_at') ? 'settled_at' : `NULL AS settled_at`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'confirmed_at') ? 'confirmed_at' : `NULL AS confirmed_at`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'created_at') ? 'created_at' : `NULL AS created_at`)
   selectParts.push(
     hasStrategyUsageColumn(columns, 'wallet_credit_txn_id')
       ? 'wallet_credit_txn_id'
       : `NULL AS wallet_credit_txn_id`,
   )
+  selectParts.push(
+    hasStrategyUsageColumn(columns, 'wallet_debit_txn_id')
+      ? 'wallet_debit_txn_id'
+      : `NULL AS wallet_debit_txn_id`,
+  )
   selectParts.push(hasStrategyUsageColumn(columns, 'exit_price') ? 'exit_price' : `NULL AS exit_price`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'selected_symbol') ? 'selected_symbol' : `NULL AS selected_symbol`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'stake_amount') ? 'stake_amount' : `0 AS stake_amount`)
+  selectParts.push(hasStrategyUsageColumn(columns, 'metadata_json') ? 'metadata_json' : `NULL AS metadata_json`)
 
   return get(
     db,
@@ -1332,13 +1405,14 @@ export function createTasksRouter(db) {
     const id = Number(req.params.id || 0)
     if (!id) return res.status(400).json({ error: 'INVALID_INPUT' })
 
-    const usage = await getStrategyUsageAdminRecord(db, id)
+    let usage = await getStrategyUsageAdminRecord(db, id)
     if (!usage) return res.status(404).json({ error: 'NOT_FOUND' })
     if (usage.admin_hidden_at) return res.json({ ok: true })
+    usage = await prepareLegacyStrategyUsageForAdminHide(db, usage)
     if (!isStrategyUsageRemovableRecord(usage)) {
       return res.status(400).json({
         error: 'ONLY_SETTLED_TRADES_CAN_BE_REMOVED',
-        message: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط دون المساس بمنطق الأصل والربح.',
+        message: 'يمكن حذف الصفقات الاستراتيجية المكتملة أو السجلات القديمة المستخدمة فقط دون المساس بمنطق الأصل أو الربح.',
       })
     }
 

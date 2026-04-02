@@ -951,21 +951,13 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     setStrategyUsages(refreshed.usages || [])
   }
 
-  function isStrategyUsageRemovable(usage: StrategyCodeUsageAdminItem) {
-    const normalizedStatus = String(usage.status || '').trim().toLowerCase()
-    if (normalizedStatus && normalizedStatus !== 'trade_active') return true
-    if (usage.settledAt) return true
-    if (usage.exitPrice != null && Number.isFinite(Number(usage.exitPrice))) return true
-    return false
+  function isStrategyUsageRemovable(_usage?: StrategyCodeUsageAdminItem) {
+    return true
   }
 
   async function handleDeleteStrategyUsage(usage: StrategyCodeUsageAdminItem) {
-    if (!isStrategyUsageRemovable(usage)) {
-      setMessage({ type: 'error', text: 'يمكن حذف الصفقات الاستراتيجية المكتملة فقط.' })
-      return
-    }
     const confirmed = window.confirm(
-      `هل تريد حذف الصفقة المكتملة #${usage.id} من السجل الظاهر فقط؟ سيبقى الربح اليومي المقفل أسبوعًا كما هو دون تغيير.`,
+      `هل تريد حذف سجل الصفقة الاستراتيجية #${usage.id} من العرض الإداري فقط؟ لن يؤدي هذا إلى إعادة إتاحة الصفقة للمستخدم.`,
     )
     if (!confirmed) return
 
@@ -974,9 +966,9 @@ export function OwnerDashboardPage({ user }: OwnerDashboardProps) {
     try {
       await deleteStrategyUsageAdmin(usage.id)
       await refreshStrategyCodes()
-      setMessage({ type: 'success', text: 'تم حذف الصفقة المكتملة من السجل دون المساس بالأصل أو الربح المقفل.' })
+      setMessage({ type: 'success', text: 'تم حذف سجل الصفقة من العرض الإداري دون إعادة إتاحته للمستخدم.' })
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف الصفقة المكتملة.' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'فشل حذف سجل الصفقة.' })
     } finally {
       setStrategyUsageDeletingId(null)
     }
