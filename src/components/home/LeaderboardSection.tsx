@@ -5,6 +5,7 @@ import { getPublicFriendProfile, type FriendUser, type HomeLeaderboardCompetitor
 import { AppModalPortal } from '../ui/AppModalPortal'
 import { SafeAvatar } from '../ui/SafeAvatar'
 import { UserIdentityBadges, resolveIdentityBadgeColor } from '../user/UserIdentityBadges'
+import { VerificationStatusNote } from '../user/VerificationStatusNote'
 
 export const defaultHomeLeaderboardConfig: HomeLeaderboardConfig = {
   enabled: false,
@@ -232,12 +233,9 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
     selectedUser?.blueBadge,
     selectedUser?.verificationStatus,
   )
-  const selectedVerified = selectedUser?.verificationStatus === 'verified'
   const selectedHasPublicTitles = Boolean(
     selectedUser &&
-      ((selectedUser.vipLevel || 0) > 0 ||
-        selectedUser.verificationStatus === 'verified' ||
-        Number(selectedUser.blueBadge || 0) === 1),
+      ((selectedUser.vipLevel || 0) > 0 || String(selectedUser.premiumBadge || '').trim().length > 0),
   )
 
   const podium = [
@@ -425,7 +423,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
                     premiumBadge={selectedUser.premiumBadge}
-                    mode="verified"
+                    mode="all"
                   />
                 </div>
                 {selectedHasPublicTitles ? (
@@ -446,12 +444,7 @@ export function LeaderboardSection({ config, previewMode = false }: LeaderboardS
             </div>
 
             <div className="friends-profile-status-row">
-              <UserIdentityBadges
-                badgeColor={selectedBadgeColor}
-                mode="verified"
-                variant="profile-soft"
-                verifiedLabel={selectedVerified ? 'حساب موثق' : 'غير موثق'}
-              />
+              <VerificationStatusNote status={selectedUser.verificationStatus} />
             </div>
 
             <div className="friends-profile-balance">

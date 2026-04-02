@@ -566,6 +566,88 @@ button {
     0 8px 18px rgba(148, 163, 184, 0.24);
 }
 
+.identity-badge-soft-none {
+  border-color: rgba(148, 163, 184, 0.2);
+  background:
+    radial-gradient(circle at 14% 20%, rgba(148, 163, 184, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(26, 32, 44, 0.92), rgba(17, 24, 39, 0.78));
+  color: #dbe5f1;
+}
+
+.identity-badge-soft-none .identity-badge-soft-icon {
+  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 8px 18px rgba(100, 116, 139, 0.2);
+}
+
+.verification-status-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.84), rgba(15, 23, 42, 0.68));
+  color: #eef4ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 26px rgba(2, 8, 20, 0.18);
+}
+
+.verification-status-note-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.verification-status-note-verified {
+  border-color: rgba(74, 222, 128, 0.24);
+  background:
+    radial-gradient(circle at 10% 18%, rgba(74, 222, 128, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(8, 30, 18, 0.9), rgba(10, 25, 18, 0.76));
+  color: #dcffe8;
+}
+
+.verification-status-note-verified .verification-status-note-icon {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+  color: #fff;
+}
+
+.verification-status-note-pending {
+  border-color: rgba(250, 204, 21, 0.24);
+  background:
+    radial-gradient(circle at 10% 18%, rgba(250, 204, 21, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(39, 26, 9, 0.9), rgba(30, 20, 8, 0.76));
+  color: #ffefb0;
+}
+
+.verification-status-note-pending .verification-status-note-icon {
+  background: linear-gradient(180deg, #facc15 0%, #f59e0b 100%);
+  color: #fff;
+}
+
+.verification-status-note-unverified {
+  border-color: rgba(148, 163, 184, 0.2);
+  background:
+    radial-gradient(circle at 10% 18%, rgba(148, 163, 184, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(26, 32, 44, 0.92), rgba(17, 24, 39, 0.78));
+  color: #dbe5f1;
+}
+
+.verification-status-note-unverified .verification-status-note-icon {
+  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
+  color: #fff;
+}
+
 .profile-name-row {
   margin-top: 12px;
   display: flex;

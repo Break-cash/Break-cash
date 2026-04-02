@@ -11,6 +11,7 @@ import {
 import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { SafeAvatar } from '../components/ui/SafeAvatar'
 import { UserIdentityBadges, resolveIdentityBadgeColor } from '../components/user/UserIdentityBadges'
+import { VerificationStatusNote } from '../components/user/VerificationStatusNote'
 import { useI18n } from '../i18nCore'
 
 const COUNTRY_FLAG_ALIASES: Record<string, string> = {
@@ -159,12 +160,9 @@ export function FriendsPage() {
     selectedUser?.blueBadge,
     selectedUser?.verificationStatus,
   )
-  const selectedVerified = selectedUser?.verificationStatus === 'verified'
   const selectedHasPublicTitles = Boolean(
     selectedUser &&
-      ((selectedUser.vipLevel || 0) > 0 ||
-        selectedUser.verificationStatus === 'verified' ||
-        Number(selectedUser.blueBadge || 0) === 1),
+      ((selectedUser.vipLevel || 0) > 0 || String(selectedUser.premiumBadge || '').trim().length > 0),
   )
 
   function getCountryFlagEmoji(value?: string | null) {
@@ -238,12 +236,11 @@ export function FriendsPage() {
                       badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
                       vipLevel={user.vipLevel || 0}
                       premiumBadge={user.premiumBadge}
-                      mode="verified"
+                      mode="all"
                     />
                   </div>
                   {(Number(user.vipLevel || 0) > 0 ||
-                    user.verificationStatus === 'verified' ||
-                    Number(user.blueBadge || 0) === 1) ? (
+                    String(user.premiumBadge || '').trim().length > 0) ? (
                     <div className="friends-public-titles">
                       <UserIdentityBadges
                         badgeColor={resolveIdentityBadgeColor(user.badgeColor, user.blueBadge, user.verificationStatus)}
@@ -397,7 +394,7 @@ export function FriendsPage() {
                     badgeColor={selectedBadgeColor}
                     vipLevel={selectedUser.vipLevel || 0}
                     premiumBadge={selectedUser.premiumBadge}
-                    mode="verified"
+                    mode="all"
                   />
                 </div>
                 {selectedHasPublicTitles ? (
@@ -418,12 +415,7 @@ export function FriendsPage() {
             </div>
 
             <div className="friends-profile-status-row">
-              <UserIdentityBadges
-                badgeColor={selectedBadgeColor}
-                mode="verified"
-                variant="profile-soft"
-                verifiedLabel={selectedVerified ? t('friends_verified') : t('friends_not_verified')}
-              />
+              <VerificationStatusNote status={selectedUser.verificationStatus} />
             </div>
 
             <div className="friends-profile-balance">

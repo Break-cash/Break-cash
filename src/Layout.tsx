@@ -283,7 +283,7 @@ export function Layout({
           badgeColor={computedBadgeColor}
           vipLevel={user.vip_level || 0}
           premiumBadge={user.profile_badge}
-          mode="verified"
+          mode="all"
           className="mt-1"
         />
       </>

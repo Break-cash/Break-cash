@@ -352,7 +352,7 @@ export function Profile() {
                 badgeColor={profile.badge_color || 'none'}
                 vipLevel={profile.vip_level || 0}
                 premiumBadge={profile.profile_badge}
-                mode="verified"
+                mode="all"
               />
             </div>
           ) : null}

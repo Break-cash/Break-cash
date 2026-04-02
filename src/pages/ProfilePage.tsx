@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { getRecoveryCodeStatus, type AuthUser, updateMyProfile, uploadAvatar, uploadKyc } from '../api'
 import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
+import { VerificationStatusNote } from '../components/user/VerificationStatusNote'
 import { getPremiumProfileColorClass } from '../premiumIdentity'
 
 type ProfilePageProps = {
@@ -266,6 +267,8 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
 
   const selectedCountryOption = COUNTRY_OPTIONS.find((option) => option.value === country) || null
   const bioText = bio.trim() || 'لا توجد نبذة تعريفية حالياً.'
+  const verificationApproved = user.verification_status === 'verified'
+  const identitySectionLocked = verificationApproved
 
   return (
     <div className="page profile-settings-page space-y-5">
@@ -305,11 +308,10 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
                   vipLevel={user.vip_level || 0}
                   premiumBadge={user.profile_badge}
                   mode="all"
-                  variant="profile-soft"
-                  verifiedLabel={'\u0645\u0648\u062b\u0642'}
                   className="profile-name-badges"
                 />
               </div>
+              <VerificationStatusNote status={user.verification_status} className="mt-2" />
               <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-300">{bioText}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85">
@@ -367,6 +369,11 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
           isOpen={openSection === 'deposit_privacy'}
           onToggle={() => setOpenSection((key) => (key === 'deposit_privacy' ? null : 'deposit_privacy'))}
         >
+          {verificationApproved ? (
+            <div className="mb-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-100">
+              تم اعتماد طلب التحقق لهذا الحساب، وأصبح الملف موثقًا بالفعل.
+            </div>
+          ) : null}
           <p className="profile-settings-sub">
             عند تفعيل هذا الخيار سيتم إخفاء مبلغك الظاهر عن المستخدمين الآخرين بشكل تلقائي.
           </p>
@@ -565,30 +572,34 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
               placeholder="الاسم القانوني الكامل"
               value={identity.legalName}
               onChange={(e) => setIdentity((v) => ({ ...v, legalName: e.target.value }))}
+              disabled={identitySectionLocked}
             />
             <input
               className="field-input"
               placeholder="الرقم الوطني"
               value={identity.nationalId}
               onChange={(e) => setIdentity((v) => ({ ...v, nationalId: e.target.value }))}
+              disabled={identitySectionLocked}
             />
             <input
               className="field-input"
               placeholder="رقم الهاتف"
               value={identity.phone}
               onChange={(e) => setIdentity((v) => ({ ...v, phone: e.target.value }))}
+              disabled={identitySectionLocked}
             />
             <input
               className="field-input"
               placeholder="الدولة"
               value={identity.country}
               onChange={(e) => setIdentity((v) => ({ ...v, country: e.target.value }))}
+              disabled={identitySectionLocked}
             />
           </div>
           <div className="profile-settings-upload-row">
             <label className="profile-settings-upload-btn">
               بطاقة الهوية
-              <input type="file" accept="image/*" onChange={handleIdCardChange} />
+              <input type="file" accept="image/*" onChange={handleIdCardChange} disabled={identitySectionLocked} />
             </label>
             {idCardPreview ? (
               <div className="profile-settings-upload-preview">
@@ -597,9 +608,9 @@ export function ProfilePage({ onLogout, user, onProfileRefresh }: ProfilePagePro
             ) : null}
           </div>
           <div className="profile-settings-upload-row">
-            <label className="profile-settings-upload-btn">
+            <label className={`profile-settings-upload-btn ${identitySectionLocked ? 'pointer-events-none opacity-55' : ''}`}>
               صورة شخصية
-              <input type="file" accept="image/*" onChange={handleSelfieChange} />
+              <input type="file" accept="image/*" onChange={handleSelfieChange} disabled={identitySectionLocked} />
             </label>
             {selfiePreview ? (
               <div className="profile-settings-upload-preview">
