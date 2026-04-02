@@ -18,19 +18,21 @@ export function VerificationStatusNote({
         : 'unverified'
 
   const Icon = state === 'verified' ? BadgeCheck : state === 'pending' ? Clock3 : ShieldAlert
-  const label =
+  const valueLabel =
     state === 'verified'
-      ? 'تم اعتماد التحقق لهذا الحساب'
+      ? 'التحقق معتمد'
       : state === 'pending'
-        ? 'طلب التحقق قيد المراجعة والاعتماد'
-        : 'لم يتم اعتماد التحقق لهذا الحساب بعد'
+        ? 'التحقق قيد المراجعة'
+        : 'التحقق غير معتمد'
 
   return (
     <div className={`verification-status-note verification-status-note-${state} ${className}`.trim()}>
       <span className="verification-status-note-icon">
         <Icon size={14} />
       </span>
-      <span>{label}</span>
+      <span className="verification-status-note-label">حالة الاعتماد</span>
+      <span className="verification-status-note-separator" />
+      <span className="verification-status-note-value">{valueLabel}</span>
     </div>
   )
 }
