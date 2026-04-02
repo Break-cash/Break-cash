@@ -218,47 +218,37 @@ async function prepareLegacyStrategyUsageForAdminHide(db, usage) {
 }
 
 async function hideStrategyUsageRecord(db, usageId, actorUserId) {
-  const attempts = [
-    {
-      sql: `UPDATE strategy_code_usages
-            SET admin_hidden_at = CURRENT_TIMESTAMP,
-                admin_hidden_by = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?`,
-      params: [actorUserId, usageId],
-    },
-    {
-      sql: `UPDATE strategy_code_usages
-            SET admin_hidden_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?`,
-      params: [usageId],
-    },
-    {
-      sql: `UPDATE strategy_code_usages
-            SET status = 'admin_deleted',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?`,
-      params: [usageId],
-    },
-    {
-      sql: `UPDATE strategy_code_usages
-            SET status = 'admin_deleted'
-            WHERE id = ?`,
-      params: [usageId],
-    },
-  ]
+  const columns = await getStrategyUsageColumns(db)
+  const assignments = []
+  const params = []
 
-  let lastError = null
-  for (const attempt of attempts) {
-    try {
-      await run(db, attempt.sql, attempt.params)
-      return true
-    } catch (error) {
-      lastError = error
-    }
+  if (hasStrategyUsageColumn(columns, 'admin_hidden_at')) {
+    assignments.push(`admin_hidden_at = CURRENT_TIMESTAMP`)
   }
-  throw lastError || new Error('STRATEGY_USAGE_HIDE_FAILED')
+  if (hasStrategyUsageColumn(columns, 'admin_hidden_by') && Number(actorUserId || 0) > 0) {
+    assignments.push(`admin_hidden_by = ?`)
+    params.push(Number(actorUserId))
+  }
+  if (hasStrategyUsageColumn(columns, 'status')) {
+    assignments.push(`status = 'admin_deleted'`)
+  }
+  if (hasStrategyUsageColumn(columns, 'updated_at')) {
+    assignments.push(`updated_at = CURRENT_TIMESTAMP`)
+  }
+
+  if (assignments.length === 0) {
+    throw new Error('STRATEGY_USAGE_HIDE_UNSUPPORTED_SCHEMA')
+  }
+
+  params.push(Number(usageId))
+  await run(
+    db,
+    `UPDATE strategy_code_usages
+     SET ${assignments.join(', ')}
+     WHERE id = ?`,
+    params,
+  )
+  return true
 }
 
 const strategyUsageColumnCache = new WeakMap()

@@ -3,7 +3,6 @@ import {
   getMyStrategyCodes,
   getPushPublicKey,
   getPushSubscriptionStatus,
-  previewStrategyCode,
   removePushSubscription,
   redeemStrategyCode,
   savePushSubscription,
@@ -15,7 +14,6 @@ import {
   type StrategyTradeDisplayConfig,
 } from '../api'
 import { playFeedbackSound } from '../appFeedback'
-import { AppModalPortal } from '../components/ui/AppModalPortal'
 import { LiveCandlesChart } from '../components/market/LiveCandlesChart'
 import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useI18n } from '../i18nCore'
@@ -48,9 +46,7 @@ export function FuturesPage() {
   const [selected, setSelected] = useState('BTCUSDT')
   const [selectedInterval, setSelectedInterval] = useState<(typeof intervals)[number]>('5m')
   const [candles, setCandles] = useState<Candle[]>([])
-  const [taskCode, setTaskCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [preview, setPreview] = useState<null | Awaited<ReturnType<typeof previewStrategyCode>>>(null)
   const [codes, setCodes] = useState<StrategyCodeItem[]>([])
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pushSupported, setPushSupported] = useState(false)
@@ -234,41 +230,24 @@ export function FuturesPage() {
     setCodes(refreshed.items || [])
   }
 
-  async function handlePreviewCode() {
-    const code = taskCode.trim()
-    if (!code) {
+  async function executeStrategyRedeem(code: string) {
+    const normalizedCode = code.trim()
+    if (!normalizedCode) {
       setMessage({ type: 'error', text: 'أدخل كود الاستراتيجية أولًا.' })
       return
     }
     setSubmitting(true)
     setMessage(null)
     try {
-      const res = await previewStrategyCode(code, selected)
-      setPreview(res)
-    } catch (error) {
-      setPreview(null)
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر التحقق من الكود.' })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function handleConfirmRedeem() {
-    if (!preview) return
-    setSubmitting(true)
-    setMessage(null)
-    try {
-      const res = await redeemStrategyCode({ code: taskCode.trim(), symbol: selected, confirmed: true })
+      const res = await redeemStrategyCode({ code: normalizedCode, symbol: selected, confirmed: true })
       await refreshCodes()
-      setPreview(null)
-      setTaskCode('')
-        playFeedbackSound('strategyCode').catch(() => {})
-        if (res.featureType === 'trial_trade') {
-          setMessage({
-            type: 'success',
-            text: `\u062a\u0645 \u0641\u062a\u062d \u0627\u0644\u0635\u0641\u0642\u0629 \u0627\u0644\u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629 \u0628\u0646\u062c\u0627\u062d. \u062a\u0645 \u062a\u0645\u0648\u064a\u0644 ${Number(res.stakeAmount || 0).toFixed(2)} USDT \u0628\u0646\u0633\u0628\u0629 ${Number(res.purchasePercent || 0).toFixed(0)}% \u0645\u0646 \u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0623\u0635\u0648\u0644 \u0627\u0644\u0645\u062a\u0627\u062d\u0629 \u0644\u0644\u062a\u0645\u0648\u064a\u0644\u060c \u0628\u0645\u0627 \u064a\u0634\u0645\u0644 \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0642\u064a\u062f \u0648\u0627\u0644\u0645\u0643\u062a\u0633\u0628\u0627\u062a. ${tradeDisplayConfig.active_notice}`, 
-          })
-        } else {
+      playFeedbackSound('strategyCode').catch(() => {})
+      if (res.featureType === 'trial_trade') {
+        setMessage({
+          type: 'success',
+          text: `\u062a\u0645 \u0641\u062a\u062d \u0627\u0644\u0635\u0641\u0642\u0629 \u0627\u0644\u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629 \u0628\u0646\u062c\u0627\u062d. \u062a\u0645 \u062a\u0645\u0648\u064a\u0644 ${Number(res.stakeAmount || 0).toFixed(2)} USDT \u0628\u0646\u0633\u0628\u0629 ${Number(res.purchasePercent || 0).toFixed(0)}% \u0645\u0646 \u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0623\u0635\u0648\u0644 \u0627\u0644\u0645\u062a\u0627\u062d\u0629 \u0644\u0644\u062a\u0645\u0648\u064a\u0644\u060c \u0628\u0645\u0627 \u064a\u0634\u0645\u0644 \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0642\u064a\u062f \u0648\u0627\u0644\u0645\u0643\u062a\u0633\u0628\u0627\u062a. ${tradeDisplayConfig.active_notice}`,
+        })
+      } else {
         setMessage({
           type: 'success',
           text: `تم تفعيل المكافأة الترويجية بنجاح وإضافتها عبر النظام المالي الجديد.`,
@@ -279,6 +258,10 @@ export function FuturesPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleActivatePublishedTrade(code: string) {
+    await executeStrategyRedeem(code)
   }
 
   async function handleSettleTrade(usageId: number) {
@@ -440,30 +423,10 @@ export function FuturesPage() {
                 : 'الإشعارات الخارجية غير مفعّلة بعد على هذا الجهاز.'}
           </div>
         </div>
-        <h2 className="text-sm font-semibold text-white">كود فتح الصفقات الاستراتيجية</h2>
-        <p className="mt-1 text-xs text-app-muted">
-          يتم التحقق من الكود أولًا، ثم تظهر لك رسالة موافقة واضحة توضح نسبة الشراء من إجمالي الأصول المحتسبة للشراء، وتشمل المكتسبات القابلة وغير القابلة للسحب مع استثناء الجزء المقيد فقط.
-        </p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input
-            className="field-input"
-            value={taskCode}
-            onChange={(e) => setTaskCode(e.target.value)}
-            placeholder="أدخل كود الاستراتيجية"
-          />
-          <button
-            type="button"
-            className="wallet-action-btn wallet-action-deposit"
-            onClick={handlePreviewCode}
-            disabled={submitting}
-          >
-            {submitting ? '...' : 'تحقق من الكود'}
-          </button>
-        </div>
         {publishedStrategyTrades.length > 0 ? (
           <div className="mt-3 grid gap-3">
             <div className="rounded-2xl border border-brand-blue/20 bg-brand-blue/10 px-3 py-2 text-xs text-brand-blue">
-              هذه اللوحات منشورة من الإدارة وتظهر لك للعرض فقط. انسخ الكود من اللوحة المقفولة ثم فعّله من الخانة أعلاه لبدء الصفقة.
+              هذه اللوحات منشورة من الإدارة وجاهزة للتفعيل المباشر. افتح الصفقة من نفس البطاقة بدون نسخ الكود أو نقله يدويًا.
             </div>
             {publishedStrategyTrades.map((item) => {
               const isUsed = Boolean(item.alreadyUsed)
@@ -499,31 +462,24 @@ export function FuturesPage() {
                     </div>
                     <div className="rounded-xl border border-app-border bg-app-card px-3 py-2">
                       <div className="text-[11px] text-app-muted">حالة اللوحة</div>
-                      <div className="mt-1 text-sm font-semibold text-white">{isUsed ? 'مرتبطة بالحساب' : 'جاهزة للنسخ والتفعيل'}</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{isUsed ? 'مرتبطة بالحساب' : 'جاهزة للتفعيل المباشر'}</div>
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
-                    <div className="text-[11px] text-amber-100/80">كود الاستراتيجية</div>
+                    <div className="text-[11px] text-amber-100/80">تفعيل الصفقة</div>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                      <input className="field-input flex-1" value={item.code} readOnly />
-                      <button
-                        type="button"
-                        className="wallet-action-btn owner-set-btn whitespace-nowrap"
-                        onClick={() => {
-                          navigator.clipboard.writeText(item.code).then(
-                            () => setMessage({ type: 'success', text: 'تم نسخ كود الاستراتيجية.' }),
-                            () => setMessage({ type: 'error', text: 'تعذر نسخ كود الاستراتيجية.' }),
-                          )
-                        }}
-                      >
-                        نسخ الكود
-                      </button>
+                      <div className="field-input flex-1 text-sm text-white/85">
+                        {isUsed ? 'تم ربط هذه الصفقة بحسابك بالفعل.' : 'اضغط على الزر لتفعيل الصفقة مباشرة من نفس البطاقة.'}
+                      </div>
                       <button
                         type="button"
                         className="wallet-action-btn wallet-action-deposit whitespace-nowrap"
-                        onClick={() => setTaskCode(item.code)}
+                        onClick={() => {
+                          handleActivatePublishedTrade(item.code).catch(() => {})
+                        }}
+                        disabled={submitting || isUsed}
                       >
-                        وضعه في الخانة
+                        {isUsed ? 'تم التفعيل' : submitting ? '...' : 'تفعيل الصفقة الآن'}
                       </button>
                     </div>
                   </div>
@@ -661,77 +617,6 @@ export function FuturesPage() {
         </section>
       ) : null}
 
-      {preview ? (
-        <AppModalPortal>
-        <div className="liquid-modal-backdrop fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="liquid-modal-card w-full max-w-lg rounded-3xl border border-app-border bg-app-card p-4 shadow-[0_24px_54px_rgba(0,0,0,0.45)]">
-            <h3 className="text-base font-semibold text-white">تأكيد تفعيل الكود</h3>
-            <p className="mt-2 text-sm text-app-muted">
-              {preview.featureType === 'trial_trade' ? tradeDisplayConfig.preview_notice : preview.preview.confirmationMessage}
-            </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">نوع الميزة</div>
-                <div className="mt-1 text-sm font-semibold text-white">
-                  {preview.featureType === 'trial_trade' ? 'فتح صفقات استراتيجية' : 'مكافأة ترويجية'}
-                </div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">الأصل</div>
-                <div className="mt-1 text-sm font-semibold text-white">{preview.assetSymbol}</div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">سعر السوق</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.currentPrice || 0).toLocaleString()}</div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">الأصول المحتسبة للشراء</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.eligibleAssetBase || preview.preview.balanceSnapshot || 0).toFixed(2)} USDT</div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">إجمالي الأصول المحتسبة</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.totalAssets || 0).toFixed(2)} USDT</div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">المكتسبات المضمنة</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.pendingEarnings || 0).toFixed(2)} USDT</div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">{'\u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u0642\u064a\u062f \u0627\u0644\u0645\u062a\u0627\u062d \u0644\u0644\u062a\u0645\u0648\u064a\u0644'}</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.lockedExcludedAmount || 0).toFixed(2)} USDT</div>
-              </div>
-              <div className="rounded-xl border border-app-border bg-app-elevated px-3 py-2">
-                <div className="text-[11px] text-app-muted">نسبة الشراء</div>
-                <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.purchasePercent || 0).toFixed(0)}%</div>
-              </div>
-              {preview.preview.stakeAmount ? (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 sm:col-span-2">
-                  <div className="text-[11px] text-amber-100/80">المبلغ الذي سيُخصم بعد موافقتك</div>
-                  <div className="mt-1 text-sm font-semibold text-white">{Number(preview.preview.stakeAmount).toFixed(2)} USDT</div>
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                className="wallet-action-btn owner-set-btn"
-                onClick={() => setPreview(null)}
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                className="wallet-action-btn wallet-action-deposit"
-                onClick={handleConfirmRedeem}
-                disabled={submitting}
-              >
-                {submitting ? '...' : 'أوافق وأفعّل الكود'}
-              </button>
-            </div>
-          </div>
-        </div>
-        </AppModalPortal>
-      ) : null}
     </div>
   )
 }
