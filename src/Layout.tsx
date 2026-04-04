@@ -177,6 +177,7 @@ export function Layout({
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted'>('default')
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
+  const [pushError, setPushError] = useState('')
   const [avatarBroken, setAvatarBroken] = useState(false)
   const [avatarRetryNonce, setAvatarRetryNonce] = useState(0)
   const [avatarFailureCount, setAvatarFailureCount] = useState(0)
@@ -474,6 +475,7 @@ export function Layout({
 
   async function enablePushNotifications(forcePrompt = true) {
     if (pushBusy) return
+    setPushError('')
     const supported = nativePushAvailable
       ? true
       : typeof window !== 'undefined' &&
@@ -491,10 +493,16 @@ export function Layout({
         }
         const normalizedPermission = mapNativePermissionState(String(permission))
         setPushPermission(normalizedPermission)
-        if (permission !== 'granted') return
+        if (permission !== 'granted') {
+          setPushError('لم يتم منح إذن الإشعارات من النظام.')
+          return
+        }
 
         const token = await registerNativePush()
-        if (!token) return
+        if (!token) {
+          setPushError('تعذر تسجيل الجهاز للإشعارات. حدّث التطبيق ثم أعد المحاولة.')
+          return
+        }
         await saveNativePushToken(token, getNativePushPlatform())
         setPushSubscribed(true)
         await sendNativePushTest().catch(() => {})
@@ -517,6 +525,9 @@ export function Layout({
       await savePushSubscription(subscription.toJSON())
       setPushSubscribed(true)
       await sendPushTest().catch(() => {})
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تفعيل الإشعارات.'
+      setPushError(message)
     } finally {
       setPushBusy(false)
     }
@@ -524,6 +535,7 @@ export function Layout({
 
   async function disablePushNotifications() {
     if (pushBusy) return
+    setPushError('')
     setPushBusy(true)
     try {
       if (nativePushAvailable) {
@@ -540,6 +552,9 @@ export function Layout({
         await removePushSubscription(null).catch(() => {})
       }
       setPushSubscribed(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر إيقاف الإشعارات.'
+      setPushError(message)
     } finally {
       setPushBusy(false)
     }
@@ -1016,6 +1031,11 @@ export function Layout({
                           ? pushTexts.enabledHint
                           : pushTexts.idleHint}
                     </div>
+                    {pushError ? (
+                      <div className="mt-2 rounded-lg border border-red-400/35 bg-red-500/15 px-2 py-1 text-[11px] text-red-100">
+                        {pushError}
+                      </div>
+                    ) : null}
                     {pushSupported ? (
                       <button
                         type="button"
