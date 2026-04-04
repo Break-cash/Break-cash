@@ -41,6 +41,7 @@ import { useInNativeApp } from './hooks/useInNativeApp'
 import { type Language, useI18n } from './i18nCore'
 import {
   getCurrentNativePushToken,
+  getLastNativePushError,
   getNativePushPermission,
   getNativePushPlatform,
   registerNativePush,
@@ -496,7 +497,12 @@ export function Layout({
 
         const token = await registerNativePush()
         if (!token) {
-          setPushError('تعذر تسجيل الجهاز للإشعارات. حدّث التطبيق ثم أعد المحاولة.')
+          const nativeError = String(getLastNativePushError() || '').trim()
+          setPushError(
+            nativeError
+              ? `تعذر تسجيل الجهاز للإشعارات (${nativeError}).`
+              : 'تعذر تسجيل الجهاز للإشعارات. حدّث التطبيق ثم أعد المحاولة.',
+          )
           return
         }
         await saveNativePushToken(token, getNativePushPlatform())

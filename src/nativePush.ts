@@ -10,6 +10,7 @@ import {
 
 let listenersBound = false
 let currentToken = ''
+let lastRegistrationError = ''
 
 function isNativePushPlatform() {
   return Capacitor.isNativePlatform()
@@ -20,10 +21,13 @@ function bindListeners() {
   listenersBound = true
 
   void PushNotifications.addListener('registration', (token: Token) => {
+    lastRegistrationError = ''
     currentToken = String(token.value || '').trim()
   })
 
-  void PushNotifications.addListener('registrationError', () => {
+  void PushNotifications.addListener('registrationError', (error: { error?: string }) => {
+    const code = String(error?.error || '').trim()
+    lastRegistrationError = code || 'NATIVE_REGISTRATION_FAILED'
     currentToken = ''
   })
 
@@ -77,11 +81,13 @@ export async function requestNativePushPermission() {
 export async function registerNativePush() {
   if (!isNativePushPlatform()) return null
   bindListeners()
+  currentToken = ''
+  lastRegistrationError = ''
   await ensureDefaultAndroidChannel()
   await PushNotifications.register()
 
   const startedAt = Date.now()
-  while (!currentToken && Date.now() - startedAt < 10000) {
+  while (!currentToken && !lastRegistrationError && Date.now() - startedAt < 12000) {
     await new Promise((resolve) => window.setTimeout(resolve, 120))
   }
 
@@ -92,9 +98,14 @@ export function getCurrentNativePushToken() {
   return currentToken || null
 }
 
+export function getLastNativePushError() {
+  return lastRegistrationError || null
+}
+
 export async function unregisterNativePush() {
   if (!isNativePushPlatform()) return
   currentToken = ''
+  lastRegistrationError = ''
   await PushNotifications.removeAllListeners().catch(() => {})
   listenersBound = false
   await PushNotifications.unregister().catch(() => {})
