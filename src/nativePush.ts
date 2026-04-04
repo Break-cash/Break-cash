@@ -81,17 +81,30 @@ export async function requestNativePushPermission() {
 export async function registerNativePush() {
   if (!isNativePushPlatform()) return null
   bindListeners()
-  currentToken = ''
-  lastRegistrationError = ''
   await ensureDefaultAndroidChannel()
-  await PushNotifications.register()
 
-  const startedAt = Date.now()
-  while (!currentToken && !lastRegistrationError && Date.now() - startedAt < 12000) {
-    await new Promise((resolve) => window.setTimeout(resolve, 120))
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    currentToken = ''
+    lastRegistrationError = ''
+    await PushNotifications.register()
+
+    const startedAt = Date.now()
+    while (!currentToken && !lastRegistrationError && Date.now() - startedAt < 20000) {
+      await new Promise((resolve) => window.setTimeout(resolve, 150))
+    }
+
+    if (currentToken) return currentToken
+    if (lastRegistrationError) return null
+
+    // Retry once or twice because some Android devices delay first FCM token mint.
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1200))
+    }
   }
 
-  return currentToken || null
+  lastRegistrationError = lastRegistrationError || 'NATIVE_REGISTRATION_TIMEOUT'
+  return null
 }
 
 export function getCurrentNativePushToken() {

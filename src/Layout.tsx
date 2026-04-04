@@ -232,8 +232,9 @@ export function Layout({
   }
 
   function mapNativePermissionState(permission: string) {
-    if (permission === 'granted') return 'granted' as const
-    if (permission.startsWith('prompt')) return 'default' as const
+    const normalized = String(permission || '').trim().toLowerCase()
+    if (normalized === 'granted') return 'granted' as const
+    if (normalized.startsWith('prompt')) return 'default' as const
     return 'denied' as const
   }
 
@@ -498,8 +499,13 @@ export function Layout({
         const token = await registerNativePush()
         if (!token) {
           const nativeError = String(getLastNativePushError() || '').trim()
+          const timeoutLike =
+            nativeError === 'NATIVE_REGISTRATION_TIMEOUT' ||
+            nativeError === 'SERVICE_NOT_AVAILABLE'
           setPushError(
-            nativeError
+            timeoutLike
+              ? 'تعذر الحصول على رمز الإشعارات من خدمات Google. تحقق من اتصال الإنترنت وخدمات Google Play ثم أعد المحاولة.'
+              : nativeError
               ? `تعذر تسجيل الجهاز للإشعارات (${nativeError}).`
               : 'تعذر تسجيل الجهاز للإشعارات. حدّث التطبيق ثم أعد المحاولة.',
           )
