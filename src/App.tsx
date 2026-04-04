@@ -20,6 +20,7 @@ import { translations, type Language } from './i18nCore'
 import { Layout } from './Layout'
 import { AppToastViewport } from './components/toast/AppToastViewport'
 import { AppModalPortal } from './components/ui/AppModalPortal'
+import { InstallPrompt } from './components/InstallPrompt'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
 import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
@@ -714,6 +715,7 @@ function App() {
         </div>
         </AppModalPortal>
       ) : null}
+      {isAuthenticated ? <InstallPrompt /> : null}
       <AppToastViewport />
     </I18nProvider>
   )
