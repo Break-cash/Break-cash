@@ -31,3 +31,12 @@ server/db.sqlite-shm
 server/db.sqlite-wal
 server/uploads/
 .vercel
+
+# Mobile local/build artifacts
+android/local.properties
+android/keystore.properties
+android/app/build/
+android/.gradle/
+android/captures/
+ios/App/build/
+build-artifacts/

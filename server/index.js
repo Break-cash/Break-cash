@@ -32,11 +32,12 @@ import { migrateUploadReferences } from './services/upload-reference-migration.j
 import { cleanupOldNotifications } from './services/notifications.js'
 import { backfillUserAvatarBlobs } from './services/user-avatars.js'
 import { reapplyRewardPoliciesToPendingEntries } from './services/wallet-service.js'
-import { syncSeededProfileAvatars } from './services/seed-profile-avatars.js'
+import { ensureUploadsRoot, getUploadsRoot } from './services/uploads-root.js'
 
 const PORT = Number(process.env.PORT || 5174)
 const app = express()
 const SENTRY_DSN = String(process.env.SENTRY_DSN || '').trim()
+const uploadsRoot = getUploadsRoot()
 
 if (SENTRY_DSN) {
   Sentry.init({
@@ -58,6 +59,9 @@ app.use('/uploads', async (req, res, next) => {
     const storageKey = getUploadStorageKey(`/uploads${String(req.path || '')}`)
     if (!storageKey) return next()
     const asset = await getUploadedAssetByKey(dbRef, storageKey)
+    if (asset?.external_url) {
+      return res.redirect(302, asset.external_url)
+    }
     if (!asset?.content_base64) return next()
     const buffer = Buffer.from(String(asset.content_base64), 'base64')
     res.setHeader('Content-Type', String(asset.mime_type || 'application/octet-stream'))
@@ -72,7 +76,7 @@ app.use('/uploads', async (req, res, next) => {
 })
 app.use(
   '/uploads',
-  express.static(path.join(process.cwd(), 'server', 'uploads'), {
+  express.static(uploadsRoot, {
     etag: false,
     lastModified: false,
     setHeaders: (res, filePath) => {
@@ -151,6 +155,7 @@ app.get('/api/health', async (_req, res) => {
 
 async function bootstrap() {
   const db = await openDb()
+  await ensureUploadsRoot()
   dbRef = db
   await ensureBaseSeed(db)
   try {
@@ -188,17 +193,6 @@ async function bootstrap() {
   } catch (error) {
     if (SENTRY_DSN) Sentry.captureException(error)
     console.warn('[avatars] backfill failed', error instanceof Error ? error.message : String(error))
-  }
-  try {
-    const seededAvatarResults = await syncSeededProfileAvatars(db)
-    const updatedCount = seededAvatarResults.filter((item) => item.status === 'updated').length
-    const missingCount = seededAvatarResults.filter((item) => item.status === 'missing_user').length
-    if (updatedCount > 0 || missingCount > 0) {
-      console.log(`[avatars] seeded profile sync updated=${updatedCount} missing=${missingCount}`)
-    }
-  } catch (error) {
-    if (SENTRY_DSN) Sentry.captureException(error)
-    console.warn('[avatars] seeded profile sync failed', error instanceof Error ? error.message : String(error))
   }
   try {
     const taskRewardRelease = await reapplyRewardPoliciesToPendingEntries(db, { sourceType: 'tasks' })

@@ -7,6 +7,12 @@ type DailyEarningsSummary = {
   lockedAmount: number
   entriesCount: number
   currency: string
+  sourceTotals: {
+    mining: number
+    tasks: number
+    referrals: number
+    deposits: number
+  }
 }
 
 const EMPTY_SUMMARY: DailyEarningsSummary = {
@@ -15,6 +21,12 @@ const EMPTY_SUMMARY: DailyEarningsSummary = {
   lockedAmount: 0,
   entriesCount: 0,
   currency: 'USDT',
+  sourceTotals: {
+    mining: 0,
+    tasks: 0,
+    referrals: 0,
+    deposits: 0,
+  },
 }
 
 function isSameLocalDay(dateText: string) {
@@ -34,6 +46,12 @@ function buildSummary(entries: EarningEntry[]): DailyEarningsSummary {
   let withdrawableAmount = 0
   let lockedAmount = 0
   let currency = 'USDT'
+  const sourceTotals = {
+    mining: 0,
+    tasks: 0,
+    referrals: 0,
+    deposits: 0,
+  }
 
   for (const entry of entries) {
     if (!isSameLocalDay(entry.created_at)) continue
@@ -41,6 +59,10 @@ function buildSummary(entries: EarningEntry[]): DailyEarningsSummary {
     if (!Number.isFinite(amount) || amount === 0) continue
     totalAmount += amount
     currency = entry.currency || currency
+    const sourceType = String(entry.source_type || '').trim().toLowerCase() as keyof typeof sourceTotals
+    if (sourceType in sourceTotals) {
+      sourceTotals[sourceType] = Number((sourceTotals[sourceType] + amount).toFixed(8))
+    }
     if (String(entry.payout_mode || 'withdrawable').trim().toLowerCase() === 'withdrawable') {
       withdrawableAmount += amount
     } else {
@@ -54,6 +76,7 @@ function buildSummary(entries: EarningEntry[]): DailyEarningsSummary {
     lockedAmount: Number(lockedAmount.toFixed(8)),
     entriesCount: entries.filter((entry) => isSameLocalDay(entry.created_at)).length,
     currency,
+    sourceTotals,
   }
 }
 

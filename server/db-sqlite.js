@@ -406,6 +406,18 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS uploaded_assets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  storage_key TEXT NOT NULL UNIQUE,
+  mime_type TEXT NOT NULL,
+  original_name TEXT,
+  content_base64 TEXT,
+  byte_size INTEGER NOT NULL DEFAULT 0,
+  external_url TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_uploaded_assets_storage_key ON uploaded_assets(storage_key);
 CREATE TABLE IF NOT EXISTS user_push_subscriptions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id),

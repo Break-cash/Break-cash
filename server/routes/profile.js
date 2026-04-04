@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { Router } from 'express'
 import multer from 'multer'
@@ -16,6 +15,7 @@ import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../se
 import { persistUploadedAsset, toStoredUploadReference } from '../services/uploaded-assets.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { buildUserAvatarUrl, persistUserAvatarUpload, resolveUserAvatarAsset } from '../services/user-avatars.js'
+import { ensureUploadDir, getUploadsRoot } from '../services/uploads-root.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -111,6 +111,9 @@ export function createProfileRouter(db) {
     const userId = Number(req.params?.userId || 0)
     if (!Number.isFinite(userId) || userId <= 0) return res.status(400).send('INVALID_USER')
     const avatar = await resolveUserAvatarAsset(db, userId)
+    if (avatar?.externalUrl) {
+      return res.redirect(302, avatar.externalUrl)
+    }
     if (!avatar?.contentBase64) return res.status(404).send('UPLOAD_NOT_FOUND')
     const buffer = Buffer.from(String(avatar.contentBase64), 'base64')
     res.setHeader('Content-Type', String(avatar.mimeType || 'image/jpeg'))

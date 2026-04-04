@@ -2,6 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { get, run, all } from '../db.js'
 import { getUploadStorageKey, getUploadedAssetByKey, persistUploadedAsset, toStoredUploadReference } from './uploaded-assets.js'
+import { resolveUploadPath } from './uploads-root.js'
+import { isObjectStorageConfigured } from './object-storage.js'
 
 function guessMimeType(filePath, fallback = 'image/jpeg') {
   const ext = path.extname(String(filePath || '')).toLowerCase()
@@ -15,7 +17,7 @@ function guessMimeType(filePath, fallback = 'image/jpeg') {
 function toAbsoluteUploadPath(value) {
   const storageKey = getUploadStorageKey(value)
   if (!storageKey) return null
-  return path.join(process.cwd(), 'server', 'uploads', storageKey)
+  return resolveUploadPath(storageKey)
 }
 
 async function readLocalFileAsBase64(absPath) {
@@ -48,6 +50,7 @@ export async function persistUserAvatarUpload(db, { userId, filePath, mimeType, 
     originalName: originalName || path.basename(filePath),
   })
 
+  const inlineBlob = isObjectStorageConfigured() ? '' : contentBase64
   await run(
     db,
     `UPDATE users
@@ -55,7 +58,7 @@ export async function persistUserAvatarUpload(db, { userId, filePath, mimeType, 
          avatar_blob_base64 = ?,
          avatar_blob_mime_type = ?
      WHERE id = ?`,
-    [storedReference, contentBase64, normalizedMimeType, userId],
+    [storedReference, inlineBlob, normalizedMimeType, userId],
   )
 
   return storedReference
@@ -84,6 +87,11 @@ export async function resolveUserAvatarAsset(db, userId) {
   if (!storageKey) return null
 
   const uploadedAsset = await getUploadedAssetByKey(db, storageKey)
+  if (uploadedAsset?.external_url) {
+    return {
+      externalUrl: uploadedAsset.external_url,
+    }
+  }
   if (uploadedAsset?.content_base64) {
     await run(
       db,

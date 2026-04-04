@@ -187,7 +187,21 @@ const notificationTemplates = {
     },
     tr: {
       title: 'Ilk Yatirim Bonusu',
-      body: ({ amount, currency }) => `Ilk yatirim bonusunuz hesabınıza eklendi: +${formatAmount(amount)} ${currency}.`,
+      body: ({ amount, currency }) => `Ilk yatirim bonusunuz hesabiniza eklendi: +${formatAmount(amount)} ${currency}.`,
+    },
+  },
+  verification_approved: {
+    en: {
+      title: 'Verification Approved',
+      body: () => 'Your identity verification request has been approved. Your account is now verified.',
+    },
+    ar: {
+      title: 'تم اعتماد التحقق',
+      body: () => 'تمت الموافقة على طلب التحقق الخاص بك، وأصبح حسابك موثقًا الآن.',
+    },
+    tr: {
+      title: 'Dogrulama Onaylandi',
+      body: () => 'Kimlik dogrulama talebiniz onaylandi. Hesabiniz artik dogrulandi.',
     },
   },
 }

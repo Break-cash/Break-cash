@@ -214,6 +214,13 @@ export function Home() {
                       {' • '}
                       {dailyEarningsSummary.lockedAmount.toFixed(2)} {balance_info.currency} {headerCopy.locked}
                     </div>
+                    <div className="mt-2 text-[11px] leading-5 text-emerald-100/80">
+                      {language === 'ar'
+                        ? `صفقات الاستراتيجية ${dailyEarningsSummary.sourceTotals.tasks.toFixed(2)} - الإحالات ${dailyEarningsSummary.sourceTotals.referrals.toFixed(2)}`
+                        : language === 'tr'
+                          ? `Stratejik islemler ${dailyEarningsSummary.sourceTotals.tasks.toFixed(2)} - Referanslar ${dailyEarningsSummary.sourceTotals.referrals.toFixed(2)}`
+                          : `Strategy trades ${dailyEarningsSummary.sourceTotals.tasks.toFixed(2)} - Referrals ${dailyEarningsSummary.sourceTotals.referrals.toFixed(2)}`}
+                    </div>
                   </div>
                   <div className="home-balance-tile rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3">
                     <div className="text-[11px] uppercase tracking-[0.14em] text-amber-200">{headerCopy.fundingLabel}</div>

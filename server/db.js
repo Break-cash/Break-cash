@@ -380,8 +380,9 @@ async function ensureSchema(db) {
       storage_key TEXT NOT NULL UNIQUE,
       mime_type TEXT NOT NULL,
       original_name TEXT,
-      content_base64 TEXT NOT NULL,
+      content_base64 TEXT,
       byte_size INTEGER NOT NULL DEFAULT 0,
+      external_url TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -923,6 +924,8 @@ async function ensureSchema(db) {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_user_id ON portfolio_holdings(user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_balance_transactions_user_id ON balance_transactions(user_id)`)
+  await db.query(`ALTER TABLE uploaded_assets ALTER COLUMN content_base64 DROP NOT NULL`).catch(() => {})
+  await db.query(`ALTER TABLE uploaded_assets ADD COLUMN IF NOT EXISTS external_url TEXT`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_user_id ON deposit_requests(user_id)`)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(request_status)`)
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_requests_idempotency ON deposit_requests(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`)
