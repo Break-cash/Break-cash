@@ -1,5 +1,12 @@
 import webpush from 'web-push'
 import { all, get, run } from '../db.js'
+import {
+  deactivateAllUserNativePushTokens,
+  deactivateUserNativePushToken,
+  getUserNativePushStatus,
+  saveUserNativePushToken,
+  sendNativePushToUser,
+} from './native-push-notifications.js'
 
 const VAPID_SETTINGS_KEY = 'web_push_vapid_keys'
 const DEFAULT_PUSH_ICON = '/break-cash-logo-premium.png'
@@ -171,7 +178,7 @@ async function markPushDeliveryFailure(db, id, deactivate = false) {
   )
 }
 
-export async function sendPushToUser(db, userId, payload) {
+export async function sendWebPushToUser(db, userId, payload) {
   if (!userId) return { sent: 0, failed: 0 }
   await ensureVapidKeys(db)
   const rows = await all(
@@ -206,4 +213,25 @@ export async function sendPushToUser(db, userId, payload) {
     }
   }
   return { sent, failed }
+}
+
+export async function sendPushToUser(db, userId, payload) {
+  const [webResult, nativeResult] = await Promise.all([
+    sendWebPushToUser(db, userId, payload),
+    sendNativePushToUser(db, userId, payload),
+  ])
+
+  return {
+    sent: Number(webResult.sent || 0) + Number(nativeResult.sent || 0),
+    failed: Number(webResult.failed || 0) + Number(nativeResult.failed || 0),
+    web: webResult,
+    native: nativeResult,
+  }
+}
+
+export {
+  getUserNativePushStatus,
+  saveUserNativePushToken,
+  deactivateUserNativePushToken,
+  deactivateAllUserNativePushTokens,
 }

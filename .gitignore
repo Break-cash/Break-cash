@@ -34,6 +34,7 @@ server/uploads/
 
 # Mobile local/build artifacts
 android/local.properties
+android/app/google-services.json
 android/keystore.properties
 android/app/build/
 android/.gradle/

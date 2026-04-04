@@ -241,10 +241,24 @@ export async function savePushSubscription(subscription: PushSubscriptionJSON) {
   }) as Promise<{ ok: boolean }>
 }
 
+export async function saveNativePushToken(token: string, platform = 'android') {
+  return apiFetch('/api/notifications/push/native/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ token, platform }),
+  }) as Promise<{ ok: boolean }>
+}
+
 export async function removePushSubscription(endpoint?: string | null) {
   return apiFetch('/api/notifications/push/unsubscribe', {
     method: 'POST',
     body: JSON.stringify({ endpoint: endpoint || null }),
+  }) as Promise<{ ok: boolean }>
+}
+
+export async function removeNativePushToken(token?: string | null) {
+  return apiFetch('/api/notifications/push/native/unsubscribe', {
+    method: 'POST',
+    body: JSON.stringify({ token: token || null }),
   }) as Promise<{ ok: boolean }>
 }
 
@@ -253,6 +267,13 @@ export async function sendPushTest() {
     method: 'POST',
     body: JSON.stringify({}),
   }) as Promise<{ ok: boolean; result: { sent: number; failed: number } }>
+}
+
+export async function sendNativePushTest() {
+  return apiFetch('/api/notifications/push/native/test', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }) as Promise<{ ok: boolean; result: { sent: number; failed: number; skipped?: boolean } }>
 }
 
 export async function createAdminNotification(payload: { userId: number; title: string; body: string }) {

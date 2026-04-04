@@ -4,12 +4,17 @@ import { requireAnyPermission, requireApproved, requireAuth, requirePermission }
 import { publishLiveUpdate } from '../services/live-updates.js'
 import {
   deactivateAllUserPushSubscriptions,
+  deactivateAllUserNativePushTokens,
+  deactivateUserNativePushToken,
   deactivateUserPushSubscription,
+  getUserNativePushStatus,
   getUserPushSubscriptionStatus,
   getWebPushPublicKey,
+  saveUserNativePushToken,
   saveUserPushSubscription,
   sendPushToUser,
 } from '../services/push-notifications.js'
+import { sendNativePushToUser } from '../services/native-push-notifications.js'
 
 function getNotificationKey(row) {
   return `${String(row?.title || '').trim()}|${String(row?.body || '').trim()}`
@@ -105,8 +110,15 @@ export function createNotificationsRouter(db) {
   })
 
   router.get('/push/status', async (req, res) => {
-    const status = await getUserPushSubscriptionStatus(db, req.user.id)
-    return res.json(status)
+    const [webStatus, nativeStatus] = await Promise.all([
+      getUserPushSubscriptionStatus(db, req.user.id),
+      getUserNativePushStatus(db, req.user.id),
+    ])
+    return res.json({
+      subscribed: Boolean(webStatus.subscribed || nativeStatus.subscribed),
+      webSubscribed: Boolean(webStatus.subscribed),
+      nativeSubscribed: Boolean(nativeStatus.subscribed),
+    })
   })
 
   router.post('/push/subscribe', async (req, res) => {
@@ -126,6 +138,24 @@ export function createNotificationsRouter(db) {
     return res.json({ ok: true })
   })
 
+  router.post('/push/native/subscribe', async (req, res) => {
+    const token = String(req.body?.token || '').trim()
+    const platform = String(req.body?.platform || 'android').trim() || 'android'
+    if (!token) return res.status(400).json({ error: 'INVALID_NATIVE_PUSH_TOKEN' })
+    await saveUserNativePushToken(db, req.user.id, token, platform, req.get('user-agent') || '')
+    return res.json({ ok: true })
+  })
+
+  router.post('/push/native/unsubscribe', async (req, res) => {
+    const token = String(req.body?.token || '').trim()
+    if (token) {
+      await deactivateUserNativePushToken(db, req.user.id, token)
+    } else {
+      await deactivateAllUserNativePushTokens(db, req.user.id)
+    }
+    return res.json({ ok: true })
+  })
+
   router.post('/push/test', async (req, res) => {
     const result = await sendPushToUser(db, req.user.id, {
       title: 'Break Cash',
@@ -133,6 +163,17 @@ export function createNotificationsRouter(db) {
       tag: 'push_test',
       url: '/portfolio',
       data: { key: 'push_test' },
+    })
+    return res.json({ ok: true, result })
+  })
+
+  router.post('/push/native/test', async (req, res) => {
+    const result = await sendNativePushToUser(db, req.user.id, {
+      title: 'Break Cash',
+      body: 'تم تفعيل إشعارات التطبيق بنجاح.',
+      tag: 'native_push_test',
+      url: '/portfolio',
+      data: { key: 'native_push_test' },
     })
     return res.json({ ok: true, result })
   })

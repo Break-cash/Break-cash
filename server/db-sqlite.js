@@ -433,6 +433,21 @@ CREATE TABLE IF NOT EXISTS user_push_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active);
 
+CREATE TABLE IF NOT EXISTS user_native_push_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  device_token TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL DEFAULT 'android',
+  user_agent TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  last_success_at TEXT,
+  last_failure_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_native_push_tokens_user ON user_native_push_tokens(user_id, is_active);
+
 CREATE TABLE IF NOT EXISTS phone_verification_codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1132,6 +1147,23 @@ async function ensureSchema(db) {
     )`,
   )
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active)`)
+  await runAsync(
+    db,
+    `CREATE TABLE IF NOT EXISTS user_native_push_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      device_token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'android',
+      user_agent TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      last_success_at TEXT,
+      last_failure_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  )
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_user_native_push_tokens_user ON user_native_push_tokens(user_id, is_active)`)
   await runAsync(
     db,
     `CREATE TABLE IF NOT EXISTS owner_financial_approval_reports (

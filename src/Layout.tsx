@@ -21,9 +21,12 @@ import {
   getHeaderIconConfig,
   getPushPublicKey,
   getPushSubscriptionStatus,
+  removeNativePushToken,
   removePushSubscription,
   savePushSubscription,
+  saveNativePushToken,
   sendPushTest,
+  sendNativePushTest,
   subscribeToLiveUpdates,
   updateMyProfile,
   type AuthUser,
@@ -34,7 +37,17 @@ import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
 import { UserIdentityBadges } from './components/user/UserIdentityBadges'
 import { useFrameRateProfile } from './hooks/useFrameRateProfile'
+import { useInNativeApp } from './hooks/useInNativeApp'
 import { type Language, useI18n } from './i18nCore'
+import {
+  getCurrentNativePushToken,
+  getNativePushPermission,
+  getNativePushPlatform,
+  registerNativePush,
+  requestNativePushPermission,
+  supportsNativePush,
+  unregisterNativePush,
+} from './nativePush'
 import { getPremiumProfileColorClass } from './premiumIdentity'
 
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
@@ -141,6 +154,7 @@ export function Layout({
   canViewReports,
 }: LayoutProps) {
   const { scaleDuration } = useFrameRateProfile()
+  const inNativeApp = useInNativeApp()
   const { t, language, setLanguage, direction } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
@@ -396,18 +410,25 @@ export function Layout({
   }, [])
 
   useEffect(() => {
-    const supported =
-      typeof window !== 'undefined' &&
-      'Notification' in window &&
-      'serviceWorker' in navigator &&
-      'PushManager' in window
+    const supported = inNativeApp
+      ? supportsNativePush()
+      : typeof window !== 'undefined' &&
+        'Notification' in window &&
+        'serviceWorker' in navigator &&
+        'PushManager' in window
     setPushSupported(supported)
     if (!supported) return
-    setPushPermission(Notification.permission)
+    if (inNativeApp) {
+      getNativePushPermission()
+        .then((permission) => setPushPermission(permission === 'granted' ? 'granted' : permission === 'prompt' ? 'default' : 'denied'))
+        .catch(() => setPushPermission('default'))
+    } else {
+      setPushPermission(Notification.permission)
+    }
     getPushSubscriptionStatus()
       .then((res) => setPushSubscribed(Boolean(res.subscribed)))
       .catch(() => setPushSubscribed(false))
-  }, [])
+  }, [inNativeApp])
 
   useEffect(() => {
     primeAppFeedback()
@@ -446,15 +467,34 @@ export function Layout({
 
   async function enablePushNotifications(forcePrompt = true) {
     if (pushBusy) return
-    const supported =
-      typeof window !== 'undefined' &&
-      'Notification' in window &&
-      'serviceWorker' in navigator &&
-      'PushManager' in window
+    const supported = inNativeApp
+      ? supportsNativePush()
+      : typeof window !== 'undefined' &&
+        'Notification' in window &&
+        'serviceWorker' in navigator &&
+        'PushManager' in window
     setPushSupported(supported)
     if (!supported) return
     setPushBusy(true)
     try {
+      if (inNativeApp) {
+        let permission = await getNativePushPermission()
+        if (permission !== 'granted' && forcePrompt) {
+          permission = await requestNativePushPermission()
+        }
+        const normalizedPermission =
+          permission === 'granted' ? 'granted' : permission === 'prompt' ? 'default' : 'denied'
+        setPushPermission(normalizedPermission)
+        if (permission !== 'granted') return
+
+        const token = await registerNativePush()
+        if (!token) return
+        await saveNativePushToken(token, getNativePushPlatform())
+        setPushSubscribed(true)
+        await sendNativePushTest().catch(() => {})
+        return
+      }
+
       let permission: NotificationPermission = Notification.permission
       if (permission !== 'granted' && forcePrompt) permission = await Notification.requestPermission()
       setPushPermission(permission)
@@ -480,7 +520,11 @@ export function Layout({
     if (pushBusy) return
     setPushBusy(true)
     try {
-      if ('serviceWorker' in navigator) {
+      if (inNativeApp) {
+        const token = getCurrentNativePushToken()
+        await unregisterNativePush().catch(() => {})
+        await removeNativePushToken(token).catch(() => {})
+      } else if ('serviceWorker' in navigator) {
         const registration = await navigator.serviceWorker.ready
         const subscription = await registration.pushManager.getSubscription()
         const endpoint = subscription?.endpoint || null
@@ -499,7 +543,7 @@ export function Layout({
     if (!pushSupported) return
     if (pushPermission !== 'granted') return
     enablePushNotifications(false).catch(() => {})
-  }, [pushSupported, pushPermission])
+  }, [pushSupported, pushPermission, inNativeApp])
 
   useEffect(() => {
     getHeaderIconConfig()

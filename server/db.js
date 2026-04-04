@@ -402,6 +402,21 @@ async function ensureSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active);
 
+    CREATE TABLE IF NOT EXISTS user_native_push_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      device_token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'android',
+      user_agent TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      last_success_at TIMESTAMP,
+      last_failure_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_native_push_tokens_user ON user_native_push_tokens(user_id, is_active);
+
     CREATE TABLE IF NOT EXISTS phone_verification_codes (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -869,6 +884,22 @@ async function ensureSchema(db) {
     )
   `)
   await db.query(`CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user ON user_push_subscriptions(user_id, is_active)`)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_native_push_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      device_token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'android',
+      user_agent TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      last_success_at TIMESTAMP,
+      last_failure_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_user_native_push_tokens_user ON user_native_push_tokens(user_id, is_active)`)
   await db.query(`ALTER TABLE mining_profiles ADD COLUMN IF NOT EXISTS video_access_unlocked INTEGER NOT NULL DEFAULT 0`)
   await db.query(`ALTER TABLE mining_profiles ADD COLUMN IF NOT EXISTS video_access_unlocked_at TIMESTAMP`)
   await db.query(`ALTER TABLE strategy_codes ADD COLUMN IF NOT EXISTS feature_type TEXT NOT NULL DEFAULT 'trial_trade'`)
