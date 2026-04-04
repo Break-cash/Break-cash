@@ -155,6 +155,7 @@ export function Layout({
 }: LayoutProps) {
   const { scaleDuration } = useFrameRateProfile()
   const inNativeApp = useInNativeApp()
+  const nativePushAvailable = inNativeApp || supportsNativePush()
   const { t, language, setLanguage, direction } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
@@ -226,6 +227,12 @@ export function Layout({
     const outputArray = new Uint8Array(rawData.length)
     for (let i = 0; i < rawData.length; i += 1) outputArray[i] = rawData.charCodeAt(i)
     return outputArray
+  }
+
+  function mapNativePermissionState(permission: string) {
+    if (permission === 'granted') return 'granted' as const
+    if (permission.startsWith('prompt')) return 'default' as const
+    return 'denied' as const
   }
 
   const pushTexts =
@@ -410,17 +417,17 @@ export function Layout({
   }, [])
 
   useEffect(() => {
-    const supported = inNativeApp
-      ? supportsNativePush()
+    const supported = nativePushAvailable
+      ? true
       : typeof window !== 'undefined' &&
         'Notification' in window &&
         'serviceWorker' in navigator &&
         'PushManager' in window
     setPushSupported(supported)
     if (!supported) return
-    if (inNativeApp) {
+    if (nativePushAvailable) {
       getNativePushPermission()
-        .then((permission) => setPushPermission(permission === 'granted' ? 'granted' : permission === 'prompt' ? 'default' : 'denied'))
+        .then((permission) => setPushPermission(mapNativePermissionState(String(permission))))
         .catch(() => setPushPermission('default'))
     } else {
       setPushPermission(Notification.permission)
@@ -428,7 +435,7 @@ export function Layout({
     getPushSubscriptionStatus()
       .then((res) => setPushSubscribed(Boolean(res.subscribed)))
       .catch(() => setPushSubscribed(false))
-  }, [inNativeApp])
+  }, [nativePushAvailable])
 
   useEffect(() => {
     primeAppFeedback()
@@ -467,8 +474,8 @@ export function Layout({
 
   async function enablePushNotifications(forcePrompt = true) {
     if (pushBusy) return
-    const supported = inNativeApp
-      ? supportsNativePush()
+    const supported = nativePushAvailable
+      ? true
       : typeof window !== 'undefined' &&
         'Notification' in window &&
         'serviceWorker' in navigator &&
@@ -477,13 +484,12 @@ export function Layout({
     if (!supported) return
     setPushBusy(true)
     try {
-      if (inNativeApp) {
+      if (nativePushAvailable) {
         let permission = await getNativePushPermission()
         if (permission !== 'granted' && forcePrompt) {
           permission = await requestNativePushPermission()
         }
-        const normalizedPermission =
-          permission === 'granted' ? 'granted' : permission === 'prompt' ? 'default' : 'denied'
+        const normalizedPermission = mapNativePermissionState(String(permission))
         setPushPermission(normalizedPermission)
         if (permission !== 'granted') return
 
@@ -520,7 +526,7 @@ export function Layout({
     if (pushBusy) return
     setPushBusy(true)
     try {
-      if (inNativeApp) {
+      if (nativePushAvailable) {
         const token = getCurrentNativePushToken()
         await unregisterNativePush().catch(() => {})
         await removeNativePushToken(token).catch(() => {})
@@ -543,7 +549,7 @@ export function Layout({
     if (!pushSupported) return
     if (pushPermission !== 'granted') return
     enablePushNotifications(false).catch(() => {})
-  }, [pushSupported, pushPermission, inNativeApp])
+  }, [pushSupported, pushPermission, nativePushAvailable])
 
   useEffect(() => {
     getHeaderIconConfig()
