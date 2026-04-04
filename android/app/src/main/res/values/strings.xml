@@ -4,4 +4,5 @@
     <string name="title_activity_main">Break Cash</string>
     <string name="package_name">com.breakcash.app</string>
     <string name="custom_url_scheme">com.breakcash.app</string>
+    <string name="asset_statements">[{"include":"https://breakcash.cash/.well-known/assetlinks.json"}]</string>
 </resources>

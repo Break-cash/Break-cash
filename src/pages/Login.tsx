@@ -9,10 +9,13 @@ import {
   submitRecoveryCodeReviewRequest,
 } from '../api'
 import { useI18n, type Language } from '../i18nCore'
+import { useNativeAppInstalled } from '../hooks/useNativeAppInstalled'
 
 type LoginProps = {
   onAuthSuccess?: () => void
 }
+
+const APK_DOWNLOAD_URL = '/downloads/Break-Cash-Android-Release-v1.apk'
 
 function resolveAuthErrorMessage(rawMessage: string, language: Language, isRegister: boolean) {
   const normalized = String(rawMessage || '').trim()
@@ -79,6 +82,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [logoBroken, setLogoBroken] = useState(false)
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
+  const nativeAppInstalled = useNativeAppInstalled()
   const brandLabel = 'BREAK CASH'
   const apkDownloadLabel =
     language === 'ar' ? 'تحميل التطبيق' : language === 'tr' ? 'Uygulamayi indir' : 'Download app'
@@ -222,13 +226,15 @@ export function Login({ onAuthSuccess }: LoginProps) {
           </div>
 
           <p className="login-subtitle">{t('login_subtitle')}</p>
-          <a
-            href="/downloads/Break-Cash-Android-Release-v1.apk"
-            download
-            className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(59,130,246,0.28)] transition-transform duration-200 hover:scale-[1.01]"
-          >
-            {apkDownloadLabel}
-          </a>
+          {!nativeAppInstalled ? (
+            <a
+              href={APK_DOWNLOAD_URL}
+              download
+              className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(59,130,246,0.28)] transition-transform duration-200 hover:scale-[1.01]"
+            >
+              {apkDownloadLabel}
+            </a>
+          ) : null}
         </div>
 
         <form className="login-form" onSubmit={onSubmit}>

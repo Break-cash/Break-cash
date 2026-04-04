@@ -13,6 +13,14 @@
   "background_color": "#0A0E17",
   "theme_color": "#00C853",
   "categories": ["finance", "business", "productivity"],
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.breakcash.app",
+      "url": "https://play.google.com/store/apps/details?id=com.breakcash.app"
+    }
+  ],
   "icons": [
     {
       "src": "/break-cash-logo-premium.png",

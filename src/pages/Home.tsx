@@ -23,6 +23,7 @@ import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { useAssetVisibility } from '../hooks/useAssetVisibility'
 import { useWalletSummary } from '../hooks/useWalletSummary'
+import { useNativeAppInstalled } from '../hooks/useNativeAppInstalled'
 import { useI18n } from '../i18nCore'
 
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
@@ -33,6 +34,7 @@ export function Home() {
   const { balance_info } = appData
   const [ads, setAds] = useState<AdItem[]>([])
   const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
+  const nativeAppInstalled = useNativeAppInstalled()
   const { summary: walletSummary } = useWalletSummary()
   const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
   const { isHidden } = useAssetVisibility()
@@ -192,13 +194,15 @@ export function Home() {
                     <div className="mt-3 text-lg font-bold text-white">{headerCopy.statWalletValue}</div>
                   </div>
                 </div>
-                <a
-                  href={APK_DOWNLOAD_URL}
-                  download
-                  className="inline-flex items-center justify-center rounded-2xl bg-brand-blue px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(59,130,246,0.28)] transition-transform duration-200 hover:scale-[1.01]"
-                >
-                  {headerCopy.downloadApp}
-                </a>
+                {!nativeAppInstalled ? (
+                  <a
+                    href={APK_DOWNLOAD_URL}
+                    download
+                    className="inline-flex items-center justify-center rounded-2xl bg-brand-blue px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(59,130,246,0.28)] transition-transform duration-200 hover:scale-[1.01]"
+                  >
+                    {headerCopy.downloadApp}
+                  </a>
+                ) : null}
               </div>
 
               <div className="home-balance-panel space-y-3 rounded-[24px] border border-white/10 bg-white/5 p-4 backdrop-blur-sm">

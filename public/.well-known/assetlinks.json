@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.query_webapk"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.breakcash.app",
+      "sha256_cert_fingerprints": [
+        "D2:0E:AF:53:EF:94:B7:6E:A3:EA:17:6E:4D:5A:CC:65:4C:14:90:D0:EC:20:D3:15:57:77:80:60:39:C8:39:B6"
+      ]
+    }
+  }
+]
