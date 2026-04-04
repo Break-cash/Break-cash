@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, Info, X } from 'lucide-react'
-import { useNativeAppInstalled } from '../hooks/useNativeAppInstalled'
+import { useInNativeApp } from '../hooks/useInNativeApp'
 import { useI18n } from '../i18nCore'
 import { AppModalPortal } from './ui/AppModalPortal'
 
@@ -17,7 +17,7 @@ export function InstallPrompt() {
   const [installed, setInstalled] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop' | 'other'>('other')
-  const nativeAppInstalled = useNativeAppInstalled()
+  const inNativeApp = useInNativeApp()
 
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase()
@@ -61,9 +61,9 @@ export function InstallPrompt() {
   }, [platform, t])
 
   const shouldShowApkDownload =
-    !nativeAppInstalled && (platform === 'android' || platform === 'desktop' || platform === 'other')
+    !inNativeApp && (platform === 'android' || platform === 'desktop' || platform === 'other')
 
-  if (installed || nativeAppInstalled) return null
+  if (installed || inNativeApp) return null
 
   return (
     <>

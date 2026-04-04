@@ -6,6 +6,7 @@ type UseWalletSummaryOptions = {
   currency?: string
   subscribeLive?: boolean
   enabled?: boolean
+  pollMs?: number
 }
 
 type UseWalletSummaryResult = {
@@ -20,13 +21,14 @@ export function useWalletSummary({
   currency = 'USDT',
   subscribeLive = true,
   enabled = true,
+  pollMs = 12000,
 }: UseWalletSummaryOptions = {}): UseWalletSummaryResult {
   const [summary, setSummary] = useState<WalletSummary>(EMPTY_WALLET_SUMMARY)
   const [overview, setOverview] = useState<WalletOverview | null>(null)
   const [loading, setLoading] = useState(Boolean(enabled))
   const [error, setError] = useState<Error | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!enabled) {
       setSummary(EMPTY_WALLET_SUMMARY)
       setOverview(null)
@@ -35,7 +37,9 @@ export function useWalletSummary({
       return EMPTY_WALLET_SUMMARY
     }
 
-    setLoading(true)
+    if (!options?.silent) {
+      setLoading(true)
+    }
     setError(null)
 
     try {
@@ -64,10 +68,33 @@ export function useWalletSummary({
 
     return subscribeToLiveUpdates((event) => {
       if (event.type === 'balance_updated') {
-        refresh().catch(() => {})
+        refresh({ silent: true }).catch(() => {})
       }
     })
   }, [enabled, refresh, subscribeLive])
+
+  useEffect(() => {
+    if (!enabled || pollMs <= 0) return () => {}
+
+    const intervalId = window.setInterval(() => {
+      refresh({ silent: true }).catch(() => {})
+    }, pollMs)
+
+    const handleForegroundRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        refresh({ silent: true }).catch(() => {})
+      }
+    }
+
+    window.addEventListener('focus', handleForegroundRefresh)
+    document.addEventListener('visibilitychange', handleForegroundRefresh)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleForegroundRefresh)
+      document.removeEventListener('visibilitychange', handleForegroundRefresh)
+    }
+  }, [enabled, pollMs, refresh])
 
   return {
     summary,

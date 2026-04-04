@@ -8,8 +8,8 @@ import {
   setToken,
   submitRecoveryCodeReviewRequest,
 } from '../api'
+import { useInNativeApp } from '../hooks/useInNativeApp'
 import { useI18n, type Language } from '../i18nCore'
-import { useNativeAppInstalled } from '../hooks/useNativeAppInstalled'
 
 type LoginProps = {
   onAuthSuccess?: () => void
@@ -82,7 +82,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [logoBroken, setLogoBroken] = useState(false)
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
-  const nativeAppInstalled = useNativeAppInstalled()
+  const inNativeApp = useInNativeApp()
   const brandLabel = 'BREAK CASH'
   const apkDownloadLabel =
     language === 'ar' ? 'تحميل التطبيق' : language === 'tr' ? 'Uygulamayi indir' : 'Download app'
@@ -226,7 +226,7 @@ export function Login({ onAuthSuccess }: LoginProps) {
           </div>
 
           <p className="login-subtitle">{t('login_subtitle')}</p>
-          {!nativeAppInstalled ? (
+          {!inNativeApp ? (
             <a
               href={APK_DOWNLOAD_URL}
               download

@@ -62,7 +62,18 @@ export function useMarketBoard(pollMs = 5000) {
   useEffect(() => {
     load().catch(() => {})
     const id = window.setInterval(() => load().catch(() => {}), pollMs)
-    return () => window.clearInterval(id)
+    const handleForegroundRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        load().catch(() => {})
+      }
+    }
+    window.addEventListener('focus', handleForegroundRefresh)
+    document.addEventListener('visibilitychange', handleForegroundRefresh)
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener('focus', handleForegroundRefresh)
+      document.removeEventListener('visibilitychange', handleForegroundRefresh)
+    }
   }, [load, pollMs])
 
   const mostTraded = useMemo(() => quotes.slice(0, 8), [quotes])

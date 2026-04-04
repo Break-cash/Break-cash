@@ -21,6 +21,7 @@ import { Layout } from './Layout'
 import { AppToastViewport } from './components/toast/AppToastViewport'
 import { AppModalPortal } from './components/ui/AppModalPortal'
 import { InstallPrompt } from './components/InstallPrompt'
+import { useFrameRateProfile } from './hooks/useFrameRateProfile'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
 import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
@@ -163,6 +164,7 @@ function applyMetaContent(name: string, content: string) {
 }
 
 function LoginRouteWrapper({ onAuthSuccess }: LoginRouteWrapperProps) {
+  const { scaleDuration } = useFrameRateProfile()
   const [isLeaving, setIsLeaving] = useState(false)
   const [shouldNavigate, setShouldNavigate] = useState(false)
   const [showSplash, setShowSplash] = useState(() => shouldShowSplashOnEntry(resolveSplashMode()))
@@ -191,16 +193,16 @@ function LoginRouteWrapper({ onAuthSuccess }: LoginRouteWrapperProps) {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 8 }}
-          transition={{ duration: 0.34, ease: 'easeOut' }}
+          transition={{ duration: scaleDuration(0.34), ease: 'easeOut' }}
         >
           <Login
-            onAuthSuccess={() => {
-              setIsLeaving(true)
-              onAuthSuccess()
-              setTimeout(() => {
-                setShouldNavigate(true)
-              }, 300)
-            }}
+              onAuthSuccess={() => {
+                setIsLeaving(true)
+                onAuthSuccess()
+                setTimeout(() => {
+                  setShouldNavigate(true)
+                }, Math.round(scaleDuration(0.3) * 1000))
+              }}
           />
         </motion.div>
       )}
@@ -229,6 +231,7 @@ function AnimatedAuthenticatedRoutes({
   handleLogout: () => void
   refreshCurrentUser: () => Promise<void>
 }) {
+  const { scaleDuration } = useFrameRateProfile()
   const location = useLocation()
 
   return (
@@ -250,7 +253,7 @@ function AnimatedAuthenticatedRoutes({
             initial={{ opacity: 0, y: 16, scale: 0.992, filter: 'blur(10px)' }}
             animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -10, scale: 0.996, filter: 'blur(8px)' }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: scaleDuration(0.3), ease: [0.22, 1, 0.36, 1] }}
           >
             <Routes location={location}>
               <Route path="/portfolio" element={<Profile />} />
@@ -318,6 +321,7 @@ function AnimatedAuthenticatedRoutes({
 }
 
 function App() {
+  const { fps, frameMs, motionScale } = useFrameRateProfile()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [grantedPermissions, setGrantedPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(() => !!getToken())
@@ -330,6 +334,12 @@ function App() {
   const [recoverySaving, setRecoverySaving] = useState(false)
   const isLocalAuthBypassEnabled =
     typeof window !== 'undefined' && LOCAL_AUTH_BYPASS_HOSTS.has(window.location.hostname) && !getToken()
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--device-fps', String(fps))
+    document.documentElement.style.setProperty('--device-frame-ms', `${frameMs.toFixed(2)}ms`)
+    document.documentElement.style.setProperty('--motion-duration-scale', motionScale.toFixed(3))
+  }, [fps, frameMs, motionScale])
 
   useEffect(() => {
     if (productionRefreshRequired) return
@@ -715,7 +725,7 @@ function App() {
         </div>
         </AppModalPortal>
       ) : null}
-      <InstallPrompt />
+      {!isAuthenticated ? <InstallPrompt /> : null}
       <AppToastViewport />
     </I18nProvider>
   )

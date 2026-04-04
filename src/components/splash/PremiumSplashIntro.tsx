@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { getLogoUrl } from '../../api'
+import { useFrameRateProfile } from '../../hooks/useFrameRateProfile'
 
 type PremiumSplashIntroProps = {
   onComplete: () => void
@@ -8,6 +9,7 @@ type PremiumSplashIntroProps = {
 
 export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
   const prefersReducedMotion = useReducedMotion()
+  const { scaleDuration } = useFrameRateProfile()
   const [logoUrl, setLogoUrl] = useState('/break-cash-logo-premium.png')
   const [logoBroken, setLogoBroken] = useState(false)
   const splashVideoUrl = '/ads/break-logo-motion.mp4'
@@ -34,16 +36,16 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
     return () => window.clearTimeout(timer)
   }, [onComplete, totalMs])
 
-  const sweepDuration = prefersReducedMotion ? 0 : 0.95
-  const pulseDuration = prefersReducedMotion ? 0 : 0.9
+  const sweepDuration = prefersReducedMotion ? 0 : scaleDuration(0.95)
+  const pulseDuration = prefersReducedMotion ? 0 : scaleDuration(0.9)
 
   return (
     <motion.div
       className="premium-splash"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: { duration: 0.45, ease: 'easeOut' } }}
-      transition={{ duration: 0.45, ease: 'easeOut' }}
+      exit={{ opacity: 0, transition: { duration: scaleDuration(0.45), ease: 'easeOut' } }}
+      transition={{ duration: scaleDuration(0.45), ease: 'easeOut' }}
     >
       {!prefersReducedMotion ? (
         <motion.video
@@ -55,20 +57,20 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
           preload="auto"
           initial={{ opacity: 0, scale: 1.04 }}
           animate={{ opacity: 0.8, scale: 1 }}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
+          transition={{ duration: scaleDuration(0.7), ease: 'easeOut' }}
         />
       ) : null}
       <motion.div
         className="premium-splash-glow"
         initial={{ opacity: 0 }}
         animate={{ opacity: prefersReducedMotion ? 0.84 : 0.78 }}
-        transition={{ duration: prefersReducedMotion ? 0.2 : 0.7, delay: prefersReducedMotion ? 0 : 0.2 }}
+        transition={{ duration: prefersReducedMotion ? 0.2 : scaleDuration(0.7), delay: prefersReducedMotion ? 0 : 0.2 }}
       />
       <motion.div
         className="premium-splash-texture"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: prefersReducedMotion ? 0.2 : 0.8, delay: prefersReducedMotion ? 0 : 0.35 }}
+        transition={{ duration: prefersReducedMotion ? 0.2 : scaleDuration(0.8), delay: prefersReducedMotion ? 0 : 0.35 }}
       />
 
       <div className="premium-splash-center">
@@ -77,7 +79,7 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
           dir="ltr"
           initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: prefersReducedMotion ? 0.2 : 0.72, delay: prefersReducedMotion ? 0 : 0.4 }}
+          transition={{ duration: prefersReducedMotion ? 0.2 : scaleDuration(0.72), delay: prefersReducedMotion ? 0 : 0.4 }}
         >
           BREAK CASH
         </motion.div>
@@ -86,7 +88,7 @@ export function PremiumSplashIntro({ onComplete }: PremiumSplashIntroProps) {
           className="premium-splash-logo-shell"
           initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: prefersReducedMotion ? 0.2 : 0.9, delay: prefersReducedMotion ? 0 : 0.75 }}
+          transition={{ duration: prefersReducedMotion ? 0.2 : scaleDuration(0.9), delay: prefersReducedMotion ? 0 : 0.75 }}
         >
           <div className="premium-splash-logo-stage">
             <img

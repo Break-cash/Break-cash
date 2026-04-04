@@ -15,6 +15,7 @@ import {
   getMobileNavConfig,
   type MobileNavConfigItem,
 } from '../../api'
+import { useFrameRateProfile } from '../../hooks/useFrameRateProfile'
 import { useI18n } from '../../i18nCore'
 
 type ManagementShortcut = {
@@ -30,6 +31,7 @@ type MobileBottomNavProps = {
 
 export function MobileBottomNav({ managementShortcut = null }: MobileBottomNavProps) {
   const { t, direction } = useI18n()
+  const { scaleDuration } = useFrameRateProfile()
   const location = useLocation()
   const [navItems, setNavItems] = useState<MobileNavConfigItem[]>([])
 
@@ -103,7 +105,7 @@ export function MobileBottomNav({ managementShortcut = null }: MobileBottomNavPr
     <motion.nav
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: scaleDuration(0.3), ease: 'easeOut' }}
       className="fixed inset-x-0 bottom-[max(10px,env(safe-area-inset-bottom))] z-50 px-2 lg:px-4"
       aria-label={t('nav_mobile') || 'Mobile navigation'}
     >

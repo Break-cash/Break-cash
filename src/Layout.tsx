@@ -33,6 +33,7 @@ import { playFeedbackSound, primeAppFeedback } from './appFeedback'
 import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
 import { UserIdentityBadges } from './components/user/UserIdentityBadges'
+import { useFrameRateProfile } from './hooks/useFrameRateProfile'
 import { type Language, useI18n } from './i18nCore'
 import { getPremiumProfileColorClass } from './premiumIdentity'
 
@@ -139,6 +140,7 @@ export function Layout({
   canManageSupport,
   canViewReports,
 }: LayoutProps) {
+  const { scaleDuration } = useFrameRateProfile()
   const { t, language, setLanguage, direction } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
@@ -681,7 +683,7 @@ export function Layout({
                         initial={{ opacity: 0, y: 6, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                        transition={{ duration: 0.16, ease: 'easeOut' }}
+                        transition={{ duration: scaleDuration(0.16), ease: 'easeOut' }}
                         className="glass-panel absolute start-0 top-14 z-50 min-w-44 rounded-xl p-2 shadow-[0_16px_32px_rgba(0,0,0,0.45)]"
                       >
                         <div className="mb-1 rounded-lg border border-app-border bg-app-elevated px-3 py-2">
@@ -862,7 +864,7 @@ export function Layout({
                 initial={{ opacity: 0, y: -6, height: 0 }}
                 animate={{ opacity: 1, y: 0, height: 'auto' }}
                 exit={{ opacity: 0, y: -6, height: 0 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+                transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
                 className="overflow-hidden"
               >
                 <div className="glass-panel mt-2 rounded-2xl p-2">
@@ -949,7 +951,7 @@ export function Layout({
                 initial={{ opacity: 0, y: -8, scale: 0.985 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.985 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+                transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
                 className="liquid-modal-backdrop app-header-notifications-panel mt-2"
               >
                 <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-3">

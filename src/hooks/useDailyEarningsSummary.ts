@@ -84,8 +84,10 @@ export function useDailyEarningsSummary() {
   const [summary, setSummary] = useState<DailyEarningsSummary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true)
+    }
     try {
       const res = await getEarningHistory({ limit: 200 })
       setSummary(buildSummary(res.entries || []))
@@ -103,9 +105,30 @@ export function useDailyEarningsSummary() {
   useEffect(() => {
     return subscribeToLiveUpdates((event) => {
       if (event.type === 'balance_updated' || event.type === 'home_content_updated') {
-        refresh().catch(() => {})
+        refresh({ silent: true }).catch(() => {})
       }
     })
+  }, [refresh])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      refresh({ silent: true }).catch(() => {})
+    }, 15000)
+
+    const handleForegroundRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        refresh({ silent: true }).catch(() => {})
+      }
+    }
+
+    window.addEventListener('focus', handleForegroundRefresh)
+    document.addEventListener('visibilitychange', handleForegroundRefresh)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleForegroundRefresh)
+      document.removeEventListener('visibilitychange', handleForegroundRefresh)
+    }
   }, [refresh])
 
   return { summary, loading, refresh }
