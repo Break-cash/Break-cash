@@ -493,10 +493,6 @@ export function Layout({
         }
         const normalizedPermission = mapNativePermissionState(String(permission))
         setPushPermission(normalizedPermission)
-        if (permission !== 'granted') {
-          setPushError('لم يتم منح إذن الإشعارات من النظام.')
-          return
-        }
 
         const token = await registerNativePush()
         if (!token) {
@@ -505,6 +501,9 @@ export function Layout({
         }
         await saveNativePushToken(token, getNativePushPlatform())
         setPushSubscribed(true)
+        if (permission !== 'granted') {
+          setPushError('تم ربط الجهاز، لكن إشعارات النظام ما زالت معطلة. فعّلها من إعدادات التطبيق.')
+        }
         await sendNativePushTest().catch(() => {})
         return
       }
