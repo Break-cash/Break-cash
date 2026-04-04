@@ -80,6 +80,8 @@ export function Login({ onAuthSuccess }: LoginProps) {
   const [showRecoveryRequest, setShowRecoveryRequest] = useState(false)
   const [recoveryCode, setRecoveryCode] = useState('')
   const brandLabel = 'BREAK CASH'
+  const apkDownloadLabel =
+    language === 'ar' ? 'تحميل التطبيق' : language === 'tr' ? 'Uygulamayi indir' : 'Download app'
   const registerCommonIssues =
     language === 'ar'
       ? [
@@ -220,6 +222,13 @@ export function Login({ onAuthSuccess }: LoginProps) {
           </div>
 
           <p className="login-subtitle">{t('login_subtitle')}</p>
+          <a
+            href="/downloads/Break-Cash-Android-Release-v1.apk"
+            download
+            className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(59,130,246,0.28)] transition-transform duration-200 hover:scale-[1.01]"
+          >
+            {apkDownloadLabel}
+          </a>
         </div>
 
         <form className="login-form" onSubmit={onSubmit}>

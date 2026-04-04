@@ -26,6 +26,7 @@ import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
+const APK_DOWNLOAD_URL = '/downloads/Break-Cash-Android-Release-v1.apk'
 
 export function Home() {
   const { t, language } = useI18n()
@@ -61,6 +62,7 @@ export function Home() {
         statSyncValue: usingFallback ? 'احتياطي' : 'مباشر',
         statWallet: 'حالة المحفظة',
         statWalletValue: walletSummary.totalAssets > 0 ? 'نشطة' : 'جاهزة',
+        downloadApp: 'تحميل التطبيق',
       }
     }
     if (language === 'tr') {
@@ -86,6 +88,7 @@ export function Home() {
         statSyncValue: usingFallback ? 'Yedek' : 'Canli',
         statWallet: 'Cuzdan durumu',
         statWalletValue: walletSummary.totalAssets > 0 ? 'Aktif' : 'Hazir',
+        downloadApp: 'Uygulamayi indir',
       }
     }
     return {
@@ -110,6 +113,7 @@ export function Home() {
       statSyncValue: usingFallback ? 'Fallback' : 'Live',
       statWallet: 'Wallet state',
       statWalletValue: walletSummary.totalAssets > 0 ? 'Active' : 'Ready',
+      downloadApp: 'Download app',
     }
   }, [language, usingFallback, walletSummary.totalAssets])
 
@@ -188,6 +192,13 @@ export function Home() {
                     <div className="mt-3 text-lg font-bold text-white">{headerCopy.statWalletValue}</div>
                   </div>
                 </div>
+                <a
+                  href={APK_DOWNLOAD_URL}
+                  download
+                  className="inline-flex items-center justify-center rounded-2xl bg-brand-blue px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(59,130,246,0.28)] transition-transform duration-200 hover:scale-[1.01]"
+                >
+                  {headerCopy.downloadApp}
+                </a>
               </div>
 
               <div className="home-balance-panel space-y-3 rounded-[24px] border border-white/10 bg-white/5 p-4 backdrop-blur-sm">

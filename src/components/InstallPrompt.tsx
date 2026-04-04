@@ -8,6 +8,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+const APK_DOWNLOAD_URL = '/downloads/Break-Cash-Android-Release-v1.apk'
+
 export function InstallPrompt() {
   const { t, direction } = useI18n()
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null)
@@ -56,21 +58,25 @@ export function InstallPrompt() {
     return [t('install_other_step_1'), t('install_other_step_2')]
   }, [platform, t])
 
+  const shouldShowApkDownload = platform === 'android' || platform === 'desktop' || platform === 'other'
+
   if (installed) return null
 
   return (
     <>
       <div
         dir={direction}
-        className={`fixed bottom-24 z-[70] flex items-center gap-2 rounded-full border border-app-border bg-app-card/95 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur ${
+        className={`fixed bottom-24 z-[70] flex items-center gap-2 rounded-full border border-app-border bg-app-card/95 px-2 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur ${
           direction === 'rtl' ? 'left-3' : 'right-3'
         }`}
       >
-        {promptEvent ? (
-          <button
-            className="inline-flex items-center gap-1 rounded-full bg-brand-blue px-3 py-1.5 text-xs font-semibold text-white"
-            type="button"
-            onClick={async () => {
+        <button
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue text-white shadow-[0_10px_24px_rgba(59,130,246,0.32)] transition-transform duration-200 hover:scale-[1.03]"
+          type="button"
+          aria-label={promptEvent ? t('install_prompt_install') : shouldShowApkDownload ? 'Download APK' : t('install_prompt_how')}
+          title={promptEvent ? t('install_prompt_install') : shouldShowApkDownload ? 'Download APK' : t('install_prompt_how')}
+          onClick={async () => {
+            if (promptEvent) {
               await promptEvent.prompt()
               const result = await promptEvent.userChoice
               if (result.outcome === 'accepted') {
@@ -78,14 +84,38 @@ export function InstallPrompt() {
                 setGuideOpen(false)
               }
               setPromptEvent(null)
-            }}
+              return
+            }
+            if (shouldShowApkDownload) {
+              window.open(APK_DOWNLOAD_URL, '_blank', 'noopener,noreferrer')
+              return
+            }
+            setGuideOpen(true)
+          }}
+        >
+          <Download size={16} />
+        </button>
+        {shouldShowApkDownload ? (
+          <a
+            className="hidden rounded-full border border-app-border bg-app-elevated px-3 py-2 text-xs font-medium text-white/90 md:inline-flex"
+            href={APK_DOWNLOAD_URL}
+            download
           >
-            <Download size={13} />
-            <span>{t('install_prompt_install')}</span>
-          </button>
-        ) : (
-          <span className="text-xs text-white/75">{t('install_prompt_not_available')}</span>
-        )}
+            APK
+          </a>
+        ) : null}
+        <button
+          className="hidden rounded-full border border-app-border bg-app-elevated px-3 py-2 text-xs font-medium text-white/90 md:inline-flex"
+          type="button"
+          onClick={() => {
+            if (promptEvent) {
+              return
+            }
+            setGuideOpen(true)
+          }}
+        >
+          {promptEvent ? t('install_prompt_install') : t('install_prompt_how')}
+        </button>
         <button
           className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-elevated px-3 py-1.5 text-xs text-white/90"
           type="button"
@@ -121,6 +151,15 @@ export function InstallPrompt() {
                 </li>
               ))}
             </ul>
+            {shouldShowApkDownload ? (
+              <a
+                className="mt-3 inline-flex items-center justify-center rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(59,130,246,0.28)]"
+                href={APK_DOWNLOAD_URL}
+                download
+              >
+                Download APK
+              </a>
+            ) : null}
             <p className="mt-3 text-xs text-white/60">{t('install_prompt_compatibility')}</p>
           </div>
         </div>
