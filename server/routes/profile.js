@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { Router } from 'express'
 import multer from 'multer'
@@ -26,7 +27,7 @@ const asyncRoute = (handler) => async (req, res) => {
   }
 }
 
-const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+const uploadsRoot = getUploadsRoot()
 const avatarsDir = path.join(uploadsRoot, 'avatars')
 const kycDir = path.join(uploadsRoot, 'kyc')
 
@@ -39,8 +40,8 @@ function resolveBadgeStyle(row) {
   return 'none'
 }
 
-fs.mkdirSync(avatarsDir, { recursive: true })
-fs.mkdirSync(kycDir, { recursive: true })
+ensureUploadDir(avatarsDir)
+ensureUploadDir(kycDir)
 
 const storage = multer.diskStorage({
   destination: (_req, file, cb) => {

@@ -3,6 +3,11 @@
 dist
 dist-ssr
 node_modules
+android
+ios
+resources
+build-artifacts
+scripts
 test-results
 coverage
 tmp-owner-ui-verify-final.png
