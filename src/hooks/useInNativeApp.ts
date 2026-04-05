@@ -20,7 +20,6 @@ function detectNativeAppShell() {
     // ignore bridge inspection failures
   }
 
-  if (Boolean(win.Capacitor)) return true
   if (Boolean(win.webkit?.messageHandlers?.bridge)) return true
 
   const ua = String(navigator.userAgent || '').toLowerCase()
