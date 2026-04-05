@@ -602,7 +602,7 @@ function App() {
           path="/"
           element={
             isAuthenticated ? (
-              <Navigate to={isLocalAuthBypassEnabled ? "/home" : "/portfolio"} replace />
+              <Navigate to="/portfolio" replace />
             ) : (
               <LoginRouteWrapper onAuthSuccess={handleAuthSuccess} />
             )
