@@ -725,7 +725,7 @@ function App() {
         </div>
         </AppModalPortal>
       ) : null}
-      <InstallPrompt />
+      {!isAuthenticated ? <InstallPrompt /> : null}
       <AppToastViewport />
     </I18nProvider>
   )
