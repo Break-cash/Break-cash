@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ArrowDownLeft, ArrowUpRight, Crown, Gift, MessageCircle, UserPlus, Users, type LucideIcon } from 'lucide-react'
+import { Crown, Gift, MessageCircle, UserPlus, Users, type LucideIcon } from 'lucide-react'
 import {
   apiFetch,
   getMyProfile,
@@ -17,16 +16,22 @@ import {
   type AdItem,
   type HomeLeaderboardConfig,
 } from '../api'
-import { AdBanner } from '../components/ads/AdBanner'
 import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../components/home/LeaderboardSection'
-import { UserIdentityBadges } from '../components/user/UserIdentityBadges'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
-import { WalletSummaryPanel } from '../components/wallet/WalletSummaryPanel'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 import { getPremiumProfileColorClass } from '../premiumIdentity'
 import { appData } from '../data'
 import { walletDashboardMock } from '../ui/mobileMock'
+import { ProfileV2Shell } from '../components/profile-v2/ProfileV2Shell'
+import { ProfilePullToRefreshIndicator } from '../components/profile-v2/ProfilePullToRefreshIndicator'
+import { ProfileHeroWalletSection } from '../components/profile-v2/ProfileHeroWalletSection'
+import { ProfileEarningsIdentityStrip } from '../components/profile-v2/ProfileEarningsIdentityStrip'
+import { ProfileAdsSection } from '../components/profile-v2/ProfileAdsSection'
+import { ProfilePushSettingsCard } from '../components/profile-v2/ProfilePushSettingsCard'
+import { ProfileQuickActionsGrid } from '../components/profile-v2/ProfileQuickActionsGrid'
+import { ProfileAccountSummarySection } from '../components/profile-v2/ProfileAccountSummarySection'
+import { ProfileMarketPreviewSection } from '../components/profile-v2/ProfileMarketPreviewSection'
 
 export function Profile() {
   const { t } = useI18n()
@@ -261,6 +266,25 @@ export function Profile() {
     icon: MessageCircle,
   })
 
+  function handleQuickActionClick(item: {
+    key: string
+    label: string
+    to: string
+    icon: LucideIcon
+    external?: boolean
+  }) {
+    if (item.external) {
+      window.location.href = item.to
+      return
+    }
+    navigate(item.to)
+  }
+
+  function handleTogglePush() {
+    if (pushSubscribed) disablePushNotifications().catch(() => {})
+    else enablePushNotifications(true).catch(() => {})
+  }
+
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
     if (window.scrollY > 0 || isPullRefreshing) return
     pullStartYRef.current = event.touches[0]?.clientY || 0
@@ -286,203 +310,59 @@ export function Profile() {
   }
 
   return (
-    <div
-      className="space-y-4 pb-6"
+    <ProfileV2Shell
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div
-        className="pointer-events-none overflow-hidden transition-[max-height,opacity] duration-200"
-        style={{ maxHeight: pullDistance > 0 || isPullRefreshing ? 40 : 0, opacity: pullDistance > 0 || isPullRefreshing ? 1 : 0 }}
-      >
-        <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-[#1e2430]/85 px-3 py-1 text-[11px] text-white/85">
-          <span>{isPullRefreshing ? t('common_loading') : t('home_pull_to_refresh')}</span>
-        </div>
-      </div>
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28, ease: 'easeOut' }}
-        className={`elite-enter w-full max-w-full space-y-4 ${premiumProfileColorClass}`}
-      >
-        <div className="flex min-w-0 flex-col gap-3">
-          <WalletSummaryPanel
-            summary={walletSummary}
-            currency="USDT"
-            isLoading={walletSummaryLoading}
-            cardVariant="hero"
-            onCardClick={() => navigate('/wallet')}
-            actionsSlot={(
-              <div className="grid min-w-0 grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('/deposit')}
-                  className="action-button action-button-deposit icon-interactive flex min-h-[54px] min-w-0 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition active:scale-[0.98]"
-                >
-                  <ArrowDownLeft size={20} strokeWidth={2} className="shrink-0" />
-                  <span className="truncate">{t('deposit')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/withdraw')}
-                  className="action-button action-button-withdraw icon-interactive flex min-h-[54px] min-w-0 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition active:scale-[0.98]"
-                >
-                  <ArrowUpRight size={20} strokeWidth={2} className="shrink-0" />
-                  <span className="truncate">{t('withdraw')}</span>
-                </button>
-              </div>
-            )}
-          />
-        </div>
-        <div className="glass-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
-          <div>
-            <p className="text-[11px] text-[var(--text-muted)]">{t('home_today_earnings')}</p>
-            <p className={`text-sm font-semibold ${dailyEarningsSummary.totalAmount >= 0 ? 'text-positive' : 'text-negative'}`}>
-              {dailyEarningsSummary.totalAmount.toFixed(2)} {earningsCurrency}
-            </p>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              {dailyEarningsSummary.withdrawableAmount.toFixed(2)} قابل للسحب • {dailyEarningsSummary.lockedAmount.toFixed(2)} غير قابل للسحب
-            </p>
-          </div>
-          {profile ? (
-            <div className="inline-flex items-center gap-2 rounded-xl border border-[var(--border-soft)] bg-white/[0.03] px-2.5 py-1.5">
-              <span className="text-xs font-medium text-[var(--text-primary)]">{profile.display_name || `#${profile.id}`}</span>
-              <UserIdentityBadges
-                badgeColor={profile.badge_color || 'none'}
-                vipLevel={profile.vip_level || 0}
-                premiumBadge={profile.profile_badge}
-                mode="all"
-              />
-            </div>
-          ) : null}
-        </div>
-      </motion.section>
-      <section className="glass-panel elite-enter rounded-3xl p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_announcement_board')}</p>
-        </div>
-        <AdBanner items={profileAds} placement="profile" className="my-0 opacity-95" />
-      </section>
-
-      <section className="glass-panel elite-enter rounded-3xl p-3">
-        <div className="mb-3 text-sm font-semibold text-[var(--text-primary)]">الإشعارات الخارجية</div>
-        <div className="space-y-3">
-          <div className="text-sm text-[var(--text-secondary)]">
-            {pushPermission === 'denied'
-              ? 'الإشعارات محظورة من المتصفح أو النظام.'
-              : pushSubscribed
-                ? 'الإشعارات الخارجية مفعّلة لهذا الجهاز.'
-                : 'فعّل الإشعارات ليصلك تنبيه حتى عند الخروج من التطبيق.'}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {pushSupported ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (pushSubscribed) disablePushNotifications().catch(() => {})
-                    else enablePushNotifications(true).catch(() => {})
-                  }}
-                  className="wallet-action-btn owner-set-btn"
-                  disabled={pushBusy}
-                >
-                  {pushBusy ? '...' : pushSubscribed ? 'إيقاف الإشعارات' : 'تفعيل الإشعارات'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    sendPushPreview().catch(() => {})
-                  }}
-                  className="wallet-action-btn wallet-action-deposit"
-                  disabled={pushBusy || (!pushSubscribed && pushPermission === 'denied')}
-                >
-                  {pushBusy ? '...' : 'إرسال إشعار تجريبي'}
-                </button>
-              </>
-            ) : (
-              <div className="text-xs text-[var(--text-muted)]">هذا المتصفح أو الجهاز لا يدعم Web Push.</div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="glass-panel elite-enter rounded-3xl p-3">
-        <div className="mb-3 text-sm font-semibold text-[var(--text-primary)]">{t('home_quick_actions_title')}</div>
-        <div className="grid grid-cols-2 gap-2">
-          {quickActions.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => {
-                  if (item.external) {
-                    window.location.href = item.to
-                    return
-                  }
-                  navigate(item.to)
-                }}
-                className="icon-interactive elite-hover-lift glass-panel-soft flex items-center gap-3 rounded-xl px-4 py-3 text-start"
-              >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border-soft)] bg-[var(--bg-elevated)]">
-                  <Icon size={20} className="text-[var(--accent-blue-soft)]" />
-                </span>
-                <span className="text-sm font-medium text-[var(--text-primary)]">{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
+      <ProfilePullToRefreshIndicator
+        pullDistance={pullDistance}
+        isPullRefreshing={isPullRefreshing}
+        loadingText={t('common_loading')}
+        pullText={t('home_pull_to_refresh')}
+      />
+      <ProfileHeroWalletSection
+        summary={walletSummary}
+        isSummaryLoading={walletSummaryLoading}
+        premiumProfileColorClass={premiumProfileColorClass}
+        depositText={t('deposit')}
+        withdrawText={t('withdraw')}
+        onOpenWallet={() => navigate('/wallet')}
+        onOpenDeposit={() => navigate('/deposit')}
+        onOpenWithdraw={() => navigate('/withdraw')}
+      />
+      <ProfileEarningsIdentityStrip
+        dailyEarningsSummary={dailyEarningsSummary}
+        earningsCurrency={earningsCurrency}
+        profile={profile}
+      />
+      <ProfileAdsSection title={t('home_announcement_board')} items={profileAds} />
+      <ProfilePushSettingsCard
+        pushSupported={pushSupported}
+        pushPermission={pushPermission}
+        pushSubscribed={pushSubscribed}
+        pushBusy={pushBusy}
+        onTogglePush={handleTogglePush}
+        onSendPushPreview={() => {
+          sendPushPreview().catch(() => {})
+        }}
+      />
+      <ProfileQuickActionsGrid
+        title={t('home_quick_actions_title')}
+        actions={quickActions}
+        onActionClick={handleQuickActionClick}
+      />
+      <ProfileAccountSummarySection summary={walletSummary} currency="USDT" />
       <LeaderboardSection config={leaderboardConfig} />
-
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.33, ease: 'easeOut', delay: 0.08 }}
-        className="glass-panel elite-enter rounded-2xl p-3"
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">{t('home_most_traded')}</p>
-          <button
-            type="button"
-            onClick={() => navigate('/market')}
-            className="glass-pill icon-interactive rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-          >
-            {t('nav_markets')}
-          </button>
-        </div>
-        {loading ? (
-          <div className="py-4 text-sm text-app-muted">{t('common_loading')}</div>
-        ) : tabAssets.length === 0 ? (
-          <div className="py-4 text-sm text-app-muted">{t('wallet_empty_assets')}</div>
-        ) : (
-          <div className="space-y-2">
-            {tabAssets.map((asset) => (
-              <motion.div
-                key={asset.symbol}
-                layout
-                transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-                className="elite-hover-lift glass-panel-soft flex items-center justify-between rounded-xl px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{asset.symbol}</p>
-                  <p className="text-xs text-app-muted">${asset.price_usd.toLocaleString()}</p>
-                </div>
-                <div className="text-end">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{asset.balance.toFixed(4)}</p>
-                  <p className={`text-xs ${asset.change_24h_percent >= 0 ? 'text-positive' : 'text-negative'}`}>
-                    {asset.change_24h_percent >= 0 ? '+' : ''}
-                    {asset.change_24h_percent.toFixed(2)}%
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </motion.section>
-    </div>
+      <ProfileMarketPreviewSection
+        loading={loading}
+        assets={tabAssets}
+        title={t('home_most_traded')}
+        marketButtonText={t('nav_markets')}
+        loadingText={t('common_loading')}
+        emptyText={t('wallet_empty_assets')}
+        onOpenMarket={() => navigate('/market')}
+      />
+    </ProfileV2Shell>
   )
 }
-
