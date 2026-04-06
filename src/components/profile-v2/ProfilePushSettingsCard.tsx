@@ -16,14 +16,14 @@ export function ProfilePushSettingsCard({
   onSendPushPreview,
 }: ProfilePushSettingsCardProps) {
   return (
-    <section className="glass-panel elite-enter rounded-3xl border border-white/10 bg-[linear-gradient(150deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-3">
+    <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
       <div className="mb-3 text-sm font-semibold text-[var(--text-primary)]">الإشعارات الخارجية</div>
       <div className="space-y-3">
         <div className="text-sm text-[var(--text-secondary)]">
           {pushPermission === 'denied'
-            ? 'الإشعارات محظورة من المتصفح أو النظام.'
+            ? 'الإشعارات محظورة من النظام أو المتصفح.'
             : pushSubscribed
-              ? 'الإشعارات الخارجية مفعّلة لهذا الجهاز.'
+              ? 'الإشعارات مفعّلة لهذا الجهاز.'
               : 'فعّل الإشعارات ليصلك تنبيه حتى عند الخروج من التطبيق.'}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -47,11 +47,10 @@ export function ProfilePushSettingsCard({
               </button>
             </>
           ) : (
-            <div className="text-xs text-[var(--text-muted)]">هذا المتصفح أو الجهاز لا يدعم Web Push.</div>
+            <div className="text-xs text-[var(--text-muted)]">هذا الجهاز أو المتصفح لا يدعم Web Push.</div>
           )}
         </div>
       </div>
     </section>
   )
 }
-

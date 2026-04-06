@@ -27,7 +27,6 @@ import { Profile } from './pages/Profile'
 import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
 import { ProductionRefreshScreen, resetProductionRefreshAttempts } from './components/splash/ProductionRefreshScreen'
 
-const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.Home })))
 const Market = lazy(() => import('./pages/Market').then((m) => ({ default: m.Market })))
 const Options = lazy(() => import('./pages/Options').then((m) => ({ default: m.Options })))
 const SyncTrade = lazy(() => import('./pages/SyncTrade').then((m) => ({ default: m.SyncTrade })))
@@ -261,7 +260,7 @@ function AnimatedAuthenticatedRoutes({
               <Route path="/deposit" element={<DepositPage user={user} />} />
               <Route path="/withdraw" element={<DepositPage user={user} pageMode="withdraw" />} />
               <Route path="/friends" element={<FriendsPage />} />
-              <Route path="/home" element={<Home />} />
+              <Route path="/home" element={<Navigate to="/portfolio" replace />} />
               <Route path="/assets" element={<WalletPage />} />
               <Route path="/market" element={<Market />} />
               <Route path="/watchlist" element={<WatchlistPage />} />

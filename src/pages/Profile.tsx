@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Crown, Gift, MessageCircle, UserPlus, Users, type LucideIcon } from 'lucide-react'
+import { Crown, Gift, Headset, UserPlus, Users, type LucideIcon } from 'lucide-react'
 import {
   apiFetch,
   getMyProfile,
+  getMyVipSummary,
   getAds,
   getHomeLeaderboardConfig,
   getPushPublicKey,
@@ -15,8 +16,9 @@ import {
   type AuthUser,
   type AdItem,
   type HomeLeaderboardConfig,
+  type UserVipSummary,
 } from '../api'
-import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../components/home/LeaderboardSection'
+import { defaultHomeLeaderboardConfig } from '../components/home/LeaderboardSection'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
@@ -26,12 +28,12 @@ import { walletDashboardMock } from '../ui/mobileMock'
 import { ProfileV2Shell } from '../components/profile-v2/ProfileV2Shell'
 import { ProfilePullToRefreshIndicator } from '../components/profile-v2/ProfilePullToRefreshIndicator'
 import { ProfileHeroWalletSection } from '../components/profile-v2/ProfileHeroWalletSection'
-import { ProfileEarningsIdentityStrip } from '../components/profile-v2/ProfileEarningsIdentityStrip'
 import { ProfileAdsSection } from '../components/profile-v2/ProfileAdsSection'
-import { ProfilePushSettingsCard } from '../components/profile-v2/ProfilePushSettingsCard'
 import { ProfileQuickActionsGrid } from '../components/profile-v2/ProfileQuickActionsGrid'
-import { ProfileAccountSummarySection } from '../components/profile-v2/ProfileAccountSummarySection'
-import { ProfileMarketPreviewSection } from '../components/profile-v2/ProfileMarketPreviewSection'
+import { ProfileTopControlsBar } from '../components/profile-v2/ProfileTopControlsBar'
+import { ProfileTopDepositorsCard } from '../components/profile-v2/ProfileTopDepositorsCard'
+import { ProfileVipCard } from '../components/profile-v2/ProfileVipCard'
+import { ProfileLowerOverviewSection } from '../components/profile-v2/ProfileLowerOverviewSection'
 
 export function Profile() {
   const { t } = useI18n()
@@ -41,6 +43,8 @@ export function Profile() {
   const [loading, setLoading] = useState(true)
   const [liveQuotes, setLiveQuotes] = useState<Record<string, { price: number; change24h: number }>>({})
   const [profileAds, setProfileAds] = useState<AdItem[]>([])
+  const [vipSummary, setVipSummary] = useState<UserVipSummary | null>(null)
+  const [vipLoading, setVipLoading] = useState(true)
   const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const [isPullRefreshing, setIsPullRefreshing] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
@@ -86,6 +90,18 @@ export function Profile() {
       .catch(() => setProfileAds([]))
   }, [])
 
+  const loadVipSummary = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setVipLoading(true)
+    try {
+      const res = await getMyVipSummary()
+      setVipSummary(res)
+    } catch {
+      setVipSummary(null)
+    } finally {
+      setVipLoading(false)
+    }
+  }, [])
+
   const loadQuotes = useCallback(async () => {
     try {
       const res = (await apiFetch('/api/market/quotes')) as {
@@ -105,11 +121,16 @@ export function Profile() {
   const refreshDashboard = useCallback(async (withSpinner = false) => {
     if (withSpinner) setIsPullRefreshing(true)
     try {
-      await Promise.allSettled([loadCoreDashboardData(), loadAdsData(), loadQuotes()])
+      await Promise.allSettled([
+        loadCoreDashboardData(),
+        loadAdsData(),
+        loadQuotes(),
+        loadVipSummary({ silent: true }),
+      ])
     } finally {
       if (withSpinner) setIsPullRefreshing(false)
     }
-  }, [loadCoreDashboardData, loadAdsData, loadQuotes])
+  }, [loadCoreDashboardData, loadAdsData, loadQuotes, loadVipSummary])
 
   useEffect(() => {
     loadCoreDashboardData()
@@ -117,10 +138,11 @@ export function Profile() {
       .finally(() => setLoading(false))
     loadAdsData().catch(() => {})
     loadQuotes().catch(() => {})
+    loadVipSummary().catch(() => {})
     getHomeLeaderboardConfig()
       .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
       .catch(() => setLeaderboardConfig(defaultHomeLeaderboardConfig))
-  }, [loadCoreDashboardData, loadAdsData, loadQuotes])
+  }, [loadCoreDashboardData, loadAdsData, loadQuotes, loadVipSummary])
 
   useEffect(() => {
     const supported =
@@ -246,6 +268,25 @@ export function Profile() {
 
   const tabAssets = useMemo(() => assetsToRender.slice(0, 5), [assetsToRender])
   const premiumProfileColorClass = getPremiumProfileColorClass(profile?.profile_color)
+  const vipCurrentLevel = Math.max(0, Math.min(5, Number(vipSummary?.currentVipLevel || profile?.vip_level || 0)))
+  const vipProgressPct = Math.max(0, Math.min(100, Number(vipSummary?.progressPct || 0)))
+  const vipNextLevel =
+    vipSummary?.nextLevel != null && vipSummary.nextLevel >= 1 && vipSummary.nextLevel <= 5
+      ? vipSummary.nextLevel
+      : null
+  const vipNextPerk = useMemo(() => {
+    const levels = (vipSummary?.tiers || []).filter((tier) => tier.level >= 1 && tier.level <= 5)
+    if (!vipNextLevel) return null
+    const nextTier = levels.find((tier) => tier.level === vipNextLevel)
+    if (!nextTier || !Array.isArray(nextTier.perks) || nextTier.perks.length === 0) return null
+    return String(nextTier.perks[0] || '').trim() || null
+  }, [vipNextLevel, vipSummary?.tiers])
+  const primaryCtaTarget = walletSummaryLoading
+    ? '/deposit'
+    : Number.isFinite(walletSummary.totalAssets) && walletSummary.totalAssets > 0
+      ? '/futures'
+      : '/deposit'
+
   const quickActions: Array<{
     key: string
     label: string
@@ -255,16 +296,10 @@ export function Profile() {
   }> = [
     { key: 'vip', label: t('home_action_vip_benefits'), to: '/vip', icon: Crown },
     { key: 'invite', label: t('home_action_invite_earn'), to: '/referral', icon: UserPlus },
+    { key: 'support', label: t('support_page_title'), to: '/support', icon: Headset },
     { key: 'rewards', label: t('home_action_rewards_center'), to: '/deposit', icon: Gift },
     { key: 'partners', label: t('home_action_partners'), to: '/friends', icon: Users },
   ]
-
-  quickActions.push({
-    key: 'support',
-    label: t('home_action_support_message'),
-    to: '/support',
-    icon: MessageCircle,
-  })
 
   function handleQuickActionClick(item: {
     key: string
@@ -321,23 +356,42 @@ export function Profile() {
         loadingText={t('common_loading')}
         pullText={t('home_pull_to_refresh')}
       />
+      <ProfileTopControlsBar
+        title={profile?.display_name || t('nav_home')}
+        subtitle={t('home_announcement_board')}
+      />
       <ProfileHeroWalletSection
         summary={walletSummary}
         isSummaryLoading={walletSummaryLoading}
         premiumProfileColorClass={premiumProfileColorClass}
         depositText={t('deposit')}
         withdrawText={t('withdraw')}
-        onOpenWallet={() => navigate('/wallet')}
-        onOpenDeposit={() => navigate('/deposit')}
-        onOpenWithdraw={() => navigate('/withdraw')}
-      />
-      <ProfileEarningsIdentityStrip
         dailyEarningsSummary={dailyEarningsSummary}
         earningsCurrency={earningsCurrency}
         profile={profile}
+        primaryCtaText="ابدأ الربح الآن"
+        secondaryCtaText="ابدأ خلال 30 ثانية"
+        onOpenWallet={() => navigate('/wallet')}
+        onOpenDeposit={() => navigate('/deposit')}
+        onOpenWithdraw={() => navigate('/withdraw')}
+        onPrimaryCtaClick={() => navigate(primaryCtaTarget)}
+        onSecondaryCtaClick={() => navigate('/deposit')}
+      />
+      <ProfileTopDepositorsCard config={leaderboardConfig} />
+      <ProfileVipCard
+        loading={vipLoading}
+        currentLevel={vipCurrentLevel}
+        nextLevel={vipNextLevel}
+        progressPct={vipProgressPct}
+        nextPerk={vipNextPerk}
       />
       <ProfileAdsSection title={t('home_announcement_board')} items={profileAds} />
-      <ProfilePushSettingsCard
+      <ProfileQuickActionsGrid
+        title={t('home_quick_actions_title')}
+        actions={quickActions}
+        onActionClick={handleQuickActionClick}
+      />
+      <ProfileLowerOverviewSection
         pushSupported={pushSupported}
         pushPermission={pushPermission}
         pushSubscribed={pushSubscribed}
@@ -346,22 +400,14 @@ export function Profile() {
         onSendPushPreview={() => {
           sendPushPreview().catch(() => {})
         }}
-      />
-      <ProfileQuickActionsGrid
-        title={t('home_quick_actions_title')}
-        actions={quickActions}
-        onActionClick={handleQuickActionClick}
-      />
-      <ProfileAccountSummarySection summary={walletSummary} currency="USDT" />
-      <LeaderboardSection config={leaderboardConfig} />
-      <ProfileMarketPreviewSection
         loading={loading}
         assets={tabAssets}
-        title={t('home_most_traded')}
+        marketTitle={t('home_most_traded')}
         marketButtonText={t('nav_markets')}
         loadingText={t('common_loading')}
         emptyText={t('wallet_empty_assets')}
         onOpenMarket={() => navigate('/market')}
+        leaderboardConfig={leaderboardConfig}
       />
     </ProfileV2Shell>
   )

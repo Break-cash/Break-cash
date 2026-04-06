@@ -1007,6 +1007,223 @@ button {
   }
 }
 
+/* ===== Total Assets cinematic waves (subtle, premium, color-matched) ===== */
+.wallet-assets-hero {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(165deg, rgba(8, 14, 28, 0.72), rgba(7, 11, 22, 0.58));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.wallet-main-card-cinematic {
+  isolation: isolate;
+}
+
+.wallet-main-card-waves {
+  position: absolute;
+  inset: -2% 0 0 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 1;
+}
+
+.wallet-main-wave {
+  position: absolute;
+  inset: -2% -5% -10% -5%;
+  border-radius: 44%;
+  filter: blur(12px);
+  transform-origin: center;
+  opacity: 1;
+  mix-blend-mode: screen;
+}
+
+.wallet-main-wave-a {
+  background:
+    radial-gradient(60% 78% at 18% 78%, rgba(38, 92, 190, 0.36), transparent 70%),
+    radial-gradient(54% 68% at 74% 46%, rgba(90, 140, 255, 0.22), transparent 72%),
+    radial-gradient(46% 62% at 50% 90%, rgba(29, 58, 122, 0.22), transparent 72%);
+  animation: wallet-main-wave-a 32s ease-in-out infinite alternate;
+}
+
+.wallet-main-wave-b {
+  background:
+    radial-gradient(64% 78% at 80% 78%, rgba(29, 58, 122, 0.3), transparent 74%),
+    radial-gradient(50% 64% at 20% 44%, rgba(18, 163, 127, 0.16), transparent 70%),
+    radial-gradient(46% 62% at 58% 70%, rgba(90, 140, 255, 0.19), transparent 70%);
+  animation: wallet-main-wave-b 38s ease-in-out infinite alternate;
+}
+
+.wallet-main-wave-c {
+  background:
+    radial-gradient(64% 76% at 50% 68%, rgba(255, 255, 255, 0.07), transparent 74%),
+    radial-gradient(58% 72% at 84% 58%, rgba(29, 58, 122, 0.24), transparent 76%),
+    radial-gradient(44% 58% at 14% 78%, rgba(38, 92, 190, 0.22), transparent 72%);
+  animation: wallet-main-wave-c 44s ease-in-out infinite alternate;
+}
+
+.wallet-main-wave-lines {
+  position: absolute;
+  inset: 0;
+  width: 130%;
+  height: 140%;
+  pointer-events: none;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: blur(0.2px);
+}
+
+.wallet-main-wave-lines path {
+  stroke-width: 2.5;
+}
+
+.wallet-main-wave-lines-a {
+  opacity: 0.66;
+  stroke: rgba(90, 140, 255, 0.2);
+  transform: translate3d(-9%, 26%, 0);
+  animation: wallet-main-lines-a 24s linear infinite;
+}
+
+.wallet-main-wave-lines-b {
+  opacity: 0.56;
+  stroke: rgba(18, 163, 127, 0.15);
+  transform: translate3d(-3%, 22%, 0);
+  animation: wallet-main-lines-b 30s linear infinite;
+}
+
+.wallet-main-card-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(5, 9, 18, 0.05), rgba(5, 9, 18, 0.12)),
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.045), transparent 62%);
+}
+
+@keyframes wallet-main-wave-a {
+  0% { transform: translate3d(-2%, 4%, 0) scale(1.03) rotate(0deg); }
+  100% { transform: translate3d(3%, 1%, 0) scale(1.1) rotate(4deg); }
+}
+
+@keyframes wallet-main-wave-b {
+  0% { transform: translate3d(2%, 2%, 0) scale(1.06) rotate(0deg); }
+  100% { transform: translate3d(-3%, 5%, 0) scale(1.12) rotate(-5deg); }
+}
+
+@keyframes wallet-main-wave-c {
+  0% { transform: translate3d(0, 2%, 0) scale(1.05) rotate(0deg); }
+  100% { transform: translate3d(1.5%, 5%, 0) scale(1.11) rotate(3deg); }
+}
+
+@keyframes wallet-main-lines-a {
+  0% { transform: translate3d(-12%, 24%, 0); }
+  100% { transform: translate3d(-1%, 28%, 0); }
+}
+
+@keyframes wallet-main-lines-b {
+  0% { transform: translate3d(-6%, 20%, 0); }
+  100% { transform: translate3d(5%, 24%, 0); }
+}
+
+.wallet-assets-hero-waves {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.wallet-assets-wave {
+  position: absolute;
+  inset: -24% -18%;
+  border-radius: 44%;
+  filter: blur(16px);
+  transform-origin: center;
+  opacity: 0.82;
+}
+
+.wallet-assets-wave-a {
+  background:
+    radial-gradient(58% 72% at 22% 64%, rgba(38, 92, 190, 0.22), transparent 72%),
+    radial-gradient(52% 66% at 72% 30%, rgba(90, 140, 255, 0.14), transparent 74%);
+  animation: wallet-wave-drift-a 34s ease-in-out infinite alternate;
+}
+
+.wallet-assets-wave-b {
+  background:
+    radial-gradient(62% 78% at 74% 70%, rgba(29, 58, 122, 0.18), transparent 76%),
+    radial-gradient(46% 66% at 18% 26%, rgba(18, 163, 127, 0.1), transparent 72%);
+  animation: wallet-wave-drift-b 40s ease-in-out infinite alternate;
+}
+
+.wallet-assets-wave-c {
+  background:
+    radial-gradient(64% 76% at 54% 48%, rgba(255, 255, 255, 0.04), transparent 75%),
+    radial-gradient(56% 72% at 82% 42%, rgba(29, 58, 122, 0.14), transparent 78%);
+  animation: wallet-wave-drift-c 46s ease-in-out infinite alternate;
+}
+
+.wallet-assets-hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(5, 9, 18, 0.26), rgba(5, 9, 18, 0.42)),
+    linear-gradient(120deg, transparent 12%, rgba(255, 255, 255, 0.03) 42%, transparent 72%);
+}
+
+@keyframes wallet-wave-drift-a {
+  0% { transform: translate3d(-2%, 1%, 0) scale(1.02) rotate(0deg); }
+  100% { transform: translate3d(3%, -2%, 0) scale(1.08) rotate(4deg); }
+}
+
+@keyframes wallet-wave-drift-b {
+  0% { transform: translate3d(2%, -1%, 0) scale(1.05) rotate(0deg); }
+  100% { transform: translate3d(-3%, 2%, 0) scale(1.11) rotate(-5deg); }
+}
+
+@keyframes wallet-wave-drift-c {
+  0% { transform: translate3d(0, 0, 0) scale(1.04) rotate(0deg); }
+  100% { transform: translate3d(1.5%, -1.5%, 0) scale(1.1) rotate(3deg); }
+}
+
+@media (max-width: 720px) {
+  .wallet-main-wave {
+    filter: blur(10px);
+    opacity: 0.9;
+  }
+
+  .wallet-main-wave-a { animation-duration: 36s; }
+  .wallet-main-wave-b { animation-duration: 42s; }
+  .wallet-main-wave-c { animation-duration: 46s; }
+  .wallet-main-wave-lines-a { animation-duration: 30s; opacity: 0.52; }
+  .wallet-main-wave-lines-b { animation-duration: 36s; opacity: 0.48; }
+
+  .wallet-assets-wave {
+    filter: blur(12px);
+    opacity: 0.72;
+  }
+
+  .wallet-assets-wave-a { animation-duration: 40s; }
+  .wallet-assets-wave-b { animation-duration: 46s; }
+  .wallet-assets-wave-c { animation-duration: 52s; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-main-wave-a,
+  .wallet-main-wave-b,
+  .wallet-main-wave-c,
+  .wallet-main-wave-lines-a,
+  .wallet-main-wave-lines-b,
+  .wallet-assets-wave-a,
+  .wallet-assets-wave-b,
+  .wallet-assets-wave-c {
+    animation: none !important;
+  }
+}
+
 /* Liquid glass page treatment without altering layout/icon positions */
 .page,
 .deposit-page,
@@ -1222,6 +1439,196 @@ button {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.card:not(.wallet-main-card-cinematic),
+.table-card:not(.wallet-main-card-cinematic),
+.glass-panel:not(.wallet-main-card-cinematic),
+.glass-panel-soft:not(.wallet-main-card-cinematic),
+.elite-panel:not(.wallet-main-card-cinematic),
+.owner-actions-card:not(.wallet-main-card-cinematic),
+.owner-history-card:not(.wallet-main-card-cinematic),
+.profile-settings-card:not(.wallet-main-card-cinematic),
+.deposit-section:not(.wallet-main-card-cinematic),
+.friends-search-section:not(.wallet-main-card-cinematic),
+.friends-list-card:not(.wallet-main-card-cinematic),
+.friends-summary-card:not(.wallet-main-card-cinematic),
+.friends-section:not(.wallet-main-card-cinematic),
+.friends-results:not(.wallet-main-card-cinematic),
+.futures-chart:not(.wallet-main-card-cinematic),
+.wallet-stat-card:not(.wallet-main-card-cinematic),
+.wallet-hero-card:not(.wallet-main-card-cinematic),
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic),
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.card:not(.wallet-main-card-cinematic)::before,
+.table-card:not(.wallet-main-card-cinematic)::before,
+.glass-panel:not(.wallet-main-card-cinematic)::before,
+.glass-panel-soft:not(.wallet-main-card-cinematic)::before,
+.elite-panel:not(.wallet-main-card-cinematic)::before,
+.owner-actions-card:not(.wallet-main-card-cinematic)::before,
+.owner-history-card:not(.wallet-main-card-cinematic)::before,
+.profile-settings-card:not(.wallet-main-card-cinematic)::before,
+.deposit-section:not(.wallet-main-card-cinematic)::before,
+.friends-search-section:not(.wallet-main-card-cinematic)::before,
+.friends-list-card:not(.wallet-main-card-cinematic)::before,
+.friends-summary-card:not(.wallet-main-card-cinematic)::before,
+.friends-section:not(.wallet-main-card-cinematic)::before,
+.friends-results:not(.wallet-main-card-cinematic)::before,
+.futures-chart:not(.wallet-main-card-cinematic)::before,
+.wallet-stat-card:not(.wallet-main-card-cinematic)::before,
+.wallet-hero-card:not(.wallet-main-card-cinematic)::before,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic)::before,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic)::before {
+  content: '';
+  position: absolute;
+  inset: -26% -18%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 42%;
+  background:
+    radial-gradient(60% 74% at 14% 76%, rgba(38, 92, 190, 0.34), transparent 72%),
+    radial-gradient(56% 68% at 76% 40%, rgba(90, 140, 255, 0.24), transparent 74%),
+    radial-gradient(46% 60% at 56% 66%, rgba(18, 163, 127, 0.16), transparent 70%);
+  filter: blur(10px);
+  opacity: 0.96;
+  mix-blend-mode: screen;
+  animation: app-card-wave-drift 36s ease-in-out infinite alternate;
+}
+
+.card:not(.wallet-main-card-cinematic)::after,
+.table-card:not(.wallet-main-card-cinematic)::after,
+.glass-panel:not(.wallet-main-card-cinematic)::after,
+.glass-panel-soft:not(.wallet-main-card-cinematic)::after,
+.elite-panel:not(.wallet-main-card-cinematic)::after,
+.owner-actions-card:not(.wallet-main-card-cinematic)::after,
+.owner-history-card:not(.wallet-main-card-cinematic)::after,
+.profile-settings-card:not(.wallet-main-card-cinematic)::after,
+.deposit-section:not(.wallet-main-card-cinematic)::after,
+.friends-search-section:not(.wallet-main-card-cinematic)::after,
+.friends-list-card:not(.wallet-main-card-cinematic)::after,
+.friends-summary-card:not(.wallet-main-card-cinematic)::after,
+.friends-section:not(.wallet-main-card-cinematic)::after,
+.friends-results:not(.wallet-main-card-cinematic)::after,
+.futures-chart:not(.wallet-main-card-cinematic)::after,
+.wallet-stat-card:not(.wallet-main-card-cinematic)::after,
+.wallet-hero-card:not(.wallet-main-card-cinematic)::after,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic)::after,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(5, 9, 18, 0.05), rgba(5, 9, 18, 0.12)),
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.04), transparent 62%);
+}
+
+.card:not(.wallet-main-card-cinematic) > *,
+.table-card:not(.wallet-main-card-cinematic) > *,
+.glass-panel:not(.wallet-main-card-cinematic) > *,
+.glass-panel-soft:not(.wallet-main-card-cinematic) > *,
+.elite-panel:not(.wallet-main-card-cinematic) > *,
+.owner-actions-card:not(.wallet-main-card-cinematic) > *,
+.owner-history-card:not(.wallet-main-card-cinematic) > *,
+.profile-settings-card:not(.wallet-main-card-cinematic) > *,
+.deposit-section:not(.wallet-main-card-cinematic) > *,
+.friends-search-section:not(.wallet-main-card-cinematic) > *,
+.friends-list-card:not(.wallet-main-card-cinematic) > *,
+.friends-summary-card:not(.wallet-main-card-cinematic) > *,
+.friends-section:not(.wallet-main-card-cinematic) > *,
+.friends-results:not(.wallet-main-card-cinematic) > *,
+.futures-chart:not(.wallet-main-card-cinematic) > *,
+.wallet-stat-card:not(.wallet-main-card-cinematic) > *,
+.wallet-hero-card:not(.wallet-main-card-cinematic) > *,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic) > *,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Let animated waves remain visible behind action buttons inside cards */
+.card:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.card:not(.wallet-main-card-cinematic) .ghost-btn,
+.card:not(.wallet-main-card-cinematic) .action-button,
+.table-card:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.table-card:not(.wallet-main-card-cinematic) .ghost-btn,
+.table-card:not(.wallet-main-card-cinematic) .action-button,
+.glass-panel:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.glass-panel:not(.wallet-main-card-cinematic) .ghost-btn,
+.glass-panel:not(.wallet-main-card-cinematic) .action-button,
+.glass-panel-soft:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.glass-panel-soft:not(.wallet-main-card-cinematic) .ghost-btn,
+.glass-panel-soft:not(.wallet-main-card-cinematic) .action-button,
+.elite-panel:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.elite-panel:not(.wallet-main-card-cinematic) .ghost-btn,
+.elite-panel:not(.wallet-main-card-cinematic) .action-button,
+.owner-actions-card:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.owner-actions-card:not(.wallet-main-card-cinematic) .ghost-btn,
+.owner-actions-card:not(.wallet-main-card-cinematic) .action-button,
+.owner-history-card:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.owner-history-card:not(.wallet-main-card-cinematic) .ghost-btn,
+.owner-history-card:not(.wallet-main-card-cinematic) .action-button,
+.deposit-section:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.deposit-section:not(.wallet-main-card-cinematic) .ghost-btn,
+.deposit-section:not(.wallet-main-card-cinematic) .action-button,
+.friends-section:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.friends-section:not(.wallet-main-card-cinematic) .ghost-btn,
+.friends-section:not(.wallet-main-card-cinematic) .action-button,
+.friends-results:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.friends-results:not(.wallet-main-card-cinematic) .ghost-btn,
+.friends-results:not(.wallet-main-card-cinematic) .action-button,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic) .ghost-btn,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic) .action-button,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) .wallet-action-btn,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) .ghost-btn,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) .action-button {
+  background-color: rgba(10, 16, 28, 0.36);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.card:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.table-card:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.glass-panel:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.glass-panel-soft:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.elite-panel:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.owner-actions-card:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.deposit-section:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.friends-section:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.friends-results:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-deposit {
+  background-image: linear-gradient(135deg, rgba(14, 136, 255, 0.78), rgba(37, 99, 235, 0.74));
+}
+
+.card:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.table-card:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.glass-panel:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.glass-panel-soft:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.elite-panel:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.owner-actions-card:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.deposit-section:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.friends-section:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.friends-results:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw,
+.page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic) .wallet-action-btn.wallet-action-withdraw {
+  background-image: linear-gradient(135deg, rgba(251, 95, 95, 0.78), rgba(219, 63, 63, 0.74));
+}
+
+@keyframes app-card-wave-drift {
+  0% {
+    transform: translate3d(-2%, 1%, 0) scale(1.02) rotate(0deg);
+  }
+  100% {
+    transform: translate3d(3%, -2%, 0) scale(1.08) rotate(4deg);
+  }
+}
+
 .liquid-page-transition {
   transform-origin: 50% 0%;
   will-change: opacity, transform, filter;
@@ -1401,6 +1808,28 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .card:not(.wallet-main-card-cinematic)::before,
+  .table-card:not(.wallet-main-card-cinematic)::before,
+  .glass-panel:not(.wallet-main-card-cinematic)::before,
+  .glass-panel-soft:not(.wallet-main-card-cinematic)::before,
+  .elite-panel:not(.wallet-main-card-cinematic)::before,
+  .owner-actions-card:not(.wallet-main-card-cinematic)::before,
+  .owner-history-card:not(.wallet-main-card-cinematic)::before,
+  .profile-settings-card:not(.wallet-main-card-cinematic)::before,
+  .deposit-section:not(.wallet-main-card-cinematic)::before,
+  .friends-search-section:not(.wallet-main-card-cinematic)::before,
+  .friends-list-card:not(.wallet-main-card-cinematic)::before,
+  .friends-summary-card:not(.wallet-main-card-cinematic)::before,
+  .friends-section:not(.wallet-main-card-cinematic)::before,
+  .friends-results:not(.wallet-main-card-cinematic)::before,
+  .futures-chart:not(.wallet-main-card-cinematic)::before,
+  .wallet-stat-card:not(.wallet-main-card-cinematic)::before,
+  .wallet-hero-card:not(.wallet-main-card-cinematic)::before,
+  .page .rounded-2xl.border.border-app-border:not(.wallet-main-card-cinematic)::before,
+  .page .rounded-xl.border.border-app-border.bg-app-elevated:not(.wallet-main-card-cinematic)::before {
+    animation: none !important;
+  }
+
   .liquid-page-transition,
   .glass-panel,
   .glass-panel-soft,
@@ -3807,6 +4236,280 @@ button:focus-visible,
   .login-lang-switch {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+.mining-subscribe-card--energized {
+  border-color: rgba(96, 165, 250, 0.32);
+}
+
+.mining-subscribe-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 14%, rgba(96, 165, 250, 0.12) 42%, rgba(45, 212, 191, 0.12) 56%, transparent 78%);
+}
+
+.mining-summary-live {
+  border-color: rgba(96, 165, 250, 0.2);
+  box-shadow: 0 12px 36px rgba(8, 47, 73, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.mining-cta-live-overlay {
+  background:
+    radial-gradient(circle at 12% 50%, rgba(191, 219, 254, 0.22), transparent 24%),
+    linear-gradient(110deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.18), rgba(34, 211, 238, 0.12), rgba(255, 255, 255, 0.04));
+  animation: mining-cta-sweep 1.1s linear infinite;
+}
+
+.mining-cta-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #fff;
+  animation: mining-cta-spin 0.8s linear infinite;
+}
+
+.mining-cta-error {
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25), 0 10px 28px rgba(127, 29, 29, 0.22);
+}
+
+.mining-wallet-card {
+  isolation: isolate;
+}
+
+.mining-wallet-card--active {
+  border-color: rgba(45, 212, 191, 0.22);
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(11, 17, 32, 0.92)),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 38%);
+}
+
+.mining-wallet-sweep {
+  position: absolute;
+  inset: -16% auto -16% -34%;
+  width: 36%;
+  pointer-events: none;
+  transform: skewX(-22deg);
+  background: linear-gradient(90deg, transparent, rgba(191, 219, 254, 0.12), rgba(45, 212, 191, 0.18), transparent);
+  filter: blur(2px);
+}
+
+.mining-wallet-badge {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  background: rgba(8, 47, 73, 0.82);
+  padding: 6px 10px;
+  color: #d1fae5;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 12px 28px rgba(8, 47, 73, 0.22);
+}
+
+.mining-page-video {
+  margin-top: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.video-wrapper {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  overflow: hidden;
+  border-bottom: 2px solid #1a1b26;
+  background: #050505;
+}
+
+#miningVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  filter: brightness(0.8) contrast(1.1);
+}
+
+.video-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 20px;
+  background: linear-gradient(to top, #06070a, transparent);
+  pointer-events: none;
+}
+
+.status-badge {
+  border-radius: 999px;
+  border: 1px solid #00e0ff;
+  background: rgba(0, 224, 255, 0.1);
+  color: #00e0ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 5px 15px;
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.3);
+}
+
+.video-wrapper:not(.is-active) .status-badge {
+  border-color: rgba(148, 163, 184, 0.25);
+  background: rgba(30, 41, 59, 0.35);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+.video-overlay h2 {
+  margin: 0;
+  letter-spacing: 2px;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+}
+
+.video-wrapper.is-active .video-overlay h2 {
+  color: #67e8f9;
+}
+
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #06070a;
+}
+
+.stat-card {
+  border-radius: 15px;
+  border: 1px solid #1a1b26;
+  background: rgba(15, 17, 26, 0.95);
+  padding: 20px;
+  text-align: center;
+  transition: 0.3s;
+}
+
+.stat-card:hover {
+  border-color: #00e0ff;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: bold;
+  color: #fff;
+}
+
+.unit {
+  font-size: 0.9rem;
+  color: #00e0ff;
+  margin-right: 5px;
+}
+
+.stat-sub-value {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #444;
+}
+
+.stat-time {
+  color: #00e0ff;
+}
+
+@media (max-width: 720px) {
+  .video-wrapper {
+    height: 260px;
+    background: #06070a;
+  }
+
+  #miningVideo {
+    object-fit: contain;
+    object-position: center center;
+    background: #06070a;
+  }
+
+  .video-overlay {
+    height: 88px;
+    padding-bottom: 14px;
+  }
+
+  .video-overlay h2 {
+    font-size: 22px;
+  }
+}
+
+.mining-activation-ripple {
+  position: fixed;
+  width: 144px;
+  height: 144px;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.48);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.26), rgba(14, 165, 233, 0.12), transparent 72%);
+  filter: blur(0.5px);
+}
+
+.mining-activation-beam {
+  position: fixed;
+  height: 3px;
+  transform-origin: left center;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0), rgba(191, 219, 254, 0.96), rgba(45, 212, 191, 0.9), rgba(96, 165, 250, 0));
+  box-shadow: 0 0 24px rgba(59, 130, 246, 0.32), 0 0 14px rgba(34, 211, 238, 0.2);
+}
+
+.mining-activation-particle {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95), rgba(96, 165, 250, 0.7), rgba(14, 165, 233, 0.08));
+  box-shadow: 0 0 14px rgba(96, 165, 250, 0.45);
+}
+
+@keyframes mining-cta-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mining-cta-sweep {
+  0% {
+    transform: translateX(-32%);
+  }
+  100% {
+    transform: translateX(32%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mining-cta-live-overlay,
+  .mining-cta-spinner {
+    animation: none !important;
   }
 }
 
@@ -6792,6 +7495,50 @@ button:focus-visible,
   .app-header-notifications-panel > .glass-panel {
     width: 100%;
   }
+}
+
+/* Final override: keep card buttons translucent so waves remain visible behind them */
+.wallet-main-card-cinematic .icon-interactive,
+.wallet-main-card-cinematic .action-button,
+.wallet-main-card-cinematic .wallet-action-btn,
+.glass-panel .icon-interactive,
+.glass-panel .action-button,
+.glass-panel .wallet-action-btn,
+.glass-panel-soft .icon-interactive,
+.glass-panel-soft .action-button,
+.glass-panel-soft .wallet-action-btn,
+.card .icon-interactive,
+.card .action-button,
+.card .wallet-action-btn,
+.table-card .icon-interactive,
+.table-card .action-button,
+.table-card .wallet-action-btn,
+.elite-panel .icon-interactive,
+.elite-panel .action-button,
+.elite-panel .wallet-action-btn {
+  background-color: rgba(9, 14, 26, 0.34) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.wallet-main-card-cinematic .action-button-deposit,
+.wallet-main-card-cinematic .wallet-action-btn.wallet-action-deposit,
+.glass-panel .wallet-action-btn.wallet-action-deposit,
+.card .wallet-action-btn.wallet-action-deposit,
+.table-card .wallet-action-btn.wallet-action-deposit,
+.elite-panel .wallet-action-btn.wallet-action-deposit {
+  background-image: linear-gradient(135deg, rgba(14, 136, 255, 0.66), rgba(37, 99, 235, 0.62)) !important;
+}
+
+.wallet-main-card-cinematic .action-button-withdraw,
+.wallet-main-card-cinematic .wallet-action-btn.wallet-action-withdraw,
+.glass-panel .wallet-action-btn.wallet-action-withdraw,
+.card .wallet-action-btn.wallet-action-withdraw,
+.table-card .wallet-action-btn.wallet-action-withdraw,
+.elite-panel .wallet-action-btn.wallet-action-withdraw {
+  background-image: linear-gradient(135deg, #fb5f5f, #db3f3f) !important;
+  border-color: #e76565 !important;
+  color: #fff !important;
 }
 
 @media (max-width: 640px) {

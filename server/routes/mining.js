@@ -34,7 +34,16 @@ const DEFAULT_MINING_CONFIG = {
     { minBalance: 1000, maxBalance: 4999.9999, percent: 4.2 },
     { minBalance: 5000, maxBalance: null, percent: 5.5 },
   ],
-  mediaItems: [],
+  mediaItems: [
+    {
+      id: 'default_mining_video',
+      type: 'video',
+      url: '/mining/IMG_3056.MP4',
+      title: 'Mining background',
+      enabled: true,
+      order: 1,
+    },
+  ],
 }
 
 function normalizeText(value, max = 180) {
@@ -112,13 +121,14 @@ function normalizeConfig(raw) {
   const safePlans = planOptions.length > 0 ? planOptions : DEFAULT_MINING_CONFIG.planOptions
   const dailyTiers = normalizeTiers(source.dailyTiers)
   const monthlyTiers = normalizeTiers(source.monthlyTiers)
+  const mediaItems = normalizeMediaItems(source.mediaItems)
   return {
     minSubscription,
     planOptions: safePlans,
     emergencyFeePercent: normalizePercent(source.emergencyFeePercent, DEFAULT_MINING_CONFIG.emergencyFeePercent),
     dailyTiers: dailyTiers.length > 0 ? dailyTiers : DEFAULT_MINING_CONFIG.dailyTiers,
     monthlyTiers: monthlyTiers.length > 0 ? monthlyTiers : DEFAULT_MINING_CONFIG.monthlyTiers,
-    mediaItems: normalizeMediaItems(source.mediaItems),
+    mediaItems: mediaItems.length > 0 ? mediaItems : DEFAULT_MINING_CONFIG.mediaItems,
   }
 }
 
