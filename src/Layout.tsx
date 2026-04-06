@@ -942,37 +942,45 @@ export function Layout({
                 >
                   <Ellipsis size={17} />
                 </button>
-                {moreMenuOpen ? (
-                  <div className="absolute end-0 top-full z-50 mt-2 w-[180px] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_18px_42px_rgba(0,0,0,0.36)] backdrop-blur-2xl">
-                    <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">
-                      {t('language')}
-                    </div>
-                    <div className="space-y-1">
-                      {[
-                        { id: 'ar', label: 'العربية' },
-                        { id: 'en', label: 'English' },
-                        { id: 'tr', label: 'Türkçe' },
-                      ].map((item) => {
-                        const active = language === item.id
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => applyLanguage(item.id as Language)}
-                            className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm transition ${
-                              active
-                                ? 'border border-brand-blue/40 bg-brand-blue/18 text-white'
-                                : 'text-white/80 hover:bg-white/8 hover:text-white'
-                            }`}
-                          >
-                            <span>{item.label}</span>
-                            {active ? <Globe2 size={14} className="text-brand-blue" /> : null}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ) : null}
+                <AnimatePresence initial={false}>
+                  {moreMenuOpen ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.985 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.985 }}
+                      transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+                      className="app-header-more-menu absolute end-0 top-full z-[95] mt-2 w-[190px] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_20px_46px_rgba(0,0,0,0.42)] backdrop-blur-2xl"
+                    >
+                      <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">
+                        {t('language')}
+                      </div>
+                      <div className="space-y-1">
+                        {[
+                          { id: 'ar', label: 'العربية' },
+                          { id: 'en', label: 'English' },
+                          { id: 'tr', label: 'Türkçe' },
+                        ].map((item) => {
+                          const active = language === item.id
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => applyLanguage(item.id as Language)}
+                              className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm transition ${
+                                active
+                                  ? 'border border-brand-blue/40 bg-brand-blue/18 text-white'
+                                  : 'text-white/80 hover:bg-white/8 hover:text-white'
+                              }`}
+                            >
+                              <span>{item.label}</span>
+                              {active ? <Globe2 size={14} className="text-brand-blue" /> : null}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
               {effectiveHeaderIcons.map((item) => {
                 if (!item.visible) return null
