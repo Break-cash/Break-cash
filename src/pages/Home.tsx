@@ -10,14 +10,11 @@ import {
 } from 'lucide-react'
 import {
   getAds,
-  getHomeLeaderboardConfig,
   subscribeToLiveUpdates,
   type AdItem,
-  type HomeLeaderboardConfig,
 } from '../api'
 import { appData } from '../data'
 import { AdBanner } from '../components/ads/AdBanner'
-import { LeaderboardSection, defaultHomeLeaderboardConfig } from '../components/home/LeaderboardSection'
 import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { useAssetVisibility } from '../hooks/useAssetVisibility'
@@ -30,7 +27,6 @@ export function Home() {
   const { t, language } = useI18n()
   const { balance_info } = appData
   const [ads, setAds] = useState<AdItem[]>([])
-  const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const { summary: walletSummary } = useWalletSummary()
   const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
   const { isHidden } = useAssetVisibility()
@@ -123,23 +119,9 @@ export function Home() {
   }, [])
 
   useEffect(() => {
-    getHomeLeaderboardConfig()
-      .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
-      .catch(() => setLeaderboardConfig(defaultHomeLeaderboardConfig))
-  }, [])
-
-  useEffect(() => {
     const unsub = subscribeToLiveUpdates((event) => {
       if (event.type === 'home_content_updated') {
         getAds('home').then((res) => setAds(res.items || [])).catch(() => {})
-      }
-      if (
-        (event.type === 'settings_updated' || event.type === 'home_content_updated') &&
-        event.key === 'home_leaderboard'
-      ) {
-        getHomeLeaderboardConfig()
-          .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
-          .catch(() => {})
       }
     })
     return unsub
@@ -252,8 +234,6 @@ export function Home() {
           </div>
         </div>
       </section>
-
-      <LeaderboardSection config={leaderboardConfig} />
 
       <div className="home-lower-grid grid gap-6 lg:grid-cols-3">
         <section className="home-market-table lg:col-span-2 space-y-4">

@@ -20,6 +20,7 @@ import {
 import {
   apiFetch,
   getHeaderIconConfig,
+  getHomeLeaderboardConfig,
   getPushPublicKey,
   getPushSubscriptionStatus,
   removeNativePushToken,
@@ -31,9 +32,11 @@ import {
   subscribeToLiveUpdates,
   updateMyProfile,
   type AuthUser,
+  type HomeLeaderboardConfig,
   type HeaderIconConfigItem,
 } from './api'
 import { playFeedbackSound, primeAppFeedback } from './appFeedback'
+import { LeaderboardSection, defaultHomeLeaderboardConfig } from './components/home/LeaderboardSection'
 import { InstallPrompt } from './components/InstallPrompt'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
 import { ProfileActiveNowCounterCompact } from './components/profile-v2/ProfileActiveNowCounter'
@@ -167,7 +170,9 @@ export function Layout({
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const [headerIcons, setHeaderIcons] = useState<HeaderIconConfigItem[]>([
     { id: 'search', visible: true },
     { id: 'language', visible: true },
@@ -450,6 +455,14 @@ export function Layout({
 
   useEffect(() => {
     const unsubscribe = subscribeToLiveUpdates((event) => {
+      if (
+        (event.type === 'settings_updated' || event.type === 'home_content_updated') &&
+        String(event.key || '').trim().toLowerCase() === 'home_leaderboard'
+      ) {
+        getHomeLeaderboardConfig()
+          .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+          .catch(() => {})
+      }
       if (event.type !== 'notification_created') return
       if (!['notifications', 'support'].includes(String(event.source || '').trim().toLowerCase())) return
       const title = String(event.title || '').trim()
@@ -590,6 +603,12 @@ export function Layout({
   }, [])
 
   useEffect(() => {
+    getHomeLeaderboardConfig()
+      .then((res) => setLeaderboardConfig(res.config || defaultHomeLeaderboardConfig))
+      .catch(() => setLeaderboardConfig(defaultHomeLeaderboardConfig))
+  }, [])
+
+  useEffect(() => {
     if (!user?.id) return
     if (String(user.preferred_language || '').toLowerCase() === language) return
     const syncKey = `${user.id}:${language}`
@@ -670,6 +689,8 @@ export function Layout({
 
   useEffect(() => {
     setNotificationsOpen(false)
+    setLeaderboardOpen(false)
+    setMoreMenuOpen(false)
   }, [location.pathname])
 
   async function toggleNotifications() {
@@ -677,6 +698,7 @@ export function Layout({
     if (next) {
       setSearchOpen(false)
       setProfileMenuOpen(false)
+      setLeaderboardOpen(false)
       setMoreMenuOpen(false)
     }
     setNotificationsOpen(next)
@@ -716,7 +738,6 @@ export function Layout({
         : 'none'
   const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
   const profileIconVisible = effectiveHeaderIcons.some((item) => item.id === 'profile' && item.visible)
-  const languageIconVisible = effectiveHeaderIcons.some((item) => item.id === 'language' && item.visible)
   const showUtilityLinksInHeader = utilityLinks.length > 0 && location.pathname !== '/portfolio'
   const desktopQuickLinks = [
     { to: '/portfolio', label: t('nav_home'), icon: House },
@@ -728,6 +749,7 @@ export function Layout({
 
   function closeHeaderPopups(options?: { keepProfileMenu?: boolean }) {
     setNotificationsOpen(false)
+    setLeaderboardOpen(false)
     setSearchOpen(false)
     setMoreMenuOpen(false)
     if (!options?.keepProfileMenu) setProfileMenuOpen(false)
@@ -735,6 +757,7 @@ export function Layout({
 
   function applyLanguage(lang: Language) {
     setNotificationsOpen(false)
+    setLeaderboardOpen(false)
     setSearchOpen(false)
     setProfileMenuOpen(false)
     setMoreMenuOpen(false)
@@ -755,6 +778,7 @@ export function Layout({
                     onClick={() => {
                       setNotificationsOpen(false)
                       setSearchOpen(false)
+                      setLeaderboardOpen(false)
                       setMoreMenuOpen(false)
                       setProfileMenuOpen((v) => !v)
                     }}
@@ -861,6 +885,21 @@ export function Layout({
             <div className="app-header-side app-header-side-actions">
               <div className="glass-panel-soft app-header-actions-shell flex items-center gap-1.5 rounded-2xl p-1.5">
               <ProfileActiveNowCounterCompact className="me-1" />
+              <button
+                type="button"
+                className="icon-interactive liquid-glass-icon relative flex h-10 min-w-[44px] items-center justify-center rounded-full border border-amber-300/35 bg-[linear-gradient(180deg,rgba(245,158,11,0.2),rgba(245,158,11,0.08))] text-amber-200 shadow-[0_0_16px_rgba(245,158,11,0.2)] hover:border-amber-300/55 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/35"
+                onClick={() => {
+                  setNotificationsOpen(false)
+                  setSearchOpen(false)
+                  setProfileMenuOpen(false)
+                  setMoreMenuOpen(false)
+                  setLeaderboardOpen((value) => !value)
+                }}
+                aria-label="أعلى المودعين"
+                title="أعلى المودعين"
+              >
+                <Crown size={16} />
+              </button>
               {managementShortcut ? (
                 <Link
                   to={managementShortcut.to}
@@ -888,54 +927,53 @@ export function Layout({
                   <path d="M19.05 4.91A9.82 9.82 0 0 0 12.03 2C6.61 2 2.2 6.41 2.2 11.83c0 1.74.45 3.43 1.3 4.92L2 22l5.4-1.42a9.8 9.8 0 0 0 4.63 1.18h.01c5.42 0 9.83-4.41 9.83-9.83a9.77 9.77 0 0 0-2.82-7.02Zm-7.02 15.19h-.01a8.15 8.15 0 0 1-4.15-1.13l-.3-.18-3.2.84.86-3.12-.2-.32a8.15 8.15 0 0 1-1.26-4.36c0-4.5 3.66-8.16 8.17-8.16a8.1 8.1 0 0 1 5.78 2.4 8.1 8.1 0 0 1 2.38 5.77c0 4.5-3.66 8.16-8.17 8.16Zm4.48-6.1c-.24-.12-1.4-.69-1.62-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.42-1.34-1.66-.14-.24-.01-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.48-.4-.41-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.68 2.56 4.07 3.59.57.25 1.02.4 1.37.51.58.18 1.1.15 1.52.09.46-.07 1.4-.57 1.6-1.12.2-.55.2-1.02.14-1.12-.06-.1-.22-.16-.46-.28Z" />
                 </svg>
               </a>
-              {languageIconVisible ? (
-                <div className="relative" ref={moreMenuRef}>
-                  <button
-                    type="button"
-                    className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
-                    onClick={() => {
-                      setNotificationsOpen(false)
-                      setSearchOpen(false)
-                      setProfileMenuOpen(false)
-                      setMoreMenuOpen((value) => !value)
-                    }}
-                    aria-label={language === 'ar' ? 'المزيد' : language === 'tr' ? 'Daha fazla' : 'More'}
-                  >
-                    <Ellipsis size={17} />
-                  </button>
-                  {moreMenuOpen ? (
-                    <div className="absolute end-0 top-full z-50 mt-2 w-[180px] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_18px_42px_rgba(0,0,0,0.36)] backdrop-blur-2xl">
-                      <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">
-                        {t('language')}
-                      </div>
-                      <div className="space-y-1">
-                        {[
-                          { id: 'ar', label: 'العربية' },
-                          { id: 'en', label: 'English' },
-                          { id: 'tr', label: 'Türkçe' },
-                        ].map((item) => {
-                          const active = language === item.id
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => applyLanguage(item.id as Language)}
-                              className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm transition ${
-                                active
-                                  ? 'border border-brand-blue/40 bg-brand-blue/18 text-white'
-                                  : 'text-white/80 hover:bg-white/8 hover:text-white'
-                              }`}
-                            >
-                              <span>{item.label}</span>
-                              {active ? <Globe2 size={14} className="text-brand-blue" /> : null}
-                            </button>
-                          )
-                        })}
-                      </div>
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  type="button"
+                  className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
+                  onClick={() => {
+                    setNotificationsOpen(false)
+                    setSearchOpen(false)
+                    setLeaderboardOpen(false)
+                    setProfileMenuOpen(false)
+                    setMoreMenuOpen((value) => !value)
+                  }}
+                  aria-label={language === 'ar' ? 'المزيد' : language === 'tr' ? 'Daha fazla' : 'More'}
+                >
+                  <Ellipsis size={17} />
+                </button>
+                {moreMenuOpen ? (
+                  <div className="absolute end-0 top-full z-50 mt-2 w-[180px] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_18px_42px_rgba(0,0,0,0.36)] backdrop-blur-2xl">
+                    <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">
+                      {t('language')}
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
+                    <div className="space-y-1">
+                      {[
+                        { id: 'ar', label: 'العربية' },
+                        { id: 'en', label: 'English' },
+                        { id: 'tr', label: 'Türkçe' },
+                      ].map((item) => {
+                        const active = language === item.id
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => applyLanguage(item.id as Language)}
+                            className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm transition ${
+                              active
+                                ? 'border border-brand-blue/40 bg-brand-blue/18 text-white'
+                                : 'text-white/80 hover:bg-white/8 hover:text-white'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            {active ? <Globe2 size={14} className="text-brand-blue" /> : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               {effectiveHeaderIcons.map((item) => {
                 if (!item.visible) return null
                 if (item.id === 'profile') return null
@@ -948,6 +986,7 @@ export function Layout({
                       type="button"
                       onClick={() => {
                         setNotificationsOpen(false)
+                        setLeaderboardOpen(false)
                         setProfileMenuOpen(false)
                         setMoreMenuOpen(false)
                         setSearchOpen(true)
@@ -984,6 +1023,24 @@ export function Layout({
               </div>
             </div>
           </div>
+
+          <AnimatePresence initial={false}>
+            {leaderboardOpen ? (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.985 }}
+                transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+                className="liquid-modal-backdrop app-header-notifications-panel mt-2"
+              >
+                <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-2">
+                  <div className="max-h-[72dvh] overflow-auto rounded-2xl [&_section]:mb-0">
+                    <LeaderboardSection config={leaderboardConfig} previewMode={!leaderboardConfig?.enabled} />
+                  </div>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
           <AnimatePresence initial={false}>
             {searchOpen ? (

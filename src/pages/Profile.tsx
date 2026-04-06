@@ -375,7 +375,7 @@ export function Profile() {
         onOpenDeposit={() => navigate('/deposit')}
         onOpenWithdraw={() => navigate('/withdraw')}
         onPrimaryCtaClick={() => navigate(primaryCtaTarget)}
-        onSecondaryCtaClick={() => navigate('/deposit')}
+        onSecondaryCtaClick={() => navigate('/mining')}
       />
       <ProfileTopDepositorsCard config={leaderboardConfig} />
       <ProfileVipCard

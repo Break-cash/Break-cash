@@ -802,68 +802,66 @@ export function MiningPage() {
         </motion.button>
       </motion.section>
 
-      {profile ? (
-        <motion.section
-          ref={walletCardRef}
-          className={`mining-wallet-card relative overflow-hidden rounded-2xl border border-app-border bg-app-card p-3 ${
-            walletVisualActive || profile.status === 'active' ? 'mining-wallet-card--active' : ''
-          }`}
-          animate={
-            activationPhase === 'success'
-              ? {
-                  scale: [1, 1.015, 1],
-                  boxShadow: [
-                    '0 0 0 rgba(14,165,233,0)',
-                    '0 0 0 1px rgba(45,212,191,0.18), 0 18px 42px rgba(14,165,233,0.18)',
-                    '0 0 0 1px rgba(45,212,191,0.12), 0 10px 26px rgba(14,165,233,0.1)',
-                  ],
-                }
-              : { scale: 1, boxShadow: '0 0 0 rgba(0,0,0,0)' }
-          }
-          transition={{ duration: 1.05, ease: 'easeOut' }}
-        >
-          <AnimatePresence>
-            {successBadgeVisible ? (
-              <motion.span
-                className="mining-wallet-badge"
-                initial={{ opacity: 0, y: 10, scale: 0.92 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                transition={{ duration: 0.28, ease: 'easeOut' }}
-              >
-                {activationCopy.success}
-              </motion.span>
-            ) : null}
-          </AnimatePresence>
-
-          <MiningVideoSection
-            isActive={miningUiActive}
-            hashRate={miningUiActive ? 245.7 : 0}
-            earningsUsdt={Number(displayValues.daily || 0)}
-            remainingTime={miningUiRemainingTime}
-            mediaUrl={activeMiningVideoUrl}
-          />
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className="wallet-action-btn wallet-action-deposit"
-              onClick={() => openConfirm('claim')}
-              disabled={activationBusy || Number(profile.daily_claimable || 0) <= 0}
+      <motion.section
+        ref={walletCardRef}
+        className={`mining-wallet-card relative overflow-hidden rounded-2xl border border-app-border bg-app-card p-3 ${
+          walletVisualActive || profile?.status === 'active' ? 'mining-wallet-card--active' : ''
+        }`}
+        animate={
+          activationPhase === 'success'
+            ? {
+                scale: [1, 1.015, 1],
+                boxShadow: [
+                  '0 0 0 rgba(14,165,233,0)',
+                  '0 0 0 1px rgba(45,212,191,0.18), 0 18px 42px rgba(14,165,233,0.18)',
+                  '0 0 0 1px rgba(45,212,191,0.12), 0 10px 26px rgba(14,165,233,0.1)',
+                ],
+              }
+            : { scale: 1, boxShadow: '0 0 0 rgba(0,0,0,0)' }
+        }
+        transition={{ duration: 1.05, ease: 'easeOut' }}
+      >
+        <AnimatePresence>
+          {successBadgeVisible ? (
+            <motion.span
+              className="mining-wallet-badge"
+              initial={{ opacity: 0, y: 10, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ duration: 0.28, ease: 'easeOut' }}
             >
-              {t('mining_claim_daily')}
-            </button>
-            <button
-              type="button"
-              className="wallet-action-btn wallet-action-withdraw"
-              onClick={() => openConfirm('emergency')}
-              disabled={activationBusy || profile.status === 'inactive'}
-            >
-              {t('mining_emergency_withdraw')}
-            </button>
-          </div>
-        </motion.section>
-      ) : null}
+              {activationCopy.success}
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+
+        <MiningVideoSection
+          isActive={miningUiActive}
+          hashRate={miningUiActive ? 245.7 : 0}
+          earningsUsdt={Number(displayValues.daily || 0)}
+          remainingTime={miningUiRemainingTime}
+          mediaUrl={activeMiningVideoUrl}
+        />
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="wallet-action-btn wallet-action-deposit"
+            onClick={() => openConfirm('claim')}
+            disabled={activationBusy || Number(profile?.daily_claimable || 0) <= 0}
+          >
+            {t('mining_claim_daily')}
+          </button>
+          <button
+            type="button"
+            className="wallet-action-btn wallet-action-withdraw"
+            onClick={() => openConfirm('emergency')}
+            disabled={activationBusy || profile?.status === 'inactive' || !profile}
+          >
+            {t('mining_emergency_withdraw')}
+          </button>
+        </div>
+      </motion.section>
 
       {message ? (
         <div className={`rounded-xl px-3 py-2 text-sm ${message.type === 'success' ? 'owner-message-success' : 'owner-message-error'}`}>
