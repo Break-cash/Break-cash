@@ -618,17 +618,24 @@ export function Layout({
   }, [language, user?.id, user?.preferred_language])
 
   useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      const target = e.target as Node
-      if (profileMenuRef.current && !profileMenuRef.current.contains(target)) {
-        setProfileMenuOpen(false)
-      }
-      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
-        setMoreMenuOpen(false)
-      }
+    function onDocPointerDown(event: PointerEvent) {
+      const path = typeof event.composedPath === 'function' ? event.composedPath() : []
+      const target = event.target as Node | null
+      const profileContainsTarget =
+        !!profileMenuRef.current &&
+        !!target &&
+        (profileMenuRef.current.contains(target) || path.includes(profileMenuRef.current))
+      const moreContainsTarget =
+        !!moreMenuRef.current &&
+        !!target &&
+        (moreMenuRef.current.contains(target) || path.includes(moreMenuRef.current))
+
+      if (!profileContainsTarget) setProfileMenuOpen(false)
+      if (!moreContainsTarget) setMoreMenuOpen(false)
     }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
+
+    document.addEventListener('pointerdown', onDocPointerDown)
+    return () => document.removeEventListener('pointerdown', onDocPointerDown)
   }, [])
 
   useEffect(() => {
@@ -931,6 +938,7 @@ export function Layout({
                 <button
                   type="button"
                   className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => {
                     setNotificationsOpen(false)
                     setSearchOpen(false)
@@ -949,6 +957,7 @@ export function Layout({
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.985 }}
                       transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+                      onPointerDown={(event) => event.stopPropagation()}
                       className="app-header-more-menu absolute end-0 top-full z-[95] mt-2 w-[190px] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_20px_46px_rgba(0,0,0,0.42)] backdrop-blur-2xl"
                     >
                       <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">

@@ -31,7 +31,6 @@ import { ProfileHeroWalletSection } from '../components/profile-v2/ProfileHeroWa
 import { ProfileAdsSection } from '../components/profile-v2/ProfileAdsSection'
 import { ProfileQuickActionsGrid } from '../components/profile-v2/ProfileQuickActionsGrid'
 import { ProfileTopControlsBar } from '../components/profile-v2/ProfileTopControlsBar'
-import { ProfileTopDepositorsCard } from '../components/profile-v2/ProfileTopDepositorsCard'
 import { ProfileVipCard } from '../components/profile-v2/ProfileVipCard'
 import { ProfileLowerOverviewSection } from '../components/profile-v2/ProfileLowerOverviewSection'
 
@@ -377,7 +376,6 @@ export function Profile() {
         onPrimaryCtaClick={() => navigate(primaryCtaTarget)}
         onSecondaryCtaClick={() => navigate('/mining')}
       />
-      <ProfileTopDepositorsCard config={leaderboardConfig} />
       <ProfileVipCard
         loading={vipLoading}
         currentLevel={vipCurrentLevel}
