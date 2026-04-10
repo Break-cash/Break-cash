@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { get, run } from '../db.js'
 import { publishLiveUpdate } from './live-updates.js'
 import { sendPushToUser } from './push-notifications.js'
@@ -13,6 +14,28 @@ function formatAmount(value) {
   const amount = Number(value || 0)
   if (!Number.isFinite(amount)) return '0'
   return amount.toFixed(2)
+}
+
+function hasArabicLetters(value) {
+  return /[\u0600-\u06FF]/.test(String(value || ''))
+}
+
+function looksLikeMojibake(value) {
+  const text = String(value || '')
+  if (!text || hasArabicLetters(text)) return false
+  return /(?:Ø|Ù|Ú|Û|Ã|Â|â)/.test(text)
+}
+
+export function repairMojibakeText(value) {
+  const text = String(value || '')
+  if (!looksLikeMojibake(text)) return text
+  try {
+    const repaired = Buffer.from(text, 'latin1').toString('utf8')
+    if (hasArabicLetters(repaired) || /[A-Za-z]/.test(repaired)) return repaired
+    return text
+  } catch {
+    return text
+  }
 }
 
 const notificationTemplates = {

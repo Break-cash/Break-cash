@@ -1,7 +1,8 @@
 import { Router } from 'express'
-import { all, get, run } from '../db.js'
-import { requireAnyPermission, requireApproved, requireAuth, requirePermission } from '../middleware/auth.js'
+import { all, run } from '../db.js'
+import { requireAnyPermission, requireApproved, requireAuth } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
+import { repairMojibakeText } from '../services/notifications.js'
 import {
   deactivateAllUserPushSubscriptions,
   deactivateAllUserNativePushTokens,
@@ -16,8 +17,19 @@ import {
 } from '../services/push-notifications.js'
 import { sendNativePushToUser } from '../services/native-push-notifications.js'
 
+function normalizeNotificationRow(row) {
+  return {
+    id: Number(row?.id || 0),
+    title: repairMojibakeText(String(row?.title || '')).trim(),
+    body: repairMojibakeText(String(row?.body || '')).trim(),
+    is_read: Number(row?.is_read || 0),
+    created_at: row?.created_at || null,
+  }
+}
+
 function getNotificationKey(row) {
-  return `${String(row?.title || '').trim()}|${String(row?.body || '').trim()}`
+  const normalized = normalizeNotificationRow(row)
+  return `${normalized.title}|${normalized.body}`
 }
 
 function parseNotificationTime(value) {
@@ -29,13 +41,7 @@ function mergeNotificationRows(rows) {
   const byKey = new Map()
   for (const row of rows || []) {
     const key = getNotificationKey(row)
-    const normalized = {
-      id: Number(row?.id || 0),
-      title: String(row?.title || ''),
-      body: String(row?.body || ''),
-      is_read: Number(row?.is_read || 0),
-      created_at: row?.created_at || null,
-    }
+    const normalized = normalizeNotificationRow(row)
     const existing = byKey.get(key)
     if (!existing) {
       byKey.set(key, normalized)
@@ -74,34 +80,22 @@ export function createNotificationsRouter(db) {
        FROM notifications
        WHERE user_id = ?
        ORDER BY id DESC
-      LIMIT ?`,
+       LIMIT ?`,
       [req.user.id, limit],
     )
     return res.json({ notifications: mergeNotificationRows(rows) })
   })
 
   router.get('/unreadCount', async (req, res) => {
-    const row = await get(
+    const rows = await all(
       db,
-      `SELECT COUNT(*) AS count
-       FROM (
-         SELECT n.title, n.body
-         FROM notifications n
-         WHERE n.user_id = ?
-           AND n.is_read = 0
-           AND NOT EXISTS (
-             SELECT 1
-             FROM notifications r
-             WHERE r.user_id = n.user_id
-               AND COALESCE(r.title, '') = COALESCE(n.title, '')
-               AND COALESCE(r.body, '') = COALESCE(n.body, '')
-               AND r.is_read = 1
-           )
-         GROUP BY n.title, n.body
-       ) unread_keys`,
+      `SELECT id, title, body, is_read
+       FROM notifications
+       WHERE user_id = ?`,
       [req.user.id],
     )
-    return res.json({ unreadCount: Number(row?.count || 0) })
+    const unreadCount = mergeNotificationRows(rows).filter((row) => Number(row.is_read || 0) === 0).length
+    return res.json({ unreadCount })
   })
 
   router.get('/push/public-key', async (_req, res) => {
@@ -182,7 +176,9 @@ export function createNotificationsRouter(db) {
     const id = Number(req.body?.id)
     const title = String(req.body?.title || '').trim()
     const body = String(req.body?.body || '').trim()
-    if (title || body) {
+    if (Number.isFinite(id) && id > 0) {
+      await run(db, `UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?`, [id, req.user.id])
+    } else if (title || body) {
       await run(
         db,
         `UPDATE notifications
@@ -192,20 +188,12 @@ export function createNotificationsRouter(db) {
            AND COALESCE(body, '') = ?`,
         [req.user.id, title, body],
       )
-    } else {
-      await run(db, `UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?`, [
-        id,
-        req.user.id,
-      ])
     }
     return res.json({ ok: true })
   })
 
   router.delete('/:id', async (req, res) => {
-    await run(db, `DELETE FROM notifications WHERE id = ? AND user_id = ?`, [
-      Number(req.params.id),
-      req.user.id,
-    ])
+    await run(db, `DELETE FROM notifications WHERE id = ? AND user_id = ?`, [Number(req.params.id), req.user.id])
     return res.json({ ok: true })
   })
 
@@ -214,11 +202,7 @@ export function createNotificationsRouter(db) {
     const title = String(req.body?.title || '').trim()
     const body = String(req.body?.body || '').trim()
     if (!userId || !title || !body) return res.status(400).json({ error: 'INVALID_INPUT' })
-    await run(db, `INSERT INTO notifications (user_id, title, body) VALUES (?, ?, ?)`, [
-      userId,
-      title,
-      body,
-    ])
+    await run(db, `INSERT INTO notifications (user_id, title, body) VALUES (?, ?, ?)`, [userId, title, body])
     await sendPushToUser(db, userId, { title, body, tag: 'admin_notification', url: '/portfolio', data: { title, body } }).catch(() => {})
     return res.status(201).json({ ok: true })
   })
@@ -241,11 +225,7 @@ export function createNotificationsRouter(db) {
     for (const row of users) {
       const userId = Number(row?.id || 0)
       if (!userId) continue
-      await run(db, `INSERT INTO notifications (user_id, title, body) VALUES (?, ?, ?)`, [
-        userId,
-        title,
-        body,
-      ])
+      await run(db, `INSERT INTO notifications (user_id, title, body) VALUES (?, ?, ?)`, [userId, title, body])
       await sendPushToUser(db, userId, { title, body, tag: 'owner_broadcast', url: '/portfolio', data: { title, body } }).catch(() => {})
       createdCount += 1
     }

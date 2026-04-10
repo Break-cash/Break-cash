@@ -155,18 +155,39 @@ body,
   max-width: 100%;
   min-height: 100dvh;
   padding: 0 0 calc(88px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
 }
 
 .portfolio-layout-content {
   width: 100%;
+  overflow-x: hidden;
+}
+
+.portfolio-layout-content > .min-w-0 {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .portfolio-screen-host {
+  width: 100%;
+  max-width: min(430px, calc(100vw - 8px));
+  margin: 0 auto;
   min-height: calc(100dvh - 88px);
+  overflow-x: clip;
+  box-sizing: border-box;
   background:
     radial-gradient(circle at 14% -8%, rgba(56, 189, 248, 0.13), transparent 30%),
     radial-gradient(circle at 86% -4%, rgba(245, 166, 35, 0.11), transparent 20%),
     linear-gradient(180deg, #0b1020, #0a0d18);
+}
+
+@media (max-width: 900px) {
+  .portfolio-screen-host {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+  }
 }
 
 .mobile-bottom-nav-modern {
@@ -2055,6 +2076,10 @@ button {
 .liquid-page-transition {
   transform-origin: 50% 0%;
   will-change: opacity, transform, filter;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .glass-panel,

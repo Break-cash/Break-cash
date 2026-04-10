@@ -68,8 +68,9 @@ export function InstallPrompt() {
     location.pathname === '/arena' ||
     location.pathname.startsWith('/arena/round/') ||
     location.pathname.startsWith('/arena/result/')
+  const isPortfolioRoute = location.pathname === '/portfolio'
 
-  if (installed || inNativeApp || isArenaRoute) return null
+  if (installed || inNativeApp || isArenaRoute || isPortfolioRoute) return null
 
   return (
     <>
