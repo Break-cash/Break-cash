@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   convertParticipationPoints,
   getArenaEntryBalance,
@@ -99,11 +99,15 @@ export function useArenaRound(roundId: string | undefined) {
   const [details, setDetails] = useState<ArenaRoundDetails | null>(null)
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted' | 'failed'>('idle')
   const [lastEntry, setLastEntry] = useState<PredictionEntry | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const [asyncState, patchAsync] = useAsyncState(true)
+  const refreshInFlightRef = useRef(false)
 
-  const refresh = useCallback(async () => {
-    if (!roundId) return
-    patchAsync({ loading: true })
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
+    if (!roundId || refreshInFlightRef.current) return
+    const silent = options?.silent ?? false
+    refreshInFlightRef.current = true
+    if (!silent) patchAsync({ loading: true })
     try {
       const result = await getArenaRoundDetails(roundId)
       setDetails(result)
@@ -111,7 +115,8 @@ export function useArenaRound(roundId: string | undefined) {
     } catch (cause) {
       patchAsync({ error: cause instanceof Error ? cause : new Error('ARENA_ROUND_LOAD_FAILED') })
     } finally {
-      patchAsync({ loading: false })
+      refreshInFlightRef.current = false
+      if (!silent) patchAsync({ loading: false })
     }
   }, [patchAsync, roundId])
 
@@ -122,8 +127,16 @@ export function useArenaRound(roundId: string | undefined) {
   useEffect(() => {
     if (!roundId) return () => {}
     const timer = window.setInterval(() => {
-      refresh().catch(() => {})
+      setNow(Date.now())
     }, 1000)
+    return () => window.clearInterval(timer)
+  }, [roundId])
+
+  useEffect(() => {
+    if (!roundId) return () => {}
+    const timer = window.setInterval(() => {
+      refresh({ silent: true }).catch(() => {})
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [refresh, roundId])
 
@@ -136,8 +149,15 @@ export function useArenaRound(roundId: string | undefined) {
         : round.status === 'OPEN' || round.status === 'LOCKED'
           ? Date.parse(round.endsAt)
           : 0
-    return Math.max(0, Math.floor((target - Date.now()) / 1000))
-  }, [details])
+    return Math.max(0, Math.floor((target - now) / 1000))
+  }, [details, now])
+
+  useEffect(() => {
+    if (!details?.round) return
+    if (!['UPCOMING', 'OPEN', 'LOCKED'].includes(details.round.status)) return
+    if (secondsRemaining > 1) return
+    refresh({ silent: true }).catch(() => {})
+  }, [details?.round, secondsRemaining, refresh])
 
   const submit = useCallback(
     async (direction: PredictionDirection) => {
@@ -147,7 +167,7 @@ export function useArenaRound(roundId: string | undefined) {
         const entry = await submitPrediction(details.round.id, details.round.assetId, direction)
         setLastEntry(entry)
         setSubmitState('submitted')
-        await refresh()
+        await refresh({ silent: true })
         return entry
       } catch (cause) {
         setSubmitState('failed')
@@ -160,7 +180,7 @@ export function useArenaRound(roundId: string | undefined) {
   const buyTickets = useCallback(
     async (packageId: string) => {
       const result = await purchaseArenaTickets(packageId)
-      await refresh()
+      await refresh({ silent: true })
       return result
     },
     [refresh],
@@ -168,7 +188,7 @@ export function useArenaRound(roundId: string | undefined) {
 
   const convertPoints = useCallback(async () => {
     await convertParticipationPoints()
-    await refresh()
+    await refresh({ silent: true })
   }, [refresh])
 
   return {
