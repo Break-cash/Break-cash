@@ -598,7 +598,7 @@ export function MiningPage() {
         : t('mining_subscribe_button')
 
   return (
-    <div className="page space-y-3">
+    <div className="page mining-page-v3 space-y-3">
       <AnimatePresence>
         {beamGeometry ? (
           <motion.div

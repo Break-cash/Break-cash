@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   apiFetch,
+  hasSessionToken,
   getMyStrategyCodes,
   getPushPublicKey,
   getPushSubscriptionStatus,
@@ -172,6 +173,10 @@ export function FuturesPage() {
     setPushSupported(supported)
     if (!supported) return
     setPushPermission(Notification.permission)
+    if (!hasSessionToken()) {
+      setPushSubscribed(false)
+      return
+    }
     getPushSubscriptionStatus().then((res) => setPushSubscribed(Boolean(res.subscribed))).catch(() => setPushSubscribed(false))
   }, [])
 

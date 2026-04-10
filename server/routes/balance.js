@@ -16,6 +16,13 @@ import {
   createFirstDepositBonusReward,
   releaseEligibleRewardEntries,
 } from '../services/wallet-service.js'
+import {
+  applyDepositOfferRewardAfterDeposit,
+  ensureDepositOffersSeeded,
+  getDepositOfferHistory,
+  listDepositOffers,
+  validateDepositOfferEligibility,
+} from '../services/deposit-offers.js'
 import { getMainBalanceSources, getPendingEarningBalanceSources, getWalletAccountsOverview } from '../services/wallet-ledger.js'
 import {
   reconcileUserCurrency,
@@ -30,6 +37,7 @@ const DIRECT_REFERRAL_PERCENT_FLOOR = 20
 import { getDefaultVipTierRows, getVipRuntimeRules, normalizeVipTierConfig, toVipTierStoragePayload } from '../services/vip-rules.js'
 import { maybeQueueOwnerFinancialApproval } from '../services/owner-financial-approvals.js'
 import { persistUploadedAsset } from '../services/uploaded-assets.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed'])
 const PRINCIPAL_UNLOCK_RATIO = 0.5
@@ -1342,7 +1350,7 @@ function buildUserPrincipalLockItems(items, options = {}) {
 export function createBalanceRouter(db) {
   const router = Router()
   schedulePrincipalLockBackfill(db)
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const proofsDir = path.join(uploadsRoot, 'payment-proofs')
   fs.mkdirSync(proofsDir, { recursive: true })
   const uploadProof = multer({
@@ -1430,6 +1438,18 @@ export function createBalanceRouter(db) {
       withdrawable_balance: withdrawSummary.withdrawable_balance,
       withdraw_summary: withdrawSummary,
     })
+  })
+
+  router.get('/deposit-offers', async (req, res) => {
+    await ensureDepositOffersSeeded(db)
+    const items = await listDepositOffers(db, req.user.id)
+    return res.json({ items })
+  })
+
+  router.get('/deposit-offers/history', async (req, res) => {
+    await ensureDepositOffersSeeded(db)
+    const items = await getDepositOfferHistory(db, req.user.id)
+    return res.json({ items })
   })
 
   router.get('/wallet-history', async (req, res) => {
@@ -1742,11 +1762,22 @@ export function createBalanceRouter(db) {
     const transferRef = normalizeText(req.body?.transferRef, 96)
     const notes = normalizeText(req.body?.notes, 500)
     const idempotencyKey = normalizeText(req.body?.idempotencyKey, 80)
+    const linkedOfferId = Number(req.body?.linkedOfferId || 0)
     if (!amount || !method || !transferRef) return res.status(400).json({ error: 'INVALID_INPUT' })
 
     const rules = await getRules(db)
     if (amount < Number(rules.minDeposit || 0)) return res.status(400).json({ error: 'INVALID_INPUT' })
     if (!rules.depositMethods.includes(method)) return res.status(400).json({ error: 'INVALID_INPUT' })
+    if (linkedOfferId > 0) {
+      const offerValidation = await validateDepositOfferEligibility(db, {
+        userId: req.user.id,
+        offerId: linkedOfferId,
+        depositAmount: amount,
+      })
+      if (!offerValidation.eligible) {
+        return res.status(400).json({ error: 'OFFER_NOT_ELIGIBLE', code: offerValidation.code })
+      }
+    }
 
     const mime = String(req.file?.mimetype || '').toLowerCase()
     if (!req.file) return res.status(400).json({ error: 'FILE_REQUIRED' })
@@ -1763,18 +1794,19 @@ export function createBalanceRouter(db) {
       })
     }
 
-    const payload = [req.user.id, amount, currency, method, transferRef, notes || null, proofImagePath, idempotencyKey || null]
+    const payload = [req.user.id, amount, currency, method, transferRef, notes || null, proofImagePath, linkedOfferId || null, idempotencyKey || null]
     try {
       if (!rules.manualReview) {
         let requestId = 0
         let rewardedReferrerUserId = 0
+        let depositOfferReward = null
         await withTransaction(db, async (tx) => {
           const insertRes = await run(
             tx,
             `INSERT INTO deposit_requests (
-              user_id, amount, currency, method, transfer_ref, user_notes, proof_image_path, request_status, idempotency_key
+              user_id, amount, currency, method, transfer_ref, user_notes, proof_image_path, linked_offer_id, request_status, idempotency_key
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
             payload,
           )
           requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
@@ -1819,6 +1851,16 @@ export function createBalanceRouter(db) {
             depositRequestId: requestId,
             rules,
           })
+          if (linkedOfferId > 0) {
+            depositOfferReward = await applyDepositOfferRewardAfterDeposit(tx, {
+              userId: req.user.id,
+              depositRequestId: requestId,
+              walletTransactionId: walletTxnId || null,
+              offerId: linkedOfferId,
+              depositAmount: amount,
+              currency,
+            })
+          }
           await reapplyPrincipalLocksForUser(tx, req.user.id, currency, rules)
           rewardedReferrerUserId = Number(vipResult.rewardedReferrerUserId || 0)
         })
@@ -1831,14 +1873,14 @@ export function createBalanceRouter(db) {
             source: 'referral_reward',
           })
         }
-        return res.json({ ok: true, requestId, status: 'approved' })
+        return res.json({ ok: true, requestId, status: 'approved', depositOfferReward })
       }
       const insertRes = await run(
         db,
         `INSERT INTO deposit_requests (
-          user_id, amount, currency, method, transfer_ref, user_notes, proof_image_path, request_status, idempotency_key
+          user_id, amount, currency, method, transfer_ref, user_notes, proof_image_path, linked_offer_id, request_status, idempotency_key
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id`,
         payload,
       )
       const requestId = Number(insertRes.lastID || insertRes.rows?.[0]?.id || 0)
@@ -1977,22 +2019,32 @@ export function createBalanceRouter(db) {
     const deposits = statusFilter
       ? await all(
           db,
-          `SELECT id, 'deposit' AS request_type, amount, currency, method, transfer_ref, user_notes,
-                  proof_image_path, request_status, admin_note, reviewed_by, reviewed_at, completed_at,
-                  created_at, updated_at
-           FROM deposit_requests
-           WHERE user_id = ? AND request_status = ?
-           ORDER BY id DESC LIMIT 200`,
+          `SELECT dr.id, 'deposit' AS request_type, dr.amount, dr.currency, dr.method, dr.transfer_ref, dr.user_notes,
+                  dr.proof_image_path, dr.request_status, dr.admin_note, dr.reviewed_by, dr.reviewed_at, dr.completed_at,
+                  dr.created_at, dr.updated_at, dr.linked_offer_id,
+                  dof.title AS linked_offer_title, dof.reward_percentage AS linked_offer_percentage,
+                  doc.claim_status AS offer_claim_status, doc.reward_amount AS offer_reward_amount,
+                  doc.reward_status AS offer_reward_status, doc.eligibility_code AS offer_eligibility_code
+           FROM deposit_requests dr
+           LEFT JOIN deposit_offers dof ON dof.id = dr.linked_offer_id
+           LEFT JOIN deposit_offer_claims doc ON doc.deposit_request_id = dr.id AND doc.user_id = dr.user_id
+           WHERE dr.user_id = ? AND dr.request_status = ?
+           ORDER BY dr.id DESC LIMIT 200`,
           [req.user.id, statusFilter],
         )
       : await all(
           db,
-          `SELECT id, 'deposit' AS request_type, amount, currency, method, transfer_ref, user_notes,
-                  proof_image_path, request_status, admin_note, reviewed_by, reviewed_at, completed_at,
-                  created_at, updated_at
-           FROM deposit_requests
-           WHERE user_id = ?
-           ORDER BY id DESC LIMIT 200`,
+          `SELECT dr.id, 'deposit' AS request_type, dr.amount, dr.currency, dr.method, dr.transfer_ref, dr.user_notes,
+                  dr.proof_image_path, dr.request_status, dr.admin_note, dr.reviewed_by, dr.reviewed_at, dr.completed_at,
+                  dr.created_at, dr.updated_at, dr.linked_offer_id,
+                  dof.title AS linked_offer_title, dof.reward_percentage AS linked_offer_percentage,
+                  doc.claim_status AS offer_claim_status, doc.reward_amount AS offer_reward_amount,
+                  doc.reward_status AS offer_reward_status, doc.eligibility_code AS offer_eligibility_code
+           FROM deposit_requests dr
+           LEFT JOIN deposit_offers dof ON dof.id = dr.linked_offer_id
+           LEFT JOIN deposit_offer_claims doc ON doc.deposit_request_id = dr.id AND doc.user_id = dr.user_id
+           WHERE dr.user_id = ?
+           ORDER BY dr.id DESC LIMIT 200`,
           [req.user.id],
         )
     const withdrawals = statusFilter
@@ -2088,6 +2140,7 @@ export function createBalanceRouter(db) {
     }
     let outcomeStatus = 'rejected'
     let rewardedReferrerUserId = 0
+    let depositOfferReward = null
     await withTransaction(db, async (tx) => {
       const item = await get(tx, `SELECT * FROM deposit_requests WHERE id = ? LIMIT 1`, [requestId])
       if (!item) throw new Error('NOT_FOUND')
@@ -2190,6 +2243,16 @@ export function createBalanceRouter(db) {
           depositRequestId: requestId,
           rules,
         })
+        if (Number(item.linked_offer_id || 0) > 0) {
+          depositOfferReward = await applyDepositOfferRewardAfterDeposit(tx, {
+            userId: item.user_id,
+            depositRequestId: requestId,
+            walletTransactionId: walletTxnId || null,
+            offerId: Number(item.linked_offer_id || 0),
+            depositAmount: Number(item.amount || 0),
+            currency: item.currency,
+          })
+        }
         await reapplyPrincipalLocksForUser(tx, item.user_id, item.currency, rules)
         rewardedReferrerUserId = Number(vipResult.rewardedReferrerUserId || 0)
         await createLocalizedNotification(tx, item.user_id, 'deposit_approved', { requestId })
@@ -2228,7 +2291,7 @@ export function createBalanceRouter(db) {
         source: 'referral_reward',
       })
     }
-    return res.json({ ok: true, status: outcomeStatus })
+    return res.json({ ok: true, status: outcomeStatus, depositOfferReward })
   })
 
   router.post('/admin/withdrawal-requests/:id/review', requirePermission(db, 'withdrawals.manage'), async (req, res) => {

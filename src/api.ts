@@ -54,14 +54,22 @@ function resolveErrorMessage(code: string, body: unknown) {
   return serverMsg || code
 }
 
-function createApiError(code: string, body: unknown) {
+type ApiRequestInit = RequestInit & {
+  suppressErrorToast?: boolean
+}
+
+function createApiError(code: string, body: unknown, suppressErrorToast = false) {
   const message = resolveErrorMessage(code, body)
-  emitApiErrorToast(code, message)
+  if (!suppressErrorToast) emitApiErrorToast(code, message)
   return new Error(message)
 }
 
 export function getToken() {
   return localStorage.getItem('breakcash_token')
+}
+
+export function hasSessionToken() {
+  return Boolean(getToken())
 }
 
 export function setToken(token: string | null) {
@@ -106,18 +114,19 @@ export function subscribeToLiveUpdates(onEvent: (event: LiveUpdateEvent) => void
   }
 }
 
-export async function apiFetch(path: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers)
+export async function apiFetch(path: string, init: ApiRequestInit = {}) {
+  const { suppressErrorToast = false, ...requestInit } = init
+  const headers = new Headers(requestInit.headers)
   headers.set('Content-Type', 'application/json')
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   let res: Response
   try {
-    res = await fetch(path, { ...init, headers })
+    res = await fetch(path, { ...requestInit, headers })
   } catch (error) {
     Sentry.captureException(error)
-    emitApiErrorToast('NETWORK_ERROR', 'Network request failed.')
+    if (!suppressErrorToast) emitApiErrorToast('NETWORK_ERROR', 'Network request failed.')
     throw error
   }
   const contentType = res.headers.get('content-type') || ''
@@ -137,23 +146,24 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     if (res.status >= 500) {
       Sentry.captureMessage(`API ${res.status} at ${path}: ${msg}`)
     }
-    throw createApiError(code, body)
+    throw createApiError(code, body, suppressErrorToast)
   }
 
   return body
 }
 
-export async function apiFormFetch(path: string, formData: FormData, init: RequestInit = {}) {
-  const headers = new Headers(init.headers)
+export async function apiFormFetch(path: string, formData: FormData, init: ApiRequestInit = {}) {
+  const { suppressErrorToast = false, ...requestInit } = init
+  const headers = new Headers(requestInit.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   let res: Response
   try {
-    res = await fetch(path, { ...init, method: init.method || 'POST', headers, body: formData })
+    res = await fetch(path, { ...requestInit, method: requestInit.method || 'POST', headers, body: formData })
   } catch (error) {
     Sentry.captureException(error)
-    emitApiErrorToast('NETWORK_ERROR', 'Network request failed.')
+    if (!suppressErrorToast) emitApiErrorToast('NETWORK_ERROR', 'Network request failed.')
     throw error
   }
   const contentType = res.headers.get('content-type') || ''
@@ -173,7 +183,7 @@ export async function apiFormFetch(path: string, formData: FormData, init: Reque
     if (res.status >= 500) {
       Sentry.captureMessage(`API ${res.status} at ${path}: ${msg}`)
     }
-    throw createApiError(code, body)
+    throw createApiError(code, body, suppressErrorToast)
   }
 
   return body
@@ -226,12 +236,22 @@ export async function getCurrentUser() {
   return apiFetch('/api/auth/me') as Promise<{ user: AuthUser }>
 }
 
+export async function getCurrentUserSilently() {
+  if (!hasSessionToken()) {
+    throw new Error('AUTH_TOKEN_MISSING')
+  }
+  return apiFetch('/api/auth/me', { suppressErrorToast: true }) as Promise<{ user: AuthUser }>
+}
+
 export async function getPushPublicKey() {
   return apiFetch('/api/notifications/push/public-key') as Promise<{ publicKey: string }>
 }
 
 export async function getPushSubscriptionStatus() {
-  return apiFetch('/api/notifications/push/status') as Promise<PushSubscriptionStatus>
+  if (!hasSessionToken()) {
+    return { subscribed: false }
+  }
+  return apiFetch('/api/notifications/push/status', { suppressErrorToast: true }) as Promise<PushSubscriptionStatus>
 }
 
 export async function savePushSubscription(subscription: PushSubscriptionJSON) {
@@ -292,6 +312,13 @@ export async function broadcastAdminNotification(payload: { title: string; body:
 
 export async function getMyPermissions() {
   return apiFetch('/api/permissions/my') as Promise<{ role: string; permissions: string[] }>
+}
+
+export async function getMyPermissionsSilently() {
+  if (!hasSessionToken()) {
+    throw new Error('AUTH_TOKEN_MISSING')
+  }
+  return apiFetch('/api/permissions/my', { suppressErrorToast: true }) as Promise<{ role: string; permissions: string[] }>
 }
 
 export type RecoveryCodeStatus = {
@@ -417,7 +444,7 @@ export async function updateLogoUrl(logoUrl: string) {
 }
 
 export async function getFaviconUrl() {
-  return apiFetch('/api/settings/favicon-url') as Promise<{ faviconUrl: string }>
+  return apiFetch('/api/settings/favicon-url', { suppressErrorToast: true }) as Promise<{ faviconUrl: string }>
 }
 
 export async function updateFaviconUrl(faviconUrl: string) {
@@ -428,7 +455,7 @@ export async function updateFaviconUrl(faviconUrl: string) {
 }
 
 export async function getAppleTouchIconUrl() {
-  return apiFetch('/api/settings/apple-touch-icon-url') as Promise<{ appleTouchIconUrl: string }>
+  return apiFetch('/api/settings/apple-touch-icon-url', { suppressErrorToast: true }) as Promise<{ appleTouchIconUrl: string }>
 }
 
 export async function updateAppleTouchIconUrl(appleTouchIconUrl: string) {
@@ -439,7 +466,7 @@ export async function updateAppleTouchIconUrl(appleTouchIconUrl: string) {
 }
 
 export async function getThemeColor() {
-  return apiFetch('/api/settings/theme-color') as Promise<{ themeColor: string }>
+  return apiFetch('/api/settings/theme-color', { suppressErrorToast: true }) as Promise<{ themeColor: string }>
 }
 
 export async function updateThemeColor(themeColor: string) {
@@ -460,7 +487,7 @@ export type PwaConfig = {
 }
 
 export async function getPwaConfig() {
-  return apiFetch('/api/settings/pwa-config') as Promise<{ config: PwaConfig; customized?: boolean }>
+  return apiFetch('/api/settings/pwa-config', { suppressErrorToast: true }) as Promise<{ config: PwaConfig; customized?: boolean }>
 }
 
 export async function updatePwaConfig(config: PwaConfig) {
@@ -506,7 +533,7 @@ export type HeaderIconConfigItem = {
 }
 
 export async function getHeaderIconConfig() {
-  return apiFetch('/api/settings/header-icon-config') as Promise<{ items: HeaderIconConfigItem[]; customized?: boolean }>
+  return apiFetch('/api/settings/header-icon-config', { suppressErrorToast: true }) as Promise<{ items: HeaderIconConfigItem[]; customized?: boolean }>
 }
 
 export async function updateHeaderIconConfig(items: HeaderIconConfigItem[]) {
@@ -785,6 +812,16 @@ export async function getBalanceHistory(userId?: number) {
   }>
 }
 
+export async function getBalanceHistorySilently(userId?: number) {
+  if (!hasSessionToken()) {
+    return { history: [] }
+  }
+  const q = userId != null ? `?userId=${userId}` : ''
+  return apiFetch(`/api/balance/history${q}`, { suppressErrorToast: true }) as Promise<{
+    history: { id: number; user_id: number; admin_id: number | null; type: string; currency: string; amount: number; note: string | null; created_at: string }[]
+  }>
+}
+
 export type WalletOverview = {
   total_assets: number
   by_currency: Record<string, number>
@@ -797,6 +834,37 @@ export type WalletOverview = {
 
 export async function getWalletOverview(currency = 'USDT') {
   return apiFetch(`/api/balance/overview?currency=${encodeURIComponent(currency)}`) as Promise<WalletOverview>
+}
+
+export async function getWalletOverviewSilently(currency = 'USDT') {
+  if (!hasSessionToken()) {
+    return {
+      total_assets: 0,
+      by_currency: {},
+      by_source: [],
+      main_balance: 0,
+      locked_balance: 0,
+      withdrawable_balance: 0,
+      withdraw_summary: {
+        currency,
+        current_balance: 0,
+        deposited_principal: 0,
+        locked_balance: 0,
+        earned_profit: 0,
+        withdrawable_balance: 0,
+        unlock_target_profit: 0,
+        remaining_profit_to_unlock: 0,
+        unlock_progress_pct: 0,
+        is_principal_unlocked: false,
+        requires_owner_approval: false,
+        unlock_ratio: 0,
+        minimum_profit_to_unlock: 0,
+        vip_level: 0,
+        force_unlock_principal: false,
+      },
+    } as WalletOverview
+  }
+  return apiFetch(`/api/balance/overview?currency=${encodeURIComponent(currency)}`, { suppressErrorToast: true }) as Promise<WalletOverview>
 }
 
 /** Wallet transaction history (source of truth: wallet_transactions) */
@@ -879,6 +947,24 @@ export async function getEarningHistory(opts?: {
   params.set('limit', String(opts?.limit ?? 100))
   if (opts?.grouped) params.set('grouped', '1')
   return apiFetch(`/api/balance/earning-history?${params}`) as Promise<{
+    entries: EarningEntry[]
+    grouped?: EarningGroup[]
+  }>
+}
+
+export async function getEarningHistorySilently(opts?: {
+  sourceType?: string
+  limit?: number
+  grouped?: boolean
+}) {
+  if (!hasSessionToken()) {
+    return { entries: [] as EarningEntry[] }
+  }
+  const params = new URLSearchParams()
+  if (opts?.sourceType) params.set('sourceType', opts.sourceType)
+  params.set('limit', String(opts?.limit ?? 100))
+  if (opts?.grouped) params.set('grouped', '1')
+  return apiFetch(`/api/balance/earning-history?${params}`, { suppressErrorToast: true }) as Promise<{
     entries: EarningEntry[]
     grouped?: EarningGroup[]
   }>
@@ -998,6 +1084,80 @@ export type DepositRequestItem = {
   user_phone?: string | null
   user_display_name?: string | null
   reviewed_by_name?: string | null
+  linked_offer_id?: number | null
+  linked_offer_title?: string | null
+  linked_offer_percentage?: number | null
+  offer_claim_status?: 'pending' | 'awarded' | 'expired' | 'rejected' | null
+  offer_reward_amount?: number | null
+  offer_reward_status?: 'pending' | 'bonus_locked' | 'withdrawable' | 'transferred' | 'none' | null
+  offer_eligibility_code?: string | null
+}
+
+export type DepositOfferState = 'active' | 'upcoming' | 'expired' | 'claimed'
+
+export type DepositOffer = {
+  id: number
+  offerId: number
+  offerKey: string
+  title: string
+  teaserText: string
+  headline: string
+  urgencyText: string
+  minimumDeposit: number
+  maximumDeposit: number | null
+  rewardPercentage: number
+  rewardType: 'deposit_bonus' | string
+  startsAt?: string | null
+  endsAt?: string | null
+  remainingSeconds: number | null
+  isActive: boolean
+  claimRule: string
+  maxClaimsPerUser: number | null
+  maxRewardAmount: number | null
+  sortOrder: number
+  state: DepositOfferState
+  userClaimCount: number
+  awardedClaimCount: number
+  pendingClaimCount: number
+}
+
+export type DepositReward = {
+  rewardAmount: number
+  rewardPercentage: number
+  rewardStatus: string
+}
+
+export type OfferClaimRecord = {
+  id: number
+  offer_id: number
+  deposit_request_id: number | null
+  wallet_transaction_id: number | null
+  reward_entry_id: number | null
+  reward_amount: number
+  reward_percentage: number
+  deposit_amount: number
+  claim_status: 'pending' | 'awarded' | 'expired' | 'rejected'
+  eligibility_code: string | null
+  reward_status: string
+  created_at: string
+  updated_at: string
+  offer_title: string
+  offer_headline?: string | null
+  minimum_deposit?: number
+  maximum_deposit?: number | null
+  deposit_status?: string | null
+}
+
+export type RewardLedgerEntry = {
+  id: number
+  source_type: string
+  reference_type: string
+  reference_id: number
+  currency: string
+  amount: number
+  status: string
+  payout_mode?: string
+  created_at?: string
 }
 
 export type WithdrawalRequestItem = {
@@ -1223,6 +1383,14 @@ export async function createDepositRequest(formData: FormData) {
   return body as { ok: boolean; requestId: number; status: BalanceRequestStatus }
 }
 
+export async function getDepositOffers() {
+  return apiFetch('/api/balance/deposit-offers') as Promise<{ items: DepositOffer[] }>
+}
+
+export async function getDepositOfferHistory() {
+  return apiFetch('/api/balance/deposit-offers/history') as Promise<{ items: OfferClaimRecord[] }>
+}
+
 export async function createWithdrawalRequest(payload: {
   amount: number
   currency?: string
@@ -1326,7 +1494,7 @@ export type HomeLeaderboardConfig = {
 }
 
 export async function getHomeLeaderboardConfig() {
-  return apiFetch('/api/settings/home-leaderboard') as Promise<{ config: HomeLeaderboardConfig }>
+  return apiFetch('/api/settings/home-leaderboard', { suppressErrorToast: true }) as Promise<{ config: HomeLeaderboardConfig }>
 }
 
 export async function updateHomeLeaderboardConfig(config: HomeLeaderboardConfig) {

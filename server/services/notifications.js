@@ -190,6 +190,23 @@ const notificationTemplates = {
       body: ({ amount, currency }) => `Ilk yatirim bonusunuz hesabiniza eklendi: +${formatAmount(amount)} ${currency}.`,
     },
   },
+  deposit_offer_bonus: {
+    en: {
+      title: 'Deposit Offer Activated',
+      body: ({ amount, currency, percentage }) =>
+        `Your limited-time deposit offer was granted: +${formatAmount(amount)} ${currency} (${formatAmount(percentage)}%).`,
+    },
+    ar: {
+      title: 'تم تفعيل عرض الإيداع',
+      body: ({ amount, currency, percentage }) =>
+        `تمت إضافة مكافأة عرض الإيداع المحدود: +${formatAmount(amount)} ${currency} (${formatAmount(percentage)}%).`,
+    },
+    tr: {
+      title: 'Yatirim Teklifi Etkinlestirildi',
+      body: ({ amount, currency, percentage }) =>
+        `Sinirli sureli yatirim teklifiniz eklendi: +${formatAmount(amount)} ${currency} (%${formatAmount(percentage)}).`,
+    },
+  },
   verification_approved: {
     en: {
       title: 'Verification Approved',

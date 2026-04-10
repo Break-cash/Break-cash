@@ -1178,3 +1178,45 @@ export async function createFirstDepositBonusReward(db, opts) {
     sourceType: 'deposits',
   })
 }
+
+/**
+ * Create a deposit-offer bonus reward through the unified earning pipeline.
+ */
+export async function createDepositOfferBonusReward(db, opts) {
+  const { userId, amount, claimId, currency = 'USDT' } = opts
+  if (!userId || !Number.isFinite(amount) || amount <= 0 || !claimId) throw new Error('INVALID_INPUT')
+  const earningResult = await createEarningEntry(db, {
+    userId,
+    sourceType: 'deposits',
+    referenceType: 'deposit_offer_bonus',
+    referenceId: claimId,
+    currency,
+    amount,
+  })
+  const entryId =
+    earningResult?.id ??
+    (await get(
+      db,
+      `SELECT id
+       FROM earning_entries
+       WHERE source_type = 'deposits'
+         AND reference_type = 'deposit_offer_bonus'
+         AND reference_id = ?
+       LIMIT 1`,
+      [claimId],
+    ))?.id
+  if (!entryId) throw new Error('EARNING_ENTRY_FAILED')
+  const transfer = await finalizeRewardTransfer(db, {
+    userId,
+    currency,
+    entryId,
+    idempotencyKey: `deposit_offer_bonus_${claimId}`,
+    sourceType: 'deposits',
+  })
+  return {
+    earningEntryId: entryId,
+    walletTxnId: transfer?.walletTxnId || null,
+    balanceAfter: transfer?.balanceAfter || (await getTotalMainBalance(db, userId, currency)),
+    payoutMode: transfer?.payoutMode || 'bonus_locked',
+  }
+}

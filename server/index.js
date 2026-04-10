@@ -26,6 +26,7 @@ import { createMiningRouter } from './routes/mining.js'
 import { createRewardsRouter } from './routes/rewards.js'
 import { createAdsRouter } from './routes/ads.js'
 import { createSupportRouter } from './routes/support.js'
+import { createArenaRouter } from './routes/arena.js'
 import { getUploadStorageKey, getUploadedAssetByKey } from './services/uploaded-assets.js'
 import { backfillUploadedAssets } from './services/upload-backfill.js'
 import { migrateUploadReferences } from './services/upload-reference-migration.js'
@@ -263,6 +264,7 @@ async function bootstrap() {
   app.use('/api/rewards', createRewardsRouter(db))
   app.use('/api/ads', createAdsRouter(db))
   app.use('/api/support', createSupportRouter(db))
+  app.use('/api/arena', createArenaRouter(db))
 
   app.get('/manifest.json', async (_req, res) => {
     const defaults = {

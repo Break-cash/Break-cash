@@ -45,6 +45,429 @@
   --gradient-card: linear-gradient(135deg, rgba(17,24,39,0.96) 0%, rgba(11,17,32,0.98) 55%, rgba(15,23,42,0.96) 100%);
 }
 
+:root {
+  --bg-app: #07111F;
+  --bg-app-secondary: #0B1728;
+  --bg-app-tertiary: #0E1C2E;
+
+  --surface-1: #0B1728;
+  --surface-2: #102033;
+  --surface-3: #13263D;
+  --surface-4: #182D47;
+
+  --text-primary: #F5F7FB;
+  --text-secondary: #AAB6C7;
+  --text-muted: #6E7C91;
+  --text-inverse: #07111F;
+  --text-disabled: #6E7C91;
+
+  --accent-gold: #F4C54C;
+  --accent-gold-hover: #FFD76A;
+  --accent-gold-pressed: #D6A93B;
+  --accent-purple: #7C5CFF;
+  --accent-purple-hover: #9478FF;
+  --accent-purple-deep: #5C3FE0;
+  --accent-cyan: #39D0FF;
+  --accent-cyan-soft: #8BE7FF;
+  --success: #2ED47A;
+  --warning: #FFB84D;
+  --error: #FF5F6D;
+  --info: #39D0FF;
+
+  --border-subtle: #1E334D;
+  --border-strong: #2A4566;
+  --divider: rgba(255, 255, 255, 0.08);
+
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.28);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow-gold: 0 0 24px rgba(244, 197, 76, 0.22);
+  --shadow-purple: 0 0 24px rgba(124, 92, 255, 0.20);
+  --shadow-cyan: 0 0 24px rgba(57, 208, 255, 0.16);
+
+  --radius-xs: 10px;
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  --bg-base: var(--bg-app);
+  --bg-surface: var(--surface-1);
+  --bg-card: var(--surface-2);
+  --bg-elevated: var(--surface-3);
+  --accent-blue: var(--accent-purple);
+  --accent-blue-soft: var(--accent-purple-hover);
+  --accent-emerald: var(--success);
+  --accent-emerald-soft: #55E39C;
+  --accent-amber: var(--accent-gold);
+  --accent-red: var(--error);
+  --border-soft: var(--divider);
+  --border-blue: rgba(124, 92, 255, 0.45);
+  --border-green: rgba(46, 212, 122, 0.35);
+  --glow-blue: var(--shadow-purple);
+  --glow-green: 0 0 20px rgba(46, 212, 122, 0.10);
+  --gradient-page: linear-gradient(180deg, var(--bg-app) 0%, var(--bg-app-secondary) 100%);
+  --gradient-card: linear-gradient(135deg, var(--surface-3) 0%, #0F2136 100%);
+}
+
+html,
+body,
+.app-shell {
+  background:
+    radial-gradient(circle at top right, rgba(124, 92, 255, 0.10), transparent 22%),
+    radial-gradient(circle at top left, rgba(57, 208, 255, 0.08), transparent 18%),
+    linear-gradient(180deg, var(--bg-app) 0%, var(--bg-app-secondary) 100%);
+  color: var(--text-primary);
+}
+
+.card {
+  background: linear-gradient(180deg, var(--surface-3) 0%, #0F2136 100%);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-lg);
+}
+
+.card-muted {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+  border-radius: var(--radius-lg);
+}
+
+.card-elevated {
+  background: linear-gradient(180deg, var(--surface-4) 0%, #11263C 100%);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-xl);
+}
+
+.hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(124, 92, 255, 0.18), transparent 32%),
+    radial-gradient(circle at center left, rgba(57, 208, 255, 0.10), transparent 24%),
+    linear-gradient(180deg, #16304C 0%, #10243A 100%);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-xl);
+}
+
+.portfolio-layout-main {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100dvh;
+  padding: 0 0 calc(88px + env(safe-area-inset-bottom));
+}
+
+.portfolio-layout-content {
+  width: 100%;
+}
+
+.portfolio-screen-host {
+  min-height: calc(100dvh - 88px);
+  background:
+    radial-gradient(circle at 14% -8%, rgba(56, 189, 248, 0.13), transparent 30%),
+    radial-gradient(circle at 86% -4%, rgba(245, 166, 35, 0.11), transparent 20%),
+    linear-gradient(180deg, #0b1020, #0a0d18);
+}
+
+.mobile-bottom-nav-modern {
+  position: fixed;
+  inset-inline: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 60;
+  padding-inline: 11px;
+  pointer-events: none;
+}
+
+.mobile-bottom-nav-modern__inner {
+  width: min(100%, 384px);
+  margin: 0 auto;
+  background: linear-gradient(180deg, rgba(19, 23, 36, 0.98), rgba(10, 13, 22, 0.98));
+  border: 1px solid rgba(68, 75, 98, 0.72);
+  border-radius: 22px;
+  min-height: 64px;
+  box-shadow: 0 18px 28px rgba(0, 0, 0, 0.34);
+  pointer-events: auto;
+}
+
+.mobile-bottom-nav-modern__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: end;
+  padding: 9px 7px 7px;
+}
+
+.mobile-bottom-nav-modern__item {
+  color: #8b94a7;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.mobile-bottom-nav-modern__icon-wrap {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mobile-bottom-nav-modern__label {
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.mobile-bottom-nav-modern__item.is-active {
+  color: #f7bf43;
+}
+
+.mobile-bottom-nav-modern__item.is-active .mobile-bottom-nav-modern__icon-wrap {
+  border-color: rgba(212, 174, 82, 0.34);
+  background: rgba(212, 174, 82, 0.1);
+  box-shadow: 0 0 14px rgba(212, 174, 82, 0.1);
+}
+
+.mobile-bottom-nav-modern__item--featured {
+  transform: translateY(-13px);
+}
+
+.mobile-bottom-nav-modern__item--featured .mobile-bottom-nav-modern__icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(212, 174, 82, 0.5);
+  background: linear-gradient(180deg, rgba(29, 34, 50, 0.98), rgba(15, 18, 31, 0.98));
+  color: var(--accent-gold);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.3);
+}
+
+.app-secondary-page {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.app-secondary-hero,
+.app-secondary-page > section:first-child,
+.app-secondary-card,
+.app-secondary-card-stack > * {
+  border: 1px solid rgba(52, 64, 95, 0.76);
+  background:
+    radial-gradient(circle at top left, rgba(44, 159, 245, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(14, 22, 38, 0.96), rgba(11, 17, 29, 0.98));
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+.app-secondary-hero {
+  border-radius: 28px;
+  padding: 20px;
+}
+
+.app-secondary-hero__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-secondary-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: #dff3ff;
+  border: 1px solid rgba(94, 168, 255, 0.18);
+  background: rgba(94, 168, 255, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-secondary-hero h1 {
+  margin: 14px 0 0;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.app-secondary-hero p {
+  margin: 8px 0 0;
+  color: #a8b2c7;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.app-secondary-hero__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.app-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(247, 191, 67, 0.32);
+  background: rgba(247, 191, 67, 0.08);
+  color: #fff5d8;
+  text-decoration: none;
+}
+
+.app-secondary-action--ghost {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #dce7fb;
+}
+
+.app-secondary-card-stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.app-secondary-card {
+  border-radius: 22px;
+  padding: 16px;
+}
+
+.notifications-page__item {
+  border-radius: 20px;
+}
+
+.notifications-page__item.is-unread {
+  border-color: rgba(247, 191, 67, 0.28);
+}
+
+.notifications-page__item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  color: #fff;
+}
+
+.notifications-page__item-head span,
+.notifications-page__item p {
+  color: #a8b2c7;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (min-width: 1024px) {
+  .mobile-bottom-nav-modern__inner {
+    width: min(100%, 720px);
+  }
+}
+
+/* App-wide visual system overrides */
+.portfolio-screen-host {
+  min-height: calc(100dvh - 88px);
+  background:
+    radial-gradient(circle at 14% -8%, rgba(124, 92, 255, 0.16), transparent 30%),
+    radial-gradient(circle at 86% -4%, rgba(57, 208, 255, 0.12), transparent 22%),
+    radial-gradient(circle at 52% 16%, rgba(244, 197, 76, 0.08), transparent 18%),
+    linear-gradient(180deg, var(--bg-app) 0%, var(--bg-app-secondary) 58%, #08111d 100%);
+}
+
+.portfolio-screen-host .app-home__hero,
+.portfolio-screen-host .app-home__promo-card,
+.portfolio-screen-host .app-home__summary-card,
+.portfolio-screen-host .app-home__progress-card,
+.portfolio-screen-host .app-home__stats-bar {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-card), var(--shadow-purple), var(--shadow-inner);
+}
+
+.portfolio-screen-host .app-home__hero {
+  background:
+    radial-gradient(circle at top right, rgba(124, 92, 255, 0.2), transparent 30%),
+    radial-gradient(circle at center left, rgba(57, 208, 255, 0.14), transparent 22%),
+    linear-gradient(180deg, #16304C 0%, #10243A 100%);
+}
+
+.portfolio-screen-host .app-home__promo-card {
+  background:
+    radial-gradient(circle at top left, rgba(57, 208, 255, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(124, 92, 255, 0.14), transparent 24%),
+    linear-gradient(180deg, #112238 0%, #0d1c2e 100%);
+}
+
+.app-secondary-page {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at top right, rgba(124, 92, 255, 0.07), transparent 20%),
+    radial-gradient(circle at top left, rgba(57, 208, 255, 0.05), transparent 16%);
+}
+
+.app-secondary-hero,
+.app-secondary-page > section:first-child,
+.app-secondary-card,
+.app-secondary-card-stack > *,
+.app-secondary-page .glass-panel,
+.app-secondary-page .glass-panel-soft {
+  border-color: var(--border-subtle);
+  background:
+    radial-gradient(circle at top left, rgba(57, 208, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, rgba(16, 32, 51, 0.94), rgba(11, 23, 40, 0.96));
+  box-shadow: var(--shadow-soft);
+}
+
+.app-secondary-page .wallet-action-btn.wallet-action-deposit,
+.app-secondary-page .action-button,
+.app-secondary-page .login-submit {
+  background: linear-gradient(180deg, var(--accent-gold-hover) 0%, var(--accent-gold) 55%, var(--accent-gold-pressed) 100%) !important;
+  color: var(--text-inverse) !important;
+  border-color: transparent !important;
+  box-shadow: var(--shadow-gold) !important;
+}
+
+.app-secondary-page .wallet-action-btn.wallet-action-withdraw {
+  background: linear-gradient(180deg, #ff8a94, var(--error)) !important;
+  border-color: rgba(255, 95, 109, 0.34) !important;
+  color: #fff !important;
+}
+
+.login-wrapper {
+  min-height: calc(100vh - 80px);
+  background:
+    radial-gradient(circle at top center, rgba(124, 92, 255, 0.1), transparent 24%),
+    linear-gradient(180deg, var(--bg-app) 0%, var(--bg-app-secondary) 100%);
+}
+
+.login-card {
+  background:
+    linear-gradient(180deg, rgba(18, 37, 58, 0.94), rgba(15, 32, 51, 0.96)),
+    #0f2033 !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: var(--shadow-card) !important;
+  border-radius: 24px !important;
+}
+
+.login-submit {
+  background: linear-gradient(180deg, var(--accent-gold-hover) 0%, var(--accent-gold) 55%, var(--accent-gold-pressed) 100%) !important;
+  color: var(--text-inverse) !important;
+  box-shadow: var(--shadow-gold) !important;
+}
+
+.login-lang-btn.active,
+.login-badge,
+.header-badge,
+.badge-gold {
+  background: rgba(244, 197, 76, 0.14) !important;
+  color: var(--accent-gold) !important;
+  border-color: rgba(244, 197, 76, 0.24) !important;
+}
+
 html,
 body,
 #root {
@@ -2873,6 +3296,318 @@ button {
   .login-trust-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Inner page harmonization: wallet / deposit / support / notifications */
+.wallet-page-v3,
+.support-page-v3,
+.notifications-page,
+.deposit-page.app-secondary-page {
+  width: min(100%, 390px);
+  margin: 0 auto;
+  padding-inline: 13px;
+  padding-top: 8px;
+  padding-bottom: calc(98px + env(safe-area-inset-bottom));
+}
+
+.wallet-page-v3 > section:first-child,
+.support-page-v3 > section:first-child,
+.notifications-page > section:first-child,
+.deposit-page.app-secondary-page > section:first-of-type {
+  border-radius: 24px !important;
+  padding: 16px !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.wallet-page-v3 h1,
+.support-page-v3 h1,
+.notifications-page h1 {
+  font-size: 24px !important;
+  line-height: 1.15 !important;
+}
+
+.wallet-page-v3 p,
+.support-page-v3 p,
+.notifications-page p {
+  line-height: 1.6;
+}
+
+.wallet-page-v3 .action-button,
+.wallet-page-v3 .wallet-action-btn,
+.deposit-page.app-secondary-page .wallet-action-btn,
+.support-page-v3 .action-button,
+.notifications-page .app-secondary-action {
+  min-height: 42px !important;
+  border-radius: 14px !important;
+  font-size: 13px !important;
+}
+
+.wallet-page-v3 .glass-panel,
+.wallet-page-v3 .glass-panel-soft,
+.support-page-v3 .elite-panel,
+.notifications-page .app-secondary-card,
+.deposit-page.app-secondary-page .deposit-section,
+.deposit-page.app-secondary-page .deposit-promo-banner,
+.deposit-page.app-secondary-page .deposit-tiers {
+  border-radius: 20px !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.wallet-page-v3 .glass-panel,
+.wallet-page-v3 .glass-panel-soft,
+.support-page-v3 .elite-panel,
+.notifications-page .app-secondary-card {
+  border-color: var(--border-subtle) !important;
+  background:
+    radial-gradient(circle at top left, rgba(57, 208, 255, 0.04), transparent 24%),
+    linear-gradient(180deg, rgba(16, 32, 51, 0.94), rgba(11, 23, 40, 0.96)) !important;
+}
+
+.wallet-page-v3 .glass-tab {
+  min-height: 42px;
+  font-size: 12px !important;
+  border-radius: 14px !important;
+}
+
+.wallet-page-v3 .glass-panel.rounded-2xl,
+.wallet-page-v3 .glass-panel.overflow-hidden,
+.wallet-page-v3 .glass-panel.flex,
+.support-page-v3 .elite-panel.rounded-\[24px\],
+.notifications-page .app-secondary-card {
+  padding: 14px !important;
+}
+
+.wallet-page-v3 .text-lg,
+.support-page-v3 .text-lg {
+  font-size: 16px !important;
+}
+
+.wallet-page-v3 .text-sm,
+.support-page-v3 .text-sm,
+.notifications-page .app-secondary-card p,
+.notifications-page .app-secondary-hero p {
+  font-size: 13px !important;
+}
+
+.support-page-v3 .field-input,
+.deposit-page.app-secondary-page .field-input,
+.deposit-page.app-secondary-page .deposit-wallet-input,
+.deposit-page.app-secondary-page .deposit-owner-input {
+  min-height: 44px;
+  border-radius: 14px !important;
+  background: rgba(14, 29, 47, 0.9) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.support-page-v3 textarea.field-input,
+.deposit-page.app-secondary-page textarea.field-input {
+  min-height: 132px;
+}
+
+.support-page-v3 .login-success,
+.support-page-v3 .login-error {
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+.notifications-page .app-secondary-hero__actions {
+  gap: 8px;
+}
+
+.notifications-page .app-secondary-card-stack {
+  gap: 12px;
+}
+
+.notifications-page__item-head {
+  margin-bottom: 6px;
+}
+
+.notifications-page__item-head strong {
+  font-size: 14px;
+}
+
+.notifications-page__item-head span,
+.notifications-page__item p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.deposit-page.app-secondary-page {
+  gap: 12px;
+}
+
+.deposit-page.app-secondary-page .deposit-back {
+  display: none;
+}
+
+.deposit-page.app-secondary-page .deposit-promo-banner {
+  margin-bottom: 0 !important;
+  overflow: hidden;
+}
+
+.deposit-page.app-secondary-page .deposit-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.deposit-page.app-secondary-page .deposit-logo-wrap {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.deposit-page.app-secondary-page .deposit-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.deposit-page.app-secondary-page .deposit-title {
+  font-size: 20px;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.deposit-page.app-secondary-page .deposit-section {
+  padding: 14px;
+}
+
+.deposit-page.app-secondary-page .deposit-section-title {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.deposit-page.app-secondary-page .deposit-welcome,
+.deposit-page.app-secondary-page .deposit-wallet-value,
+.deposit-page.app-secondary-page .deposit-network-note-hint,
+.deposit-page.app-secondary-page .deposit-network-note-value {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.deposit-page.app-secondary-page .deposit-wallet-display,
+.deposit-page.app-secondary-page .deposit-network-note {
+  border-radius: 16px;
+}
+
+.deposit-page.app-secondary-page .deposit-copy-btn,
+.deposit-page.app-secondary-page .deposit-wallet-save,
+.deposit-page.app-secondary-page .deposit-owner-save,
+.deposit-page.app-secondary-page .deposit-proof-help-btn,
+.deposit-page.app-secondary-page .deposit-terms-link,
+.deposit-page.app-secondary-page .deposit-terms-close {
+  border-radius: 14px !important;
+  min-height: 40px;
+}
+
+.deposit-page.app-secondary-page .deposit-tier {
+  min-height: 78px;
+  border-radius: 18px;
+}
+
+.deposit-page.app-secondary-page .deposit-tier-amount {
+  font-size: 18px;
+}
+
+@media (min-width: 768px) {
+  .wallet-page-v3,
+  .support-page-v3,
+  .notifications-page,
+  .deposit-page.app-secondary-page {
+    width: min(100%, 720px);
+    padding-inline: 24px;
+    padding-top: 16px;
+  }
+}
+
+/* Mining page color harmonization */
+.mining-page-v3 .mining-subscribe-card,
+.mining-page-v3 .mining-wallet-card,
+.mining-page-v3 .rounded-2xl.border.border-app-border.bg-app-card {
+  border-color: rgba(42, 69, 102, 0.64);
+  background:
+    linear-gradient(180deg, rgba(18, 33, 52, 0.98), rgba(13, 26, 41, 0.98)) !important;
+  box-shadow: var(--shadow-soft);
+}
+
+.mining-page-v3 .mining-subscribe-card--energized,
+.mining-page-v3 .mining-wallet-card--active,
+.mining-page-v3 .mining-summary-live {
+  box-shadow:
+    var(--shadow-soft),
+    0 0 18px rgba(124, 92, 255, 0.08);
+}
+
+.mining-page-v3 .owner-set-btn {
+  background:
+    linear-gradient(180deg, rgba(23, 39, 60, 0.96), rgba(16, 29, 46, 0.98)) !important;
+  border: 1px solid rgba(42, 69, 102, 0.72) !important;
+  color: var(--text-secondary) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(0, 0, 0, 0.16) !important;
+}
+
+.mining-page-v3 .owner-set-btn:hover,
+.mining-page-v3 .owner-set-btn:focus-visible {
+  color: var(--text-primary) !important;
+  border-color: rgba(124, 92, 255, 0.24) !important;
+}
+
+.mining-page-v3 .rounded-xl.border.border-brand-blue\/40.bg-brand-blue,
+.mining-page-v3 .rounded-lg.bg-brand-blue,
+.mining-page-v3 .wallet-action-btn.wallet-action-deposit,
+.mining-page-v3 .action-button-deposit {
+  background:
+    linear-gradient(180deg, rgba(255, 215, 106, 0.98), rgba(244, 197, 76, 0.96) 58%, rgba(214, 169, 59, 0.94) 100%) !important;
+  border-color: rgba(244, 197, 76, 0.26) !important;
+  color: var(--text-inverse) !important;
+  box-shadow: 0 10px 20px rgba(244, 197, 76, 0.14) !important;
+}
+
+.mining-page-v3 .rounded-xl.border.border-brand-blue\/40.bg-brand-blue:hover,
+.mining-page-v3 .rounded-lg.bg-brand-blue:hover,
+.mining-page-v3 .wallet-action-btn.wallet-action-deposit:hover,
+.mining-page-v3 .action-button-deposit:hover {
+  filter: brightness(1.03);
+}
+
+.mining-page-v3 .wallet-action-btn.wallet-action-withdraw,
+.mining-page-v3 .action-button-withdraw {
+  background:
+    linear-gradient(180deg, rgba(164, 97, 110, 0.94), rgba(133, 73, 84, 0.96)) !important;
+  border-color: rgba(186, 108, 122, 0.24) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 16px rgba(150, 83, 96, 0.12) !important;
+}
+
+.mining-page-v3 .field-input {
+  background: #0e1d2f;
+  border-color: rgba(42, 69, 102, 0.68);
+}
+
+.mining-page-v3 .text-brand-blue {
+  color: var(--accent-gold) !important;
+}
+
+.mining-page-v3 .text-positive {
+  color: #7dd9a4 !important;
+}
+
+.mining-page-v3 .mining-activation-beam {
+  opacity: 0.64;
+  filter: saturate(0.72) hue-rotate(-10deg);
+}
+
+.mining-page-v3 .mining-activation-ripple,
+.mining-page-v3 .mining-activation-particle,
+.mining-page-v3 .mining-subscribe-sheen,
+.mining-page-v3 .mining-wallet-badge {
+  filter: saturate(0.76);
 }
 
 @media (max-width: 520px) {
@@ -7043,6 +7778,250 @@ button:focus-visible,
 
 .deposit-promo-banner + section {
   margin-top: 2px;
+}
+
+.deposit-offers-section {
+  display: grid;
+  gap: 14px;
+}
+
+.deposit-offers-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deposit-offers-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.deposit-offers-badge {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 197, 76, 0.22);
+  background: rgba(244, 197, 76, 0.1);
+  color: var(--accent-gold);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.deposit-offers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.deposit-offer-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  text-align: right;
+  border-radius: 18px;
+  border: 1px solid var(--border-subtle);
+  background:
+    radial-gradient(circle at top left, rgba(244, 197, 76, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(19, 38, 61, 0.96), rgba(10, 23, 39, 0.98));
+  box-shadow: var(--shadow-soft);
+  color: var(--text-primary);
+}
+
+.deposit-offer-selected {
+  border-color: rgba(244, 197, 76, 0.36);
+  box-shadow: var(--shadow-gold);
+}
+
+.deposit-offer-card-top,
+.deposit-offer-title-row,
+.deposit-offer-meta,
+.deposit-offer-modal-metrics,
+.deposit-offer-modal-actions,
+.deposit-offer-selected-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.deposit-offer-percent {
+  color: var(--accent-gold);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.deposit-offer-timer,
+.deposit-offer-pill {
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.deposit-offer-timer {
+  background: rgba(124, 92, 255, 0.12);
+  color: var(--text-primary);
+  border: 1px solid rgba(124, 92, 255, 0.22);
+}
+
+.deposit-offer-pill-active {
+  background: rgba(46, 212, 122, 0.14);
+  color: var(--success);
+  border: 1px solid rgba(46, 212, 122, 0.22);
+}
+
+.deposit-offer-pill-claimed {
+  background: rgba(57, 208, 255, 0.12);
+  color: var(--info);
+  border: 1px solid rgba(57, 208, 255, 0.22);
+}
+
+.deposit-offer-pill-expired {
+  background: rgba(255, 95, 109, 0.14);
+  color: var(--error);
+  border: 1px solid rgba(255, 95, 109, 0.24);
+}
+
+.deposit-offer-pill-upcoming {
+  background: rgba(255, 184, 77, 0.14);
+  color: var(--warning);
+  border: 1px solid rgba(255, 184, 77, 0.24);
+}
+
+.deposit-offer-teaser {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.deposit-offer-title-row strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.deposit-offer-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.deposit-offer-selected-banner {
+  align-items: flex-start;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(244, 197, 76, 0.24);
+  background: rgba(244, 197, 76, 0.08);
+}
+
+.deposit-offer-selected-banner strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.deposit-offer-selected-banner p,
+.deposit-offer-selected-banner small {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.deposit-offer-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.deposit-offer-modal {
+  width: min(100%, 390px);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top center, rgba(244, 197, 76, 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(18, 37, 58, 0.98), rgba(14, 28, 45, 0.98));
+}
+
+.deposit-offer-modal-badge {
+  width: fit-content;
+  min-height: 30px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(244, 197, 76, 0.14);
+  color: var(--accent-gold);
+  border: 1px solid rgba(244, 197, 76, 0.24);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.deposit-offer-modal-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.deposit-offer-modal-urgency,
+.deposit-offer-modal-copy,
+.deposit-offer-modal-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.deposit-offer-modal-urgency {
+  color: #ffd9a1;
+}
+
+.deposit-offer-modal-metric {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(11, 23, 40, 0.84);
+  border: 1px solid var(--border-subtle);
+}
+
+.deposit-offer-modal-metric span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.deposit-offer-modal-metric strong {
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+@media (max-width: 640px) {
+  .deposit-offers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deposit-offers-head,
+  .deposit-offer-modal-metrics,
+  .deposit-offer-modal-actions,
+  .deposit-offer-selected-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .deposit-offers-badge {
+    width: fit-content;
+  }
 }
 
 @media (max-width: 640px) {

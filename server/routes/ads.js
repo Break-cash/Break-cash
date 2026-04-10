@@ -6,6 +6,7 @@ import { all, get, run } from '../db.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
 const GLOBAL_PROMOTED_AD_ITEMS = [
@@ -146,7 +147,7 @@ async function ensurePromotedAdsPersisted(db) {
 
 export function createAdsRouter(db) {
   const router = Router()
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const adsDir = path.join(uploadsRoot, 'ads')
   fs.mkdirSync(adsDir, { recursive: true })
 

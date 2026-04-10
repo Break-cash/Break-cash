@@ -14,6 +14,7 @@ import {
 } from '../services/wallet-service.js'
 import { createLocalizedNotification } from '../services/notifications.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 import { getVipRuntimeRules, normalizeVipTierConfig } from '../services/vip-rules.js'
 
 const MINING_PERMISSION = 'تعدين'
@@ -270,7 +271,7 @@ export function createMiningRouter(db) {
   const router = Router()
   router.use(requireAuth(db))
 
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const miningMediaDir = path.join(uploadsRoot, 'mining-media')
   fs.mkdirSync(miningMediaDir, { recursive: true })
   const uploadMedia = multer({

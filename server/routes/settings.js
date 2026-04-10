@@ -7,6 +7,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import { hasPermission } from '../services/permissions.js'
 import { persistUploadedAsset, toUploadPublicUrl } from '../services/uploaded-assets.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const DEFAULT_BRAND_LOGO_URL = '/break-cash-logo-premium.png'
 const HOME_LEADERBOARD_AVATAR_KEYS = ['leaderboard_first_avatar', 'leaderboard_second_avatar', 'leaderboard_third_avatar']
@@ -29,7 +30,7 @@ const asyncRoute = (handler) => async (req, res) => {
 
 export function createSettingsRouter(db) {
   const router = Router()
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const settingsImagesDir = path.join(uploadsRoot, 'settings')
   fs.mkdirSync(settingsImagesDir, { recursive: true })
 

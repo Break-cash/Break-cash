@@ -110,7 +110,7 @@ export function WalletPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
+    <div className="app-secondary-page wallet-page-v3 mx-auto max-w-2xl px-4 pb-24 pt-4">
       <section className="mb-6 overflow-hidden rounded-[28px] border border-brand-blue/20 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_28%),linear-gradient(135deg,rgba(6,13,24,0.96),rgba(10,18,32,0.92))] p-5 shadow-[0_22px_52px_rgba(2,8,20,0.32)]">
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200"><BadgeCheck size={14} /><span>{language === 'ar' ? 'المحفظة الرسمية' : language === 'tr' ? 'Resmi cuzdan' : 'Official wallet'}</span></div>
         <h1 className="mt-4 text-3xl font-black tracking-tight text-white">{t('wallet_overview_title')}</h1>

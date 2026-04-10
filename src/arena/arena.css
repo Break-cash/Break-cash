@@ -1,0 +1,1161 @@
+.arena-page {
+  --arena-max-width: 390px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 16px 16px calc(82px + 48px);
+}
+
+.arena-page__frame {
+  width: min(100%, var(--arena-max-width));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.arena-page--reference .arena-page__frame {
+  gap: 14px;
+}
+
+.arena-card {
+  border-radius: 20px;
+  border: 1px solid #1e334d;
+  background: linear-gradient(180deg, #102033 0%, #13263d 100%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}
+
+.arena-card--hero {
+  min-height: 220px;
+  padding: 18px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(244, 197, 76, 0.12), transparent 24%),
+    radial-gradient(circle at 10% 10%, rgba(124, 92, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, #16304c 0%, #10243a 100%);
+}
+
+.arena-page__topbar,
+.arena-section__head,
+.arena-hero__meta,
+.arena-asset-row,
+.arena-screen__header,
+.arena-wallet-card__row,
+.arena-wallet-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.arena-page__topbar--reference {
+  gap: 10px;
+}
+
+.arena-page__topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.arena-page__chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.arena-chip,
+.arena-page__summary {
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #1e334d;
+  background: rgba(16, 32, 51, 0.94);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #f5f7fb;
+  gap: 8px;
+}
+
+.arena-page__summary {
+  min-width: 0;
+  gap: 10px;
+}
+
+.arena-page__summary--avatar-only {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 16px;
+}
+
+.arena-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(244, 197, 76, 0.18), rgba(124, 92, 255, 0.2));
+  border: 1px solid rgba(244, 197, 76, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f4c54c;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.arena-avatar--sm {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+
+.arena-page__summary-copy,
+.arena-asset-copy,
+.arena-round-item__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.arena-page__summary-copy strong,
+.arena-asset-copy strong,
+.arena-round-item__copy strong,
+.arena-leaderboard__item strong {
+  display: block;
+  font-size: 16px;
+  color: #f5f7fb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arena-page__summary-copy span,
+.arena-asset-copy span,
+.arena-round-item__copy span,
+.arena-leaderboard__item span,
+.arena-caption,
+.arena-muted-meta {
+  display: block;
+  font-size: 12px;
+  color: #aab6c7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arena-page__icon-btn,
+.arena-screen__icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  border: 1px solid #1e334d;
+  background: #13263d;
+  color: #f5f7fb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.arena-screen__icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+}
+
+.arena-screen__icon-btn--sm {
+  width: 36px;
+  height: 36px;
+}
+
+.arena-page__icon-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #f4c54c;
+  color: #07111f;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arena-page__title {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.arena-page__title h1 {
+  margin: 0;
+  font-size: clamp(28px, 7vw, 32px);
+  line-height: 1.05;
+  color: #f5f7fb;
+}
+
+.arena-page__title p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #aab6c7;
+}
+
+.arena-page__title--reference {
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.arena-page__title--reference h1 {
+  font-size: 22px;
+}
+
+.arena-page__title--reference p {
+  font-size: 13px;
+  color: #f4c54c;
+}
+
+.arena-badge,
+.arena-chip--timer {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.arena-badge {
+  border: 1px solid rgba(244, 197, 76, 0.24);
+  background: rgba(244, 197, 76, 0.12);
+  color: #f4c54c;
+}
+
+.arena-chip--metric {
+  min-width: 86px;
+  justify-content: center;
+  border-radius: 14px;
+}
+
+.arena-badge--live::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #12d97a;
+  box-shadow: 0 0 0 4px rgba(18, 217, 122, 0.14);
+}
+
+.arena-asset-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.arena-asset-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #07111f;
+  flex-shrink: 0;
+}
+
+.arena-asset-icon--gold { background: linear-gradient(180deg, #ffd76a, #f4c54c); }
+.arena-asset-icon--green { background: linear-gradient(180deg, #36e18c, #12d97a); }
+.arena-asset-icon--red { background: linear-gradient(180deg, #ff6a79, #ff4d5e); }
+.arena-asset-icon--purple { background: linear-gradient(180deg, #9478ff, #7c5cff); }
+.arena-asset-icon--cyan { background: linear-gradient(180deg, #7ceaff, #39d0ff); }
+
+.arena-price {
+  text-align: left;
+}
+
+.arena-price strong {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  color: #f5f7fb;
+}
+
+.arena-price span {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #aab6c7;
+}
+
+.arena-hero__timer {
+  margin-top: 22px;
+  font-size: clamp(36px, 10vw, 44px);
+  line-height: 1;
+  font-weight: 800;
+  color: #f5f7fb;
+  text-align: center;
+  letter-spacing: -0.03em;
+}
+
+.arena-hero__reward {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #aab6c7;
+  font-size: 14px;
+}
+
+.arena-hero__reward strong {
+  font-size: 24px;
+  color: #f4c54c;
+}
+
+.arena-primary-btn--purple {
+  background: linear-gradient(180deg, #744dff 0%, #6138ee 52%, #4d27cf 100%);
+  color: #f5f7fb;
+  box-shadow: 0 0 24px rgba(124, 92, 255, 0.22);
+}
+
+.arena-primary-btn__sub--light {
+  color: rgba(245, 247, 251, 0.76);
+}
+
+.arena-primary-btn {
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffd76a 0%, #f4c54c 56%, #d6a93b 100%);
+  color: #07111f;
+  font-size: 18px;
+  font-weight: 800;
+  box-shadow: 0 0 24px rgba(244, 197, 76, 0.2);
+}
+
+.arena-primary-btn__sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(7, 17, 31, 0.76);
+}
+
+.arena-section__head h2,
+.arena-result-card h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+  color: #f5f7fb;
+}
+
+.arena-link-btn,
+.arena-secondary-inline {
+  border: 0;
+  background: transparent;
+  color: #f4c54c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.arena-secondary-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.arena-round-list,
+.arena-leaderboard__list,
+.arena-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arena-round-item {
+  min-height: 78px;
+  border-radius: 16px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.arena-round-item__price {
+  text-align: left;
+}
+
+.arena-round-item__price strong {
+  display: block;
+  font-size: 18px;
+  color: #f5f7fb;
+}
+
+.arena-round-item__price span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.arena-round-item__price span.is-up { color: #12d97a; }
+.arena-round-item__price span.is-down { color: #ff4d5e; }
+
+.arena-chip--timer {
+  margin-top: 6px;
+  border: 1px solid #1e334d;
+  background: rgba(7, 17, 31, 0.44);
+  color: #f5f7fb;
+}
+
+.arena-leaderboard {
+  min-height: 170px;
+  padding: 16px;
+}
+
+.arena-leaderboard__item {
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 24px 32px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.arena-rank {
+  color: #f4c54c;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.arena-streak {
+  min-height: 110px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.arena-streak__meter {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 197, 76, 0.26);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #f4c54c;
+  background: rgba(244, 197, 76, 0.08);
+}
+
+.arena-streak__meter strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.arena-streak__meter span {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #aab6c7;
+}
+
+.arena-screen__header {
+  min-height: 56px;
+}
+
+.arena-screen__header h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 20px;
+  color: #f5f7fb;
+  flex: 1;
+}
+
+.arena-summary-card,
+.arena-info-strip__item,
+.arena-sentiment,
+.arena-result-card,
+.arena-reward-card,
+.arena-rank-card,
+.arena-chat-preview,
+.arena-wallet-card {
+  padding: 16px;
+}
+
+.arena-summary-card {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.arena-info-strip {
+  min-height: 100px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  overflow: hidden;
+}
+
+.arena-info-strip__item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.arena-info-strip__item + .arena-info-strip__item {
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.arena-info-strip__item strong {
+  font-size: 24px;
+  color: #f5f7fb;
+}
+
+.arena-question {
+  min-height: 58px;
+  border-radius: 16px;
+  border: 1px solid #1e334d;
+  background: rgba(16, 32, 51, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 16px;
+  color: #f5f7fb;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.arena-chart-card {
+  min-height: 240px;
+  padding: 12px;
+}
+
+.arena-chart-card svg {
+  width: 100%;
+  height: 216px;
+}
+
+.arena-chart-grid line { stroke: rgba(255, 255, 255, 0.06); }
+.arena-chart-line { fill: none; stroke: #39d0ff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.arena-chart-fill { fill: url(#arenaChartFill); }
+.arena-chart-reference { stroke: rgba(244, 197, 76, 0.8); stroke-width: 2; stroke-dasharray: 6 5; }
+
+.arena-sentiment {
+  min-height: 92px;
+}
+
+.arena-reactions-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.arena-reaction-pill {
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(7, 17, 31, 0.28);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.arena-reaction-pill span {
+  font-size: 16px;
+}
+
+.arena-reaction-pill strong {
+  font-size: 12px;
+  color: #f5f7fb;
+}
+
+.arena-prediction-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.arena-prediction-btn {
+  min-height: 120px;
+  border-radius: 20px;
+  padding: 18px;
+  border: 1px solid transparent;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.arena-prediction-btn:disabled {
+  opacity: 0.55;
+}
+
+.arena-prediction-btn strong {
+  font-size: 20px;
+  color: #f5f7fb;
+}
+
+.arena-prediction-btn span {
+  font-size: 14px;
+  color: rgba(245, 247, 251, 0.82);
+}
+
+.arena-prediction-btn--up {
+  background: linear-gradient(180deg, rgba(17, 84, 54, 0.96), rgba(13, 58, 38, 0.98));
+  border-color: rgba(18, 217, 122, 0.24);
+}
+
+.arena-prediction-btn--down {
+  background: linear-gradient(180deg, rgba(101, 29, 40, 0.96), rgba(71, 20, 28, 0.98));
+  border-color: rgba(255, 77, 94, 0.24);
+}
+
+.arena-prediction-btn__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arena-prediction-btn--up .arena-prediction-btn__icon { background: rgba(18, 217, 122, 0.14); color: #12d97a; }
+.arena-prediction-btn--down .arena-prediction-btn__icon { background: rgba(255, 77, 94, 0.14); color: #ff4d5e; }
+
+.arena-inline-note {
+  text-align: center;
+  font-size: 13px;
+  color: #aab6c7;
+}
+
+.arena-wallet-card__stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #aab6c7;
+}
+
+.arena-wallet-card__stats span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.arena-wallet-card__actions {
+  margin-top: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.arena-ghost-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid #1e334d;
+  background: rgba(7, 17, 31, 0.28);
+  color: #f5f7fb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.arena-result-card {
+  min-height: 230px;
+  padding: 20px;
+  border-radius: 22px;
+}
+
+.arena-result-card__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: rgba(244, 197, 76, 0.12);
+  border: 1px solid rgba(244, 197, 76, 0.24);
+  color: #f4c54c;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arena-result-card__headline {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.arena-result-card__headline strong {
+  font-size: 24px;
+  color: #f5f7fb;
+}
+
+.arena-result-card__headline span {
+  font-size: 14px;
+  color: #aab6c7;
+}
+
+.arena-result-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.arena-result-grid__item {
+  border-radius: 16px;
+  background: rgba(7, 17, 31, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px;
+}
+
+.arena-result-grid__item span {
+  font-size: 11px;
+  color: #aab6c7;
+}
+
+.arena-result-grid__item strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 16px;
+  color: #f5f7fb;
+}
+
+.arena-reward-card { min-height: 128px; }
+.arena-rank-card { min-height: 88px; }
+.arena-chat-preview { min-height: 118px; }
+
+.arena-list-compact__row {
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.arena-empty,
+.arena-error {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: #aab6c7;
+}
+
+.arena-error {
+  color: #ffb6bf;
+}
+
+.arena-reference-hero {
+  padding: 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 85% 15%, rgba(244, 197, 76, 0.1), transparent 18%),
+    linear-gradient(180deg, #101c2f 0%, #13253a 100%);
+}
+
+.arena-reference-hero__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.arena-reference-hero__header strong {
+  text-align: center;
+  font-size: 16px;
+  color: #f5f7fb;
+}
+
+.arena-reference-hero__asset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+
+.arena-reference-hero__asset-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.arena-reference-hero .arena-asset-copy {
+  flex: 1;
+}
+
+.arena-reference-hero .arena-asset-copy strong {
+  font-size: 15px;
+  line-height: 1.15;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.arena-reference-hero__price {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+  line-height: 1.1;
+  color: #f5f7fb;
+}
+
+.arena-reference-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.arena-reference-hero__stats span {
+  display: block;
+  font-size: 11px;
+  color: #aab6c7;
+}
+
+.arena-reference-hero__stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+  color: #f4c54c;
+}
+
+.arena-reference-hero__countdown {
+  min-width: 64px;
+}
+
+.arena-reference-hero__reward-value {
+  min-width: 58px;
+}
+
+.arena-reference-chart {
+  min-height: 104px;
+  border-radius: 14px;
+  padding: 6px 4px 2px;
+  background: rgba(7, 17, 31, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.arena-reference-chart svg {
+  width: 100%;
+  height: 98px;
+}
+
+.arena-reference-chart__baseline {
+  stroke: rgba(57, 208, 255, 0.24);
+  stroke-dasharray: 4 4;
+}
+
+.arena-reference-chart__fill {
+  fill: url(#arenaReferenceFill);
+}
+
+.arena-reference-chart__line {
+  fill: none;
+  stroke: #12d97a;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.arena-reference-chart__label {
+  fill: #12d97a;
+  font-size: 11px;
+}
+
+.arena-reference-question {
+  margin-top: 8px;
+  min-height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #dfe7f4;
+}
+
+.arena-reference-actions {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.arena-reference-action {
+  min-height: 68px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.arena-reference-action__icon {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.arena-reference-action strong {
+  display: block;
+  font-size: 16px;
+  color: #f5f7fb;
+}
+
+.arena-reference-action span {
+  display: block;
+  font-size: 11px;
+  color: rgba(245, 247, 251, 0.76);
+}
+
+.arena-reference-action--up {
+  background: linear-gradient(180deg, rgba(15, 92, 58, 0.96), rgba(13, 63, 41, 0.98));
+  border-color: rgba(18, 217, 122, 0.24);
+}
+
+.arena-reference-action--up .arena-reference-action__icon {
+  color: #12d97a;
+}
+
+.arena-reference-action--down {
+  background: linear-gradient(180deg, rgba(121, 28, 40, 0.96), rgba(83, 20, 29, 0.98));
+  border-color: rgba(255, 77, 94, 0.24);
+}
+
+.arena-reference-action--down .arena-reference-action__icon {
+  color: #ff4d5e;
+}
+
+.arena-reference-hero__footnote {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #c5d1df;
+}
+
+.arena-reference-section {
+  padding: 14px;
+  border-radius: 16px;
+}
+
+.arena-reference-rounds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.arena-reference-round {
+  min-height: 96px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: right;
+}
+
+.arena-reference-round__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arena-reference-round__top strong {
+  font-size: 13px;
+  color: #f5f7fb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arena-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.arena-reference-sidecard {
+  min-height: 132px;
+  padding: 14px;
+  border-radius: 16px;
+}
+
+.arena-reference-leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.arena-reference-leaderboard__row {
+  display: grid;
+  grid-template-columns: 24px 1fr 16px;
+  align-items: center;
+  gap: 8px;
+  color: #f4c54c;
+}
+
+.arena-reference-leaderboard__user {
+  min-width: 0;
+}
+
+.arena-reference-leaderboard__user strong {
+  display: block;
+  font-size: 13px;
+  color: #f5f7fb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arena-reference-leaderboard__user span {
+  display: block;
+  font-size: 12px;
+  color: #d6dee9;
+}
+
+.arena-rank--badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(244, 197, 76, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.arena-reference-sidecard--streak {
+  display: flex;
+  flex-direction: column;
+}
+
+.arena-reference-streak {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.arena-reference-streak__flames {
+  font-size: 24px;
+  letter-spacing: 1px;
+}
+
+.arena-reference-streak__count {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f5f7fb;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.arena-reference-streak__bonus {
+  margin-top: auto;
+  font-size: 13px;
+  color: #f4c54c;
+}
+
+.arena-text-up {
+  color: #12d97a;
+}
+
+.arena-text-down {
+  color: #ff4d5e;
+}
+
+@media (max-width: 374px) {
+  .arena-page {
+    padding-inline: 12px;
+    padding-bottom: calc(82px + 56px);
+  }
+
+  .arena-page__frame {
+    gap: 14px;
+  }
+
+  .arena-page__chips {
+    flex-wrap: wrap;
+  }
+
+  .arena-reference-rounds,
+  .arena-reference-grid,
+  .arena-reference-actions,
+  .arena-reference-hero__asset {
+    grid-template-columns: 1fr;
+  }
+
+  .arena-reference-hero__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .arena-prediction-buttons,
+  .arena-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .arena-reactions-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .arena-page {
+    padding-top: 20px;
+  }
+
+  .arena-page__frame {
+    width: min(100%, 430px);
+  }
+}

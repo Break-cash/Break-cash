@@ -16,11 +16,15 @@ export async function ensureUploadsRoot() {
 }
 
 export async function ensureUploadDir(...segments) {
-  const dir = path.join(getUploadsRoot(), ...segments)
+  const first = segments[0]
+  const dir = typeof first === 'string' && path.isAbsolute(first)
+    ? path.join(first, ...segments.slice(1))
+    : path.join(getUploadsRoot(), ...segments)
   await fs.mkdir(dir, { recursive: true })
   return dir
 }
 
 export function resolveUploadPath(storageKey) {
+  if (path.isAbsolute(storageKey)) return storageKey
   return path.join(getUploadsRoot(), storageKey)
 }

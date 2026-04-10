@@ -187,7 +187,7 @@ export function SupportPage() {
   }
 
   return (
-    <div className="page space-y-4">
+    <div className="page app-secondary-page support-page-v3 space-y-4">
       <section className="overflow-hidden rounded-[28px] border border-brand-blue/20 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_30%),linear-gradient(140deg,rgba(6,13,24,0.96),rgba(9,17,30,0.92))] p-5 shadow-[0_22px_52px_rgba(2,8,20,0.32)]">
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
           <BadgeCheck size={14} />

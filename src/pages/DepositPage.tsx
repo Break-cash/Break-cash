@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   createDepositRequest,
@@ -6,7 +6,8 @@ import {
   getBalanceRules,
   getAssetImages,
   getAds,
-  getActivePromotions,
+  getDepositOfferHistory,
+  getDepositOffers,
   getMyBalanceRequests,
   getWithdrawLocksMy,
   getWithdrawSummaryMy,
@@ -19,7 +20,8 @@ import {
   type BalanceRequestStatus,
   type BalanceRules,
   type DepositRequestItem,
-  type PromotionRule,
+  type DepositOffer,
+  type OfferClaimRecord,
   type PublicPrincipalLockItem,
   type PublicWithdrawalSummary,
   type WithdrawalRequestItem,
@@ -40,8 +42,18 @@ type DepositPageProps = {
   pageMode?: 'deposit' | 'withdraw'
 }
 
-const QUICK_AMOUNTS = [75, 499, 1000] as const
+const QUICK_AMOUNTS = [500, 1000, 2500] as const
 const DEFAULT_DEPOSIT_PROOF_EXAMPLE_URL = '/help/deposit-proof.jpg'
+
+function formatOfferCountdown(totalSeconds: number | null) {
+  if (totalSeconds == null) return 'متاح الآن'
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  const seconds = safeSeconds % 60
+  if (hours > 0) return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
 
 export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   const { t } = useI18n()
@@ -90,15 +102,17 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   const [depositSubmitting, setDepositSubmitting] = useState(false)
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false)
   const [depositAds, setDepositAds] = useState<AdItem[]>([])
-  const [promotionRules, setPromotionRules] = useState<{ firstDeposit: PromotionRule[]; referral: PromotionRule[] }>({
-    firstDeposit: [],
-    referral: [],
-  })
+  const [depositOffers, setDepositOffers] = useState<DepositOffer[]>([])
+  const [offerHistory, setOfferHistory] = useState<OfferClaimRecord[]>([])
+  const [selectedOffer, setSelectedOffer] = useState<DepositOffer | null>(null)
+  const [offerModalOpen, setOfferModalOpen] = useState(false)
+  const [offerNow, setOfferNow] = useState(Date.now())
 
   const isOwner = profile?.role === 'owner'
   const isDepositPage = pageMode === 'deposit'
   const isWithdrawPage = pageMode === 'withdraw'
   const effectiveProofExampleUrl = (depositProofExampleUrl || '').trim() || DEFAULT_DEPOSIT_PROOF_EXAMPLE_URL
+  const depositFormRef = useRef<HTMLDivElement | null>(null)
   const { summary: walletSummary, refresh: refreshWalletSummary } = useWalletSummary({
     subscribeLive: false,
   })
@@ -177,13 +191,24 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
     getAds('deposit')
       .then((res) => setDepositAds(res.items || []))
       .catch(() => setDepositAds([]))
-    getActivePromotions()
-      .then((res) => setPromotionRules({
-        firstDeposit: res.firstDeposit || [],
-        referral: res.referral || [],
-      }))
-      .catch(() => setPromotionRules({ firstDeposit: [], referral: [] }))
+    getDepositOffers()
+      .then((res) => setDepositOffers(Array.isArray(res.items) ? res.items : []))
+      .catch(() => setDepositOffers([]))
+    getDepositOfferHistory()
+      .then((res) => setOfferHistory(Array.isArray(res.items) ? res.items : []))
+      .catch(() => setOfferHistory([]))
   }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setOfferNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedOffer) return
+    const refreshed = depositOffers.find((offer) => Number(offer.id || 0) === Number(selectedOffer.id || 0))
+    if (refreshed) setSelectedOffer(refreshed)
+  }, [depositOffers])
 
   useEffect(() => {
     const unsub = subscribeToLiveUpdates((event) => {
@@ -233,14 +258,34 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
   }, [requestStatusFilter])
 
   const displayLogoUrl = (logoUrl || '').trim() ? logoUrl : '/break-cash-logo-premium.png'
-  const formatPromotionText = (rule: PromotionRule) => {
-    const conditions = (rule.conditions || {}) as Record<string, unknown>
-    const reward = (rule.reward || {}) as Record<string, unknown>
-    const minDeposit = Number(conditions.minDeposit ?? 0)
-    const mode = String(reward.mode || 'percent')
-    const value = Number(reward.value ?? reward.amount ?? reward.percent ?? 0)
-    if (mode === 'fixed') return `أودع ${minDeposit || 0} واحصل على ${value.toFixed(2)} USDT`
-    return `أودع ${minDeposit || 0} واحصل على ${value.toFixed(2)}%`
+  const offersWithTimers = useMemo(
+    () =>
+      depositOffers.map((offer) => ({
+        ...offer,
+        liveRemainingSeconds:
+          offer.endsAt != null ? Math.max(0, Math.floor((Date.parse(String(offer.endsAt)) - offerNow) / 1000)) : offer.remainingSeconds,
+      })),
+    [depositOffers, offerNow],
+  )
+  const selectedOfferHistory = selectedOffer
+    ? offerHistory.find((item) => Number(item.offer_id || 0) === Number(selectedOffer.id || 0))
+    : null
+
+  function openOfferModal(offer: DepositOffer) {
+    setSelectedOffer(offer)
+    setOfferModalOpen(true)
+  }
+
+  function activateOfferForDeposit(offer: DepositOffer) {
+    setSelectedOffer(offer)
+    setOfferModalOpen(false)
+    setDepositAmount((current) => {
+      const currentAmount = Number(current || 0)
+      return String(Math.max(currentAmount, Number(offer.minimumDeposit || 500)))
+    })
+    window.requestAnimationFrame(() => {
+      depositFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
   }
 
   async function handleSaveWallet() {
@@ -308,6 +353,10 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
     const myReq = await getMyBalanceRequests(requestStatusFilter || undefined)
     setDepositRequests(myReq.deposits || [])
     setWithdrawalRequests(myReq.withdrawals || [])
+    const offerHistoryRes = await getDepositOfferHistory().catch(() => ({ items: [] as OfferClaimRecord[] }))
+    setOfferHistory(Array.isArray(offerHistoryRes.items) ? offerHistoryRes.items : [])
+    const offersRes = await getDepositOffers().catch(() => ({ items: [] as DepositOffer[] }))
+    setDepositOffers(Array.isArray(offersRes.items) ? offersRes.items : [])
   }
 
   async function submitDepositRequest() {
@@ -335,19 +384,26 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
     try {
       const formData = new FormData()
       const effectiveDepositMethod = depositMethod || resolveUsdtDepositMethod(rules)
+      const activeOfferId = selectedOffer?.state === 'active' ? Number(selectedOffer.id || 0) : 0
       formData.append('amount', String(amount))
       formData.append('currency', 'USDT')
       formData.append('method', effectiveDepositMethod)
       formData.append('transferRef', transferRef.trim())
       formData.append('notes', depositNotes.trim())
       formData.append('idempotencyKey', `dep_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`)
+      if (activeOfferId > 0) formData.append('linkedOfferId', String(activeOfferId))
       if (proofImage) formData.append('proofImage', proofImage)
-      await createDepositRequest(formData)
+      const depositRes = await createDepositRequest(formData)
       setDepositAmount('')
       setTransferRef('')
       setDepositNotes('')
       setProofImage(null)
-      const text = t('wallet_requests_deposit_submitted')
+      const text =
+        activeOfferId > 0
+          ? depositRes.status === 'approved'
+            ? 'تم تأكيد الإيداع وربط العرض الترويجي بالمكافأة.'
+            : 'تم إرسال الإيداع بنجاح. سيتم فحص العرض وربط مكافأته عند تأكيد العملية.'
+          : t('wallet_requests_deposit_submitted')
       setRequestMessage({ type: 'success', text })
       emitToast({ kind: 'success', message: text, durationMs: 3600 })
       await refreshBalancesAndRequests()
@@ -406,14 +462,14 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
 
   if (loading) {
     return (
-      <div className="deposit-page page">
+      <div className="deposit-page page app-secondary-page">
         <div className="deposit-loading">جاري التحميل...</div>
       </div>
     )
   }
 
   return (
-    <div className="deposit-page page">
+    <div className="deposit-page page app-secondary-page">
       <button type="button" className="deposit-back" onClick={() => navigate(-1)} aria-label="رجوع">
         ←
       </button>
@@ -422,21 +478,41 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         <AdBanner items={depositAds} placement="deposit" />
       </section>
 
-      {(promotionRules.firstDeposit.length > 0 || promotionRules.referral.length > 0) ? (
-        <section className="rounded-2xl border border-app-border bg-app-card p-3">
-          <div className="mb-2 text-sm font-semibold text-white">العروض الحالية</div>
-          <div className="space-y-2 text-xs text-white/85">
-            {promotionRules.firstDeposit.map((rule) => (
-              <div key={`fd-${rule.id}`} className="rounded-xl border border-app-border bg-app-elevated p-3">
-                <div className="font-medium text-brand-blue">مكافأة أول إيداع</div>
-                <div className="mt-1">{formatPromotionText(rule)}</div>
-              </div>
-            ))}
-            {promotionRules.referral.map((rule) => (
-              <div key={`ref-${rule.id}`} className="rounded-xl border border-app-border bg-app-elevated p-3">
-                <div className="font-medium text-emerald-300">مكافأة الإحالة بعد أول إيداع مؤكد</div>
-                <div className="mt-1">إذا سجّل صديقك عبر كودك أو رابطك وتم تأكيد أول إيداعه: {formatPromotionText(rule)}</div>
-              </div>
+      {isDepositPage ? (
+        <section className="deposit-section deposit-offers-section">
+          <div className="deposit-offers-head">
+            <div>
+              <h2 className="deposit-section-title">عروض الإيداع النشطة</h2>
+              <p className="deposit-offers-subtitle">
+                أكثر من 13 عرضًا مرتبطة مباشرة بمكافآت الإيداع. اختر العرض المناسب ثم ثبّت الإيداع قبل انتهاء الوقت.
+              </p>
+            </div>
+            <span className="deposit-offers-badge">{offersWithTimers.filter((offer) => offer.state === 'active').length} عرض فعال</span>
+          </div>
+          <div className="deposit-offers-grid">
+            {offersWithTimers.map((offer) => (
+              <button
+                key={`offer-${offer.id}`}
+                type="button"
+                className={`deposit-offer-card deposit-offer-state-${offer.state} ${selectedOffer?.id === offer.id ? 'deposit-offer-selected' : ''}`}
+                onClick={() => openOfferModal(offer)}
+              >
+                <div className="deposit-offer-card-top">
+                  <span className="deposit-offer-percent">+{offer.rewardPercentage}%</span>
+                  <span className="deposit-offer-timer">{formatOfferCountdown(offer.liveRemainingSeconds)}</span>
+                </div>
+                <div className="deposit-offer-title-row">
+                  <strong>{offer.title}</strong>
+                  <span className={`deposit-offer-pill deposit-offer-pill-${offer.state}`}>
+                    {offer.state === 'active' ? 'نشط الآن' : offer.state === 'claimed' ? 'تمت المطالبة' : offer.state === 'expired' ? 'منتهي' : 'قريبًا'}
+                  </span>
+                </div>
+                <p className="deposit-offer-teaser">{offer.teaserText}</p>
+                <div className="deposit-offer-meta">
+                  <span>من {offer.minimumDeposit} USD</span>
+                  <span>{offer.maximumDeposit ? `حتى ${offer.maximumDeposit} USD` : 'بدون حد أعلى'}</span>
+                </div>
+              </button>
             ))}
           </div>
         </section>
@@ -594,9 +670,33 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         ) : null}
         <div className="owner-image-grid">
           {isDepositPage ? (
-            <div className="owner-actions-card">
+            <div ref={depositFormRef} className="owner-actions-card">
               <h3 className="owner-wallet-heading">{t('wallet_requests_deposit_title')}</h3>
               <p className="owner-hint">{t('wallet_requests_quick_amounts')}</p>
+              {selectedOffer ? (
+                <div className={`deposit-offer-selected-banner deposit-offer-state-${selectedOffer.state}`}>
+                  <div>
+                    <strong>{selectedOffer.title}</strong>
+                    <p>
+                      إيداع من {selectedOffer.minimumDeposit} USD
+                      {selectedOffer.maximumDeposit ? ` حتى ${selectedOffer.maximumDeposit} USD` : ' بدون حد أعلى'}
+                      {' '}يمنحك {selectedOffer.rewardPercentage}% مكافأة.
+                    </p>
+                    {selectedOfferHistory ? (
+                      <small>
+                        الحالة الأخيرة: {selectedOfferHistory.claim_status === 'awarded' ? 'تمت الإضافة' : selectedOfferHistory.claim_status === 'pending' ? 'قيد الانتظار' : selectedOfferHistory.claim_status === 'expired' ? 'انتهى العرض' : 'غير مؤهل'}
+                      </small>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="wallet-action-btn owner-set-btn"
+                    onClick={() => setSelectedOffer(null)}
+                  >
+                    إزالة
+                  </button>
+                </div>
+              ) : null}
               <div className="wallet-quick-amounts-grid">
                 {QUICK_AMOUNTS.map((v) => (
                   <button
@@ -780,9 +880,26 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
                     <span>#{item.id}</span>
                     <span>{Number(item.amount).toFixed(2)} {item.currency}</span>
                     <span>{item.method}</span>
+                    {item.linked_offer_title ? (
+                      <span className="request-status-badge status-pending">
+                        {item.linked_offer_title}
+                        {item.linked_offer_percentage ? ` +${Number(item.linked_offer_percentage).toFixed(0)}%` : ''}
+                      </span>
+                    ) : null}
                     <span className={`request-status-badge ${statusBadgeClass(item.request_status)}`}>
                       {statusLabel(item.request_status)}
                     </span>
+                    {item.offer_claim_status ? (
+                      <span className={`request-status-badge ${item.offer_claim_status === 'awarded' ? 'status-approved' : item.offer_claim_status === 'pending' ? 'status-pending' : 'status-rejected'}`}>
+                        {item.offer_claim_status === 'awarded'
+                          ? `مكافأة +${Number(item.offer_reward_amount || 0).toFixed(2)} USDT`
+                          : item.offer_claim_status === 'pending'
+                            ? 'العرض قيد التحقق'
+                            : item.offer_claim_status === 'expired'
+                              ? 'انتهى العرض قبل التأكيد'
+                              : 'العرض غير مؤهل'}
+                      </span>
+                    ) : null}
                     {item.proof_image_path ? (
                       <a href={item.proof_image_path} target="_blank" rel="noreferrer" className="owner-nav-link">
                         {t('wallet_requests_view_proof')}
@@ -847,6 +964,56 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
       >
         تعرف على الامتيازات والشروط
       </button>
+
+      {offerModalOpen && selectedOffer ? (
+        <AppModalPortal>
+          <div className="deposit-offer-modal-backdrop liquid-modal-backdrop" onClick={() => setOfferModalOpen(false)}>
+            <div
+              className="deposit-offer-modal liquid-modal-card"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={selectedOffer.title}
+            >
+              <div className="deposit-offer-modal-badge">عرض إيداع محدود</div>
+              <h3 className="deposit-offer-modal-title">{selectedOffer.headline || selectedOffer.title}</h3>
+              <p className="deposit-offer-modal-urgency">{selectedOffer.urgencyText}</p>
+              <div className="deposit-offer-modal-metrics">
+                <div className="deposit-offer-modal-metric">
+                  <span>الحد الأدنى</span>
+                  <strong>{selectedOffer.minimumDeposit} USD</strong>
+                </div>
+                <div className="deposit-offer-modal-metric">
+                  <span>المكافأة</span>
+                  <strong>+{selectedOffer.rewardPercentage}%</strong>
+                </div>
+                <div className="deposit-offer-modal-metric">
+                  <span>الوقت المتبقي</span>
+                  <strong>{formatOfferCountdown((selectedOffer as DepositOffer & { liveRemainingSeconds?: number }).liveRemainingSeconds ?? selectedOffer.remainingSeconds)}</strong>
+                </div>
+              </div>
+              <div className="deposit-offer-modal-copy">
+                هذا العرض متاح لوقت قصير فقط. أودع مبلغًا يبدأ من {selectedOffer.minimumDeposit} USD
+                {selectedOffer.maximumDeposit ? ` وحتى ${selectedOffer.maximumDeposit} USD` : ' أو أكثر'}
+                {' '}وسيتم احتساب المكافأة تلقائيًا إذا بقي العرض نشطًا وقت تأكيد الإيداع.
+              </div>
+              {selectedOfferHistory ? (
+                <div className="deposit-offer-modal-note">
+                  آخر حالة مسجلة: {selectedOfferHistory.claim_status === 'awarded' ? 'تمت إضافة المكافأة' : selectedOfferHistory.claim_status === 'pending' ? 'قيد التحقق مع الإيداع' : selectedOfferHistory.claim_status === 'expired' ? 'انتهت الصلاحية قبل التأكيد' : 'تم رفض المطالبة وفق الشروط'}
+                </div>
+              ) : null}
+              <div className="deposit-offer-modal-actions">
+                <button type="button" className="wallet-action-btn owner-set-btn" onClick={() => setOfferModalOpen(false)}>
+                  لاحقًا
+                </button>
+                <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={() => activateOfferForDeposit(selectedOffer)}>
+                  إيداع الآن
+                </button>
+              </div>
+            </div>
+          </div>
+        </AppModalPortal>
+      ) : null}
 
       {termsOpen && (
         <AppModalPortal>

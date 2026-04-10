@@ -16,7 +16,7 @@ import { refreshVerificationStatus, scheduleVerificationIfEligible } from '../se
 import { persistUploadedAsset, toStoredUploadReference } from '../services/uploaded-assets.js'
 import { blockProtectedOwnerAction } from '../services/protected-owners.js'
 import { buildUserAvatarUrl, persistUserAvatarUpload, resolveUserAvatarAsset } from '../services/user-avatars.js'
-import { ensureUploadDir, getUploadsRoot } from '../services/uploads-root.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const asyncRoute = (handler) => async (req, res) => {
   try {
@@ -40,8 +40,8 @@ function resolveBadgeStyle(row) {
   return 'none'
 }
 
-ensureUploadDir(avatarsDir)
-ensureUploadDir(kycDir)
+fs.mkdirSync(avatarsDir, { recursive: true })
+fs.mkdirSync(kycDir, { recursive: true })
 
 const storage = multer.diskStorage({
   destination: (_req, file, cb) => {

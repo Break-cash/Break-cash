@@ -5,9 +5,9 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   acknowledgeRecoveryCode,
   getAppleTouchIconUrl,
-  getCurrentUser,
+  getCurrentUserSilently,
   getFaviconUrl,
-  getMyPermissions,
+  getMyPermissionsSilently,
   getPwaConfig,
   getRecoveryCodeStatus,
   getThemeColor,
@@ -24,6 +24,9 @@ import { InstallPrompt } from './components/InstallPrompt'
 import { useFrameRateProfile } from './hooks/useFrameRateProfile'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
+import { ArenaHomePage } from './pages/ArenaHomePage'
+import { ArenaRoundPage } from './pages/ArenaRoundPage'
+import { ArenaResultPage } from './pages/ArenaResultPage'
 import { PremiumSplashIntro } from './components/splash/PremiumSplashIntro'
 import { ProductionRefreshScreen, resetProductionRefreshAttempts } from './components/splash/ProductionRefreshScreen'
 
@@ -46,6 +49,9 @@ const FriendsPage = lazy(() => import('./pages/FriendsPage').then((m) => ({ defa
 const VipPage = lazy(() => import('./pages/VipPage').then((m) => ({ default: m.VipPage })))
 const ReferralPage = lazy(() => import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })))
 const SupportPage = lazy(() => import('./pages/SupportPage').then((m) => ({ default: m.SupportPage })))
+const NotificationsPage = lazy(() =>
+  import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
+)
 const LeaderboardPreviewPage = lazy(() =>
   import('./pages/LeaderboardPreviewPage').then((m) => ({ default: m.LeaderboardPreviewPage })),
 )
@@ -264,11 +270,15 @@ function AnimatedAuthenticatedRoutes({
               <Route path="/assets" element={<WalletPage />} />
               <Route path="/market" element={<Market />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/arena" element={<ArenaHomePage />} />
+              <Route path="/arena/round/:roundId" element={<ArenaRoundPage />} />
+              <Route path="/arena/result/:roundId" element={<ArenaResultPage />} />
               <Route path="/futures" element={<FuturesPage />} />
               <Route path="/mining" element={<MiningPage />} />
               <Route path="/vip" element={<VipPage />} />
               <Route path="/referral" element={<ReferralPage />} />
               <Route path="/support" element={<SupportPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
               <Route
                 path="/profile"
                 element={(
@@ -381,7 +391,7 @@ function App() {
   useEffect(() => {
     const token = getToken()
     if (!token) return
-    Promise.all([getCurrentUser(), getMyPermissions()])
+    Promise.all([getCurrentUserSilently(), getMyPermissionsSilently()])
       .then(([userRes, permissionsRes]) => {
         setUser(userRes.user)
         setGrantedPermissions(Array.isArray(permissionsRes.permissions) ? permissionsRes.permissions : [])
@@ -531,7 +541,7 @@ function App() {
   )
 
   function handleAuthSuccess() {
-    Promise.all([getCurrentUser(), getMyPermissions()])
+    Promise.all([getCurrentUserSilently(), getMyPermissionsSilently()])
       .then(([userRes, permissionsRes]) => {
         setUser(userRes.user)
         setGrantedPermissions(Array.isArray(permissionsRes.permissions) ? permissionsRes.permissions : [])
@@ -581,7 +591,7 @@ function App() {
 
   async function refreshCurrentUser() {
     if (isLocalAuthBypassEnabled) return
-    const res = await getCurrentUser()
+    const res = await getCurrentUserSilently()
     setUser(res.user)
   }
 

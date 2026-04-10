@@ -7,6 +7,7 @@ import { requireAuth, requirePermission } from '../middleware/auth.js'
 import { publishLiveUpdate } from '../services/live-updates.js'
 import { sendSupportTicketEmail } from '../services/email.js'
 import { persistUploadedAsset } from '../services/uploaded-assets.js'
+import { getUploadsRoot } from '../services/uploads-root.js'
 
 const USER_ARCHIVE_AFTER_HOURS = 72
 const MAX_SUPPORT_ATTACHMENTS = 4
@@ -228,7 +229,7 @@ export function createSupportRouter(db) {
   const router = Router()
   router.use(requireAuth(db))
 
-  const uploadsRoot = path.join(process.cwd(), 'server', 'uploads')
+  const uploadsRoot = getUploadsRoot()
   const supportDir = path.join(uploadsRoot, 'support')
   fs.mkdirSync(supportDir, { recursive: true })
   const upload = multer({

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, Info, X } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { useInNativeApp } from '../hooks/useInNativeApp'
 import { useI18n } from '../i18nCore'
 import { AppModalPortal } from './ui/AppModalPortal'
@@ -13,6 +14,7 @@ const APK_DOWNLOAD_URL = '/downloads/Break-Cash-Android-Release-v1.apk'
 
 export function InstallPrompt() {
   const { t, direction } = useI18n()
+  const location = useLocation()
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null)
   const [installed, setInstalled] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
@@ -62,8 +64,12 @@ export function InstallPrompt() {
 
   const shouldShowApkDownload =
     !inNativeApp && (platform === 'android' || platform === 'desktop' || platform === 'other')
+  const isArenaRoute =
+    location.pathname === '/arena' ||
+    location.pathname.startsWith('/arena/round/') ||
+    location.pathname.startsWith('/arena/result/')
 
-  if (installed || inNativeApp) return null
+  if (installed || inNativeApp || isArenaRoute) return null
 
   return (
     <>

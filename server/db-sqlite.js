@@ -229,6 +229,143 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_requests_idempotency
   ON deposit_requests(user_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS deposit_offers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_key TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  teaser_text TEXT,
+  headline TEXT,
+  urgency_text TEXT,
+  minimum_deposit REAL NOT NULL DEFAULT 500,
+  maximum_deposit REAL,
+  reward_percentage REAL NOT NULL DEFAULT 10,
+  reward_type TEXT NOT NULL DEFAULT 'deposit_bonus',
+  starts_at TEXT,
+  ends_at TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  claim_rule TEXT NOT NULL DEFAULT 'one_time',
+  max_claims_per_user INTEGER NOT NULL DEFAULT 1,
+  max_reward_amount REAL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  eligibility_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_deposit_offers_active ON deposit_offers(is_active, ends_at);
+CREATE INDEX IF NOT EXISTS idx_deposit_offers_sort_order ON deposit_offers(sort_order, reward_percentage DESC);
+
+CREATE TABLE IF NOT EXISTS deposit_offer_claims (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  offer_id INTEGER NOT NULL REFERENCES deposit_offers(id),
+  deposit_request_id INTEGER REFERENCES deposit_requests(id),
+  wallet_transaction_id INTEGER,
+  reward_entry_id INTEGER,
+  reward_amount REAL NOT NULL DEFAULT 0,
+  reward_percentage REAL NOT NULL DEFAULT 0,
+  deposit_amount REAL NOT NULL DEFAULT 0,
+  claim_status TEXT NOT NULL DEFAULT 'pending',
+  eligibility_code TEXT,
+  reward_status TEXT NOT NULL DEFAULT 'none',
+  linked_transaction_id INTEGER,
+  linked_deposit_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_offer_claims_unique_request
+  ON deposit_offer_claims(user_id, offer_id, deposit_request_id)
+  WHERE deposit_request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_deposit_offer_claims_user ON deposit_offer_claims(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deposit_offer_claims_offer ON deposit_offer_claims(offer_id, claim_status);
+
+CREATE TABLE IF NOT EXISTS arena_wallets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+  ticket_balance INTEGER NOT NULL DEFAULT 3,
+  participation_points INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_arena_wallets_user ON arena_wallets(user_id);
+
+CREATE TABLE IF NOT EXISTS arena_rounds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_id TEXT NOT NULL UNIQUE,
+  asset_id TEXT NOT NULL,
+  round_index INTEGER NOT NULL,
+  starts_at TEXT NOT NULL,
+  lock_at TEXT NOT NULL,
+  ends_at TEXT NOT NULL,
+  duration_seconds INTEGER NOT NULL DEFAULT 60,
+  participants_count INTEGER NOT NULL DEFAULT 0,
+  start_price REAL NOT NULL DEFAULT 0,
+  current_price REAL NOT NULL DEFAULT 0,
+  end_price REAL,
+  outcome TEXT,
+  status TEXT NOT NULL DEFAULT 'UPCOMING',
+  reward_preview_min REAL NOT NULL DEFAULT 5,
+  reward_preview_max REAL NOT NULL DEFAULT 1000,
+  headline TEXT,
+  reactions_json TEXT,
+  settled_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_arena_rounds_asset_time ON arena_rounds(asset_id, starts_at DESC);
+CREATE INDEX IF NOT EXISTS idx_arena_rounds_status ON arena_rounds(status, ends_at DESC);
+
+CREATE TABLE IF NOT EXISTS arena_predictions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  round_id TEXT NOT NULL REFERENCES arena_rounds(round_id),
+  asset_id TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  entry_cost_tickets INTEGER NOT NULL DEFAULT 1,
+  state TEXT NOT NULL DEFAULT 'SUBMITTED',
+  outcome TEXT,
+  reward_id INTEGER,
+  submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  settled_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, round_id, asset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_arena_predictions_round ON arena_predictions(round_id, submitted_at ASC);
+CREATE INDEX IF NOT EXISTS idx_arena_predictions_user ON arena_predictions(user_id, submitted_at DESC);
+
+CREATE TABLE IF NOT EXISTS arena_bonus_rewards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  round_id TEXT NOT NULL REFERENCES arena_rounds(round_id),
+  prediction_id INTEGER REFERENCES arena_predictions(id),
+  amount REAL NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'USDT',
+  status TEXT NOT NULL DEFAULT 'LOCKED_NON_VIP',
+  requested_at TEXT,
+  processed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_arena_bonus_rewards_user ON arena_bonus_rewards(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_arena_bonus_rewards_status ON arena_bonus_rewards(status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS arena_reward_ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  entry_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  amount REAL,
+  currency TEXT DEFAULT 'USDT',
+  points INTEGER,
+  tickets INTEGER,
+  round_id TEXT,
+  reward_id INTEGER REFERENCES arena_bonus_rewards(id),
+  status TEXT NOT NULL DEFAULT 'COMPLETED',
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_arena_reward_ledger_user ON arena_reward_ledger(user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS withdrawal_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id),
@@ -1034,6 +1171,7 @@ async function ensureSchema(db) {
   await ensureDepositCol('reviewed_at', `ALTER TABLE deposit_requests ADD COLUMN reviewed_at TEXT`)
   await ensureDepositCol('completed_at', `ALTER TABLE deposit_requests ADD COLUMN completed_at TEXT`)
   await ensureDepositCol('wallet_transaction_id', `ALTER TABLE deposit_requests ADD COLUMN wallet_transaction_id INTEGER REFERENCES wallet_transactions(id)`)
+  await ensureDepositCol('linked_offer_id', `ALTER TABLE deposit_requests ADD COLUMN linked_offer_id INTEGER REFERENCES deposit_offers(id)`)
   try {
     await runAsync(db, `ALTER TABLE deposit_requests DROP COLUMN processed_txn_id`)
   } catch (_) {}
@@ -1193,6 +1331,7 @@ async function ensureSchema(db) {
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_owner_financial_approval_target ON owner_financial_approval_reports(target_user_id, created_at DESC)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_user_id ON deposit_requests(user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(request_status)`)
+  await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_deposit_requests_linked_offer ON deposit_requests(linked_offer_id)`).catch(() => {})
   await runAsync(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_requests_idempotency ON deposit_requests(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_id ON withdrawal_requests(user_id)`)
   await runAsync(db, `CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status ON withdrawal_requests(request_status)`)

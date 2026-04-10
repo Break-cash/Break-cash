@@ -1,13 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+﻿import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  ArrowLeft,
-  ArrowRight,
   BarChart3,
-  Bell,
-  Crown,
-  Ellipsis,
   Globe2,
   House,
   Search,
@@ -19,6 +14,7 @@ import {
 } from 'lucide-react'
 import {
   apiFetch,
+  hasSessionToken,
   getHeaderIconConfig,
   getHomeLeaderboardConfig,
   getPushPublicKey,
@@ -38,8 +34,8 @@ import {
 import { playFeedbackSound, primeAppFeedback } from './appFeedback'
 import { LeaderboardSection, defaultHomeLeaderboardConfig } from './components/home/LeaderboardSection'
 import { InstallPrompt } from './components/InstallPrompt'
+import { AppHeader } from './components/layout/AppHeader'
 import { MobileBottomNav } from './components/mobile/MobileBottomNav'
-import { ProfileActiveNowCounterCompact } from './components/profile-v2/ProfileActiveNowCounter'
 import { UserIdentityBadges } from './components/user/UserIdentityBadges'
 import { useFrameRateProfile } from './hooks/useFrameRateProfile'
 import { useInNativeApp } from './hooks/useInNativeApp'
@@ -63,77 +59,77 @@ const COUNTRY_FLAG_ALIASES: Record<string, string> = {
   turkey: 'TR',
   turkiye: 'TR',
   'türkiye': 'TR',
-  تركيا: 'TR',
+  'تركيا': 'TR',
   sa: 'SA',
   saudi: 'SA',
   'saudi arabia': 'SA',
-  السعودية: 'SA',
+  'السعودية': 'SA',
   eg: 'EG',
   egypt: 'EG',
-  مصر: 'EG',
+  'مصر': 'EG',
   ae: 'AE',
   uae: 'AE',
   'united arab emirates': 'AE',
-  الامارات: 'AE',
+  'الامارات': 'AE',
   'الإمارات': 'AE',
   iq: 'IQ',
   iraq: 'IQ',
-  العراق: 'IQ',
+  'العراق': 'IQ',
   sy: 'SY',
   syria: 'SY',
-  سوريا: 'SY',
+  'سوريا': 'SY',
   jo: 'JO',
   jordan: 'JO',
-  الاردن: 'JO',
+  'الاردن': 'JO',
   'الأردن': 'JO',
   lb: 'LB',
   lebanon: 'LB',
-  لبنان: 'LB',
+  'لبنان': 'LB',
   kw: 'KW',
   kuwait: 'KW',
-  الكويت: 'KW',
+  'الكويت': 'KW',
   qa: 'QA',
   qatar: 'QA',
-  قطر: 'QA',
+  'قطر': 'QA',
   bh: 'BH',
   bahrain: 'BH',
-  البحرين: 'BH',
+  'البحرين': 'BH',
   om: 'OM',
   oman: 'OM',
-  عمان: 'OM',
+  'عمان': 'OM',
   ye: 'YE',
   yemen: 'YE',
-  اليمن: 'YE',
+  'اليمن': 'YE',
   ma: 'MA',
   morocco: 'MA',
-  المغرب: 'MA',
+  'المغرب': 'MA',
   dz: 'DZ',
   algeria: 'DZ',
-  الجزائر: 'DZ',
+  'الجزائر': 'DZ',
   tn: 'TN',
   tunisia: 'TN',
-  تونس: 'TN',
+  'تونس': 'TN',
   ly: 'LY',
   libya: 'LY',
-  ليبيا: 'LY',
+  'ليبيا': 'LY',
   us: 'US',
   usa: 'US',
   'united states': 'US',
   america: 'US',
-  امريكا: 'US',
+  'امريكا': 'US',
   'أمريكا': 'US',
   gb: 'GB',
   uk: 'GB',
   britain: 'GB',
   england: 'GB',
-  بريطانيا: 'GB',
+  'بريطانيا': 'GB',
   fr: 'FR',
   france: 'FR',
-  فرنسا: 'FR',
+  'فرنسا': 'FR',
   de: 'DE',
   germany: 'DE',
-  ألمانيا: 'DE',
-  المانيا: 'DE',
+  'ألمانيا': 'DE',
+  'المانيا': 'DE',
 }
 
 type LayoutProps = {
@@ -169,9 +165,9 @@ export function Layout({
   const [unreadCount, setUnreadCount] = useState(0)
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [leaderboardConfig, setLeaderboardConfig] = useState<HomeLeaderboardConfig>(defaultHomeLeaderboardConfig)
   const [headerIcons, setHeaderIcons] = useState<HeaderIconConfigItem[]>([
     { id: 'search', visible: true },
@@ -190,7 +186,6 @@ export function Layout({
   const [avatarBroken, setAvatarBroken] = useState(false)
   const [avatarRetryNonce, setAvatarRetryNonce] = useState(0)
   const [avatarFailureCount, setAvatarFailureCount] = useState(0)
-  const profileMenuRef = useRef<HTMLDivElement | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const languageSyncRef = useRef('')
   const readNotificationKeysRef = useRef<Set<string>>(new Set())
@@ -213,24 +208,6 @@ export function Layout({
       ]
     : []
   const utilityLinks = [...ownerLinks, ...adminLinks].filter(Boolean) as { title: string; route: string }[]
-  const managementShortcuts = [
-    isOwner ? { title: t('nav_owner'), route: '/owner/operations' } : null,
-    canViewReports ? { title: t('nav_admin'), route: '/admin/dashboard' } : null,
-    canManageUsers ? { title: t('admin_users'), route: '/admin/users' } : null,
-    canManageInvites ? { title: t('admin_invites'), route: '/admin/invites' } : null,
-    canManageBalances ? { title: t('admin_balances'), route: '/admin/balances' } : null,
-    canManagePermissions ? { title: t('admin_permissions'), route: '/admin/permissions' } : null,
-    canManageSupport ? { title: t('support_page_title'), route: '/admin/support' } : null,
-  ].filter(Boolean) as { title: string; route: string }[]
-  const managementShortcut = managementShortcuts.length > 0
-    ? {
-        to: managementShortcuts[0].route,
-        label: isOwner ? t('nav_owner') : t('nav_admin'),
-        count: managementShortcuts.length,
-        kind: isOwner ? 'owner' as const : 'admin' as const,
-      }
-    : null
-
   function urlBase64ToUint8Array(base64String: string) {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
     const base64 = `${base64String}${padding}`.replace(/-/g, '+').replace(/_/g, '/')
@@ -250,13 +227,13 @@ export function Layout({
   const pushTexts =
     language === 'ar'
       ? {
-          enable: 'تفعيل الإشعارات الخارجية',
-          disable: 'إيقاف الإشعارات الخارجية',
-          enabledHint: 'سيصلك إشعار حتى عند الخروج من التطبيق.',
-          deniedHint: 'المتصفح منع الإشعارات. فعّلها من إعدادات المتصفح أو النظام.',
-          idleHint: 'فعّلها ليصلك إشعار فعلي عند الموافقات والتحديثات المهمة.',
-          loading: 'جارٍ التفعيل...',
-          unsupported: 'Web Push غير مدعوم على هذا المتصفح أو الجهاز.',
+          enable: 'ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ©',
+          disable: 'Ø¥ÙŠÙ‚Ø§Ù Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ©',
+          enabledHint: 'Ø³ÙŠØµÙ„Ùƒ Ø¥Ø´Ø¹Ø§Ø± Ø­ØªÙ‰ Ø¹Ù†Ø¯ Ø§Ù„Ø®Ø±ÙˆØ¬ Ù…Ù† Ø§Ù„ØªØ·Ø¨ÙŠÙ‚.',
+          deniedHint: 'Ø§Ù„Ù…ØªØµÙØ­ Ù…Ù†Ø¹ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª. ÙØ¹Ù‘Ù„Ù‡Ø§ Ù…Ù† Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…ØªØµÙØ­ Ø£Ùˆ Ø§Ù„Ù†Ø¸Ø§Ù….',
+          idleHint: 'ÙØ¹Ù‘Ù„Ù‡Ø§ Ù„ÙŠØµÙ„Ùƒ Ø¥Ø´Ø¹Ø§Ø± ÙØ¹Ù„ÙŠ Ø¹Ù†Ø¯ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø§Øª ÙˆØ§Ù„ØªØ­Ø¯ÙŠØ«Ø§Øª Ø§Ù„Ù…Ù‡Ù…Ø©.',
+          loading: 'Ø¬Ø§Ø±Ù Ø§Ù„ØªÙØ¹ÙŠÙ„...',
+          unsupported: 'Web Push ØºÙŠØ± Ù…Ø¯Ø¹ÙˆÙ… Ø¹Ù„Ù‰ Ù‡Ø°Ø§ Ø§Ù„Ù…ØªØµÙØ­ Ø£Ùˆ Ø§Ù„Ø¬Ù‡Ø§Ø².',
         }
       : language === 'tr'
         ? {
@@ -340,16 +317,16 @@ export function Layout({
     })
     if (diffDays === 0) {
       return language === 'ar'
-        ? `اليوم، ${timeOnly}`
+        ? `Ø§Ù„ÙŠÙˆÙ…ØŒ ${timeOnly}`
         : language === 'tr'
-          ? `Bugün, ${timeOnly}`
+          ? `BugÃ¼n, ${timeOnly}`
           : `Today, ${timeOnly}`
     }
     if (diffDays === 1) {
       return language === 'ar'
-        ? `أمس، ${timeOnly}`
+        ? `Ø£Ù…Ø³ØŒ ${timeOnly}`
         : language === 'tr'
-          ? `Dün, ${timeOnly}`
+          ? `DÃ¼n, ${timeOnly}`
           : `Yesterday, ${timeOnly}`
     }
     return date.toLocaleString(locale, {
@@ -397,10 +374,10 @@ export function Layout({
     const haystack = `${String(item.title || '')} ${String(item.body || '')}`.toLowerCase()
     return (
       haystack.includes('strategy') ||
-      haystack.includes('الاستراتيجية') ||
-      haystack.includes('الاستراتيجيه') ||
-      haystack.includes('صفقة') ||
-      haystack.includes('كود')
+      haystack.includes('Ø§Ù„Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©') ||
+      haystack.includes('Ø§Ù„Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠÙ‡') ||
+      haystack.includes('ØµÙÙ‚Ø©') ||
+      haystack.includes('ÙƒÙˆØ¯')
     )
   }
 
@@ -410,9 +387,9 @@ export function Layout({
       haystack.includes('support') ||
       haystack.includes('help') ||
       haystack.includes('ticket') ||
-      haystack.includes('الدعم') ||
-      haystack.includes('مساعدة') ||
-      haystack.includes('محادثة')
+      haystack.includes('Ø§Ù„Ø¯Ø¹Ù…') ||
+      haystack.includes('Ù…Ø³Ø§Ø¹Ø¯Ø©') ||
+      haystack.includes('Ù…Ø­Ø§Ø¯Ø«Ø©')
     )
   }
 
@@ -423,7 +400,11 @@ export function Layout({
   }
 
   useEffect(() => {
-    apiFetch('/api/notifications/unreadCount')
+    if (!hasSessionToken()) {
+      setUnreadCount(0)
+      return
+    }
+    apiFetch('/api/notifications/unreadCount', { suppressErrorToast: true })
       .then((res) => setUnreadCount((res as { unreadCount: number }).unreadCount))
       .catch(() => setUnreadCount(0))
   }, [])
@@ -443,6 +424,10 @@ export function Layout({
         .catch(() => setPushPermission('default'))
     } else {
       setPushPermission(Notification.permission)
+    }
+    if (!hasSessionToken()) {
+      setPushSubscribed(false)
+      return
     }
     getPushSubscriptionStatus()
       .then((res) => setPushSubscribed(Boolean(res.subscribed)))
@@ -521,17 +506,17 @@ export function Layout({
             nativeError === 'SERVICE_NOT_AVAILABLE'
           setPushError(
             timeoutLike
-              ? 'تعذر الحصول على رمز الإشعارات من خدمات Google. تحقق من اتصال الإنترنت وخدمات Google Play ثم أعد المحاولة.'
+              ? 'ØªØ¹Ø°Ø± Ø§Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ø±Ù…Ø² Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ù…Ù† Ø®Ø¯Ù…Ø§Øª Google. ØªØ­Ù‚Ù‚ Ù…Ù† Ø§ØªØµØ§Ù„ Ø§Ù„Ø¥Ù†ØªØ±Ù†Øª ÙˆØ®Ø¯Ù…Ø§Øª Google Play Ø«Ù… Ø£Ø¹Ø¯ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©.'
               : nativeError
-              ? `تعذر تسجيل الجهاز للإشعارات (${nativeError}).`
-              : 'تعذر تسجيل الجهاز للإشعارات. حدّث التطبيق ثم أعد المحاولة.',
+              ? `ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¬Ù‡Ø§Ø² Ù„Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª (${nativeError}).`
+              : 'ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¬Ù‡Ø§Ø² Ù„Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª. Ø­Ø¯Ù‘Ø« Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø«Ù… Ø£Ø¹Ø¯ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©.',
           )
           return
         }
         await saveNativePushToken(token, getNativePushPlatform())
         setPushSubscribed(true)
         if (permission !== 'granted') {
-          setPushError('تم ربط الجهاز، لكن إشعارات النظام ما زالت معطلة. فعّلها من إعدادات التطبيق.')
+          setPushError('ØªÙ… Ø±Ø¨Ø· Ø§Ù„Ø¬Ù‡Ø§Ø²ØŒ Ù„ÙƒÙ† Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ø§Ù„Ù†Ø¸Ø§Ù… Ù…Ø§ Ø²Ø§Ù„Øª Ù…Ø¹Ø·Ù„Ø©. ÙØ¹Ù‘Ù„Ù‡Ø§ Ù…Ù† Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„ØªØ·Ø¨ÙŠÙ‚.')
         }
         await sendNativePushTest().catch(() => {})
         return
@@ -554,7 +539,7 @@ export function Layout({
       setPushSubscribed(true)
       await sendPushTest().catch(() => {})
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'تعذر تفعيل الإشعارات.'
+      const message = error instanceof Error ? error.message : 'ØªØ¹Ø°Ø± ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª.'
       setPushError(message)
     } finally {
       setPushBusy(false)
@@ -581,7 +566,7 @@ export function Layout({
       }
       setPushSubscribed(false)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'تعذر إيقاف الإشعارات.'
+      const message = error instanceof Error ? error.message : 'ØªØ¹Ø°Ø± Ø¥ÙŠÙ‚Ø§Ù Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª.'
       setPushError(message)
     } finally {
       setPushBusy(false)
@@ -621,16 +606,11 @@ export function Layout({
     function onDocPointerDown(event: PointerEvent) {
       const path = typeof event.composedPath === 'function' ? event.composedPath() : []
       const target = event.target as Node | null
-      const profileContainsTarget =
-        !!profileMenuRef.current &&
-        !!target &&
-        (profileMenuRef.current.contains(target) || path.includes(profileMenuRef.current))
       const moreContainsTarget =
         !!moreMenuRef.current &&
         !!target &&
         (moreMenuRef.current.contains(target) || path.includes(moreMenuRef.current))
 
-      if (!profileContainsTarget) setProfileMenuOpen(false)
       if (!moreContainsTarget) setMoreMenuOpen(false)
     }
 
@@ -698,13 +678,13 @@ export function Layout({
     setNotificationsOpen(false)
     setLeaderboardOpen(false)
     setMoreMenuOpen(false)
+    setMenuOpen(false)
   }, [location.pathname])
 
   async function toggleNotifications() {
     const next = !notificationsOpen
     if (next) {
       setSearchOpen(false)
-      setProfileMenuOpen(false)
       setLeaderboardOpen(false)
       setMoreMenuOpen(false)
     }
@@ -744,8 +724,8 @@ export function Layout({
         ? 'blue'
         : 'none'
   const premiumProfileColorClass = getPremiumProfileColorClass(user.profile_color)
-  const profileIconVisible = effectiveHeaderIcons.some((item) => item.id === 'profile' && item.visible)
   const showUtilityLinksInHeader = utilityLinks.length > 0 && location.pathname !== '/portfolio'
+  const isPortfolioDashboard = location.pathname === '/portfolio'
   const desktopQuickLinks = [
     { to: '/portfolio', label: t('nav_home'), icon: House },
     { to: '/market', label: t('nav_markets'), icon: BarChart3 },
@@ -753,525 +733,415 @@ export function Layout({
     { to: '/friends', label: t('nav_friends'), icon: User },
     { to: '/profile', label: t('nav_profile'), icon: UserCircle2 },
   ]
+  const headerTitleMap: Record<string, string> = {
+    '/portfolio': 'Break Cash',
+    '/wallet': t('nav_wallet'),
+    '/market': t('nav_markets'),
+    '/arena': t('arena_home_title'),
+    '/deposit': t('deposit_page_title'),
+    '/withdraw': t('withdraw_page_title'),
+    '/support': t('support_page_title'),
+    '/notifications': t('notifications'),
+    '/profile': t('nav_profile'),
+    '/friends': t('nav_friends'),
+    '/vip': 'VIP',
+    '/mining': t('nav_mining'),
+  }
+  const currentHeaderTitle =
+    location.pathname.startsWith('/arena/result/')
+      ? t('arena_result_title') : location.pathname.startsWith('/arena/round/')
+        ? t('arena_round_title') : headerTitleMap[location.pathname] || (showBackButton ? document.title || 'Break Cash' : 'Break Cash')
 
-  function closeHeaderPopups(options?: { keepProfileMenu?: boolean }) {
+  function closeHeaderPopups() {
     setNotificationsOpen(false)
     setLeaderboardOpen(false)
     setSearchOpen(false)
     setMoreMenuOpen(false)
-    if (!options?.keepProfileMenu) setProfileMenuOpen(false)
+    setMenuOpen(false)
   }
 
   function applyLanguage(lang: Language) {
     setNotificationsOpen(false)
     setLeaderboardOpen(false)
     setSearchOpen(false)
-    setProfileMenuOpen(false)
     setMoreMenuOpen(false)
     setLanguage(lang)
   }
 
-  return (
-    <div dir={direction} className="min-h-[100dvh] overflow-x-clip bg-app-bg text-[var(--text-primary)]">
-      <header className="sticky top-0 z-50 border-b border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(7,11,20,0.96),rgba(11,17,32,0.9))] pt-[max(6px,env(safe-area-inset-top))] shadow-[0_8px_26px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
-        <div className="mx-auto w-full max-w-[1280px] px-3 pb-2 pt-1 lg:px-6 lg:pb-2 lg:pt-1.5">
-          <div className="app-header-row">
-            <div className="app-header-side app-header-side-start">
-              {profileIconVisible ? (
-                <div className="relative" ref={profileMenuRef}>
-                  <button
-                    className={`icon-interactive liquid-glass-icon flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-brand-blue/45 shadow-[0_0_0_1px_rgba(0,123,255,0.18)] focus:outline-none focus:ring-2 focus:ring-brand-blue/35 ${premiumProfileColorClass}`}
-                    type="button"
-                    onClick={() => {
-                      setNotificationsOpen(false)
-                      setSearchOpen(false)
-                      setLeaderboardOpen(false)
-                      setMoreMenuOpen(false)
-                      setProfileMenuOpen((v) => !v)
-                    }}
-                    aria-label={t('profile_menu_title')}
-                  >
-                    {user.avatar_url && !avatarBroken ? (
-                      <img
-                        src={resolveAvatarSrc(user.avatar_url)}
-                        alt={t('nav_profile')}
-                        className="h-full w-full object-cover"
-                        onLoad={handleAvatarLoadSuccess}
-                        onError={handleAvatarLoadError}
-                      />
-                    ) : (
-                      <UserCircle2 size={20} className="text-white/85" />
-                    )}
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {profileMenuOpen ? (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                        transition={{ duration: scaleDuration(0.16), ease: 'easeOut' }}
-                        className="glass-panel absolute start-0 top-14 z-50 min-w-44 rounded-xl p-2 shadow-[0_16px_32px_rgba(0,0,0,0.45)]"
-                      >
-                        <div className="mb-1 rounded-lg border border-app-border bg-app-elevated px-3 py-2">
-                          {renderProfileIdentity(true)}
-                        </div>
-                        {utilityLinks.length > 0 ? (
-                          <div className="mb-1 space-y-1">
-                            {utilityLinks.map((item) => (
-                              <button
-                                key={`menu-${item.route}`}
-                                type="button"
-                                className="w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-app-elevated"
-                                onClick={() => {
-                                  closeHeaderPopups()
-                                  navigate(item.route)
-                                }}
-                              >
-                                {item.title}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-app-elevated"
-                          onClick={() => {
-                            closeHeaderPopups()
-                            navigate('/profile')
-                          }}
-                        >
-                          {t('nav_profile')}
-                        </button>
-                        <button
-                          type="button"
-                          className="mt-1 w-full rounded-lg px-3 py-2 text-start text-sm text-white/90 hover:bg-[#2a3342]"
-                          onClick={() => {
-                            closeHeaderPopups()
-                            onLogout()
-                          }}
-                        >
-                          {t('logout') || 'Logout'}
-                        </button>
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
-                </div>
-              ) : null}
+  const moreMenu = moreMenuOpen ? (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 6, scale: 0.985 }}
+      transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+      onPointerDown={(event) => event.stopPropagation()}
+      className="app-header-more-menu app-header-more-menu--language z-[95] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_20px_46px_rgba(0,0,0,0.42)] backdrop-blur-2xl"
+    >
+      <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">{t('language')}</div>
+      <div className="space-y-1">
+        {[
+          { id: 'ar', label: t('language_name_ar') },
+          { id: 'en', label: t('language_name_en') },
+          { id: 'tr', label: t('language_name_tr') },
+        ].map((item) => {
+          const active = language === item.id
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => applyLanguage(item.id as Language)}
+              className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm transition ${
+                active
+                  ? 'border border-brand-blue/40 bg-brand-blue/18 text-white'
+                  : 'text-white/80 hover:bg-white/8 hover:text-white'
+              }`}
+            >
+              <span>{item.label}</span>
+              {active ? <Globe2 size={14} className="text-brand-blue" /> : null}
+            </button>
+          )
+        })}
+      </div>
+    </motion.div>
+  ) : null
 
-              {showBackButton ? (
+  const utilityLinksRow = showUtilityLinksInHeader ? (
+    <>
+      {utilityLinks.map((item) => (
+        <Link
+          key={item.route}
+          to={item.route}
+          onClick={() => closeHeaderPopups()}
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${
+            location.pathname === item.route
+              ? 'border border-brand-blue/60 bg-brand-blue/22 text-white shadow-[0_0_0_1px_rgba(0,123,255,0.22)]'
+              : 'border border-white/10 bg-[#242a34] text-white/85 hover:bg-[#2d3542]'
+          }`}
+        >
+          <Shield size={11} />
+          {item.title}
+        </Link>
+      ))}
+    </>
+  ) : null
+
+  const extraPanels = (
+    <>
+      <AnimatePresence initial={false}>
+        {leaderboardOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.985 }}
+            transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+            className="liquid-modal-backdrop app-header-notifications-panel"
+          >
+            <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-2">
+              <div className="max-h-[72dvh] overflow-auto rounded-2xl [&_section]:mb-0">
+                <LeaderboardSection config={leaderboardConfig} previewMode={!leaderboardConfig?.enabled} />
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {searchOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: -6, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -6, height: 0 }}
+            transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="glass-panel rounded-2xl p-2">
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-white/40">
+                  <Search size={15} />
+                </span>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('wallet_search')}
+                  className="glass-input h-10 w-full rounded-full ps-10 pe-10 text-sm text-[var(--text-primary)] placeholder:text-app-muted/80 transition"
+                />
                 <button
-                  className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/50 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
                   type="button"
-                  onClick={() => {
-                    closeHeaderPopups()
-                    navigate(-1)
-                  }}
-                  aria-label={t('back')}
+                  className="absolute inset-y-0 end-2 inline-flex items-center text-white/60 hover:text-white"
+                  onClick={() => setSearchOpen(false)}
+                  aria-label={t('close_search')}
                 >
-                  {direction === 'rtl' ? <ArrowRight size={17} /> : <ArrowLeft size={17} />}
+                  <X size={15} />
                 </button>
+              </div>
+              <div className="mt-2 flex gap-2 overflow-x-auto">
+                <button type="button" className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]" onClick={() => { closeHeaderPopups(); navigate('/market') }}>{t('nav_markets')}</button>
+                <button type="button" className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]" onClick={() => { closeHeaderPopups(); navigate('/futures') }}>{t('nav_futures')}</button>
+                <button type="button" className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]" onClick={() => { closeHeaderPopups(); navigate('/friends') }}>{t('nav_friends')}</button>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {notificationsOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.985 }}
+            transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
+            className="liquid-modal-backdrop app-header-notifications-panel"
+          >
+            <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-3">
+              <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="text-sm font-medium text-white">{pushSubscribed ? pushTexts.disable : pushTexts.enable}</div>
+                <div className="mt-1 text-xs text-white/60">
+                  {pushPermission === 'denied' ? pushTexts.deniedHint : pushSubscribed ? pushTexts.enabledHint : pushTexts.idleHint}
+                </div>
+                {pushError ? <div className="mt-2 rounded-lg border border-red-400/35 bg-red-500/15 px-2 py-1 text-[11px] text-red-100">{pushError}</div> : null}
+                {pushSupported ? (
+                  <button
+                    type="button"
+                    className="mt-3 icon-interactive rounded-full border border-app-border bg-app-elevated px-3 py-1.5 text-xs text-white/85 hover:border-brand-blue/40 hover:text-brand-blue"
+                    onClick={() => {
+                      if (pushSubscribed) disablePushNotifications().catch(() => {})
+                      else enablePushNotifications(true).catch(() => {})
+                    }}
+                    disabled={pushBusy}
+                  >
+                    {pushBusy ? pushTexts.loading : pushSubscribed ? pushTexts.disable : pushTexts.enable}
+                  </button>
+                ) : (
+                  <div className="mt-3 text-xs text-white/45">{pushTexts.unsupported}</div>
+                )}
+              </div>
+              {notifications.length === 0 ? (
+                <div className="text-sm text-white/55">{t('no_notifications')}</div>
               ) : (
-                <div className="h-10 w-10" aria-hidden="true" />
+                <div className="space-y-2">
+                  {notifications.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2 transition ${
+                        Number(item.is_read || 0) === 0 ? 'border border-brand-blue/30 bg-brand-blue/10 shadow-[0_0_0_1px_rgba(0,123,255,0.12)]' : 'opacity-80'
+                      } ${isStrategyNotification(item) || isSupportNotification(item) ? 'border border-amber-400/25 bg-amber-500/10' : ''}`}
+                    >
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-start"
+                        onClick={() => {
+                          const route = resolveNotificationRoute(item)
+                          if (!route) return
+                          closeHeaderPopups()
+                          navigate(route)
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium">{item.title}</div>
+                          {Number(item.is_read || 0) === 0 ? <span className="rounded-full border border-brand-blue/30 bg-brand-blue/15 px-2 py-0.5 text-[10px] font-bold text-brand-blue">Ø¬Ø¯ÙŠØ¯</span> : null}
+                          {isStrategyNotification(item) || isSupportNotification(item) ? <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">Ù…Ù‡Ù…</span> : null}
+                        </div>
+                        <div className="text-xs text-white/60">{item.body}</div>
+                        <div className="mt-1 text-[11px] text-white/40">{formatNotificationTimestamp(item.created_at)}</div>
+                      </button>
+                      {Number(item.is_read || 0) === 0 ? (
+                        <button
+                          className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
+                          type="button"
+                          onClick={async () => {
+                            await apiFetch('/api/notifications/markAsRead', {
+                              method: 'POST',
+                              body: JSON.stringify({ id: item.id, title: item.title, body: item.body }),
+                            })
+                            readNotificationKeysRef.current.add(getNotificationKey(item))
+                            setNotifications((rows) => rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)))
+                            setUnreadCount((value) => (value > 0 ? value - 1 : 0))
+                          }}
+                        >
+                          {t('mark_read')}
+                        </button>
+                      ) : (
+                        <div className="px-2 py-1 text-[11px] text-white/35">Ù…Ù‚Ø±ÙˆØ¡</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </>
+  )
 
-            <div className="app-header-brand-wrap">
-              <Link to="/portfolio" className="app-header-brand-banner" aria-label="Break Cash" dir="ltr">
-                <span className="app-header-brand-mark" aria-hidden="true">
-                  <span className="app-header-brand-mark-line app-header-brand-mark-line-lg" />
-                  <span className="app-header-brand-mark-line app-header-brand-mark-line-md" />
-                  <span className="app-header-brand-mark-line app-header-brand-mark-line-sm" />
-                </span>
-                <span className="app-header-brand-wordmark">Break Cash</span>
-                <span className="app-header-brand-badge" aria-hidden="true">
-                  <span className="app-header-brand-badge-check">✓</span>
-                </span>
-              </Link>
+  const menuDrawer = menuOpen ? (
+    <AnimatePresence initial={false}>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: scaleDuration(0.16), ease: 'easeOut' }}
+        className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-sm"
+        onClick={() => setMenuOpen(false)}
+      >
+        <motion.div
+          initial={{ x: direction === 'rtl' ? 26 : -26, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: direction === 'rtl' ? 26 : -26, opacity: 0 }}
+          transition={{ duration: scaleDuration(0.18), ease: 'easeOut' }}
+          className={`absolute top-[calc(env(safe-area-inset-top)+14px)] ${
+            direction === 'rtl' ? 'left-3' : 'right-3'
+          } w-[min(320px,calc(100vw-24px))] rounded-[24px] border border-app-border bg-[linear-gradient(180deg,rgba(12,16,29,0.98),rgba(10,13,24,0.98))] p-3 shadow-[0_24px_64px_rgba(0,0,0,0.45)]`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="mb-3 flex items-center gap-2 rounded-2xl border border-app-border bg-app-elevated p-3">
+            <div className={`h-10 w-10 overflow-hidden rounded-full border border-app-border bg-app-surface ${premiumProfileColorClass}`}>
+              {user.avatar_url && !avatarBroken ? (
+                <img
+                  src={resolveAvatarSrc(user.avatar_url)}
+                  alt={t('nav_profile')}
+                  className="h-full w-full object-cover"
+                  onLoad={handleAvatarLoadSuccess}
+                  onError={handleAvatarLoadError}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-white/70">
+                  <UserCircle2 size={18} />
+                </div>
+              )}
             </div>
-
-            <div className="app-header-side app-header-side-actions">
-              <div className="glass-panel-soft app-header-actions-shell flex items-center gap-1.5 rounded-2xl p-1.5">
-              <ProfileActiveNowCounterCompact className="me-1" />
-              <button
-                type="button"
-                className="icon-interactive liquid-glass-icon relative flex h-10 min-w-[44px] items-center justify-center rounded-full border border-amber-300/35 bg-[linear-gradient(180deg,rgba(245,158,11,0.2),rgba(245,158,11,0.08))] text-amber-200 shadow-[0_0_16px_rgba(245,158,11,0.2)] hover:border-amber-300/55 hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300/35"
-                onClick={() => {
-                  setNotificationsOpen(false)
-                  setSearchOpen(false)
-                  setProfileMenuOpen(false)
-                  setMoreMenuOpen(false)
-                  setLeaderboardOpen((value) => !value)
-                }}
-                aria-label="أعلى المودعين"
-                title="أعلى المودعين"
-              >
-                <Crown size={16} />
-              </button>
-              {managementShortcut ? (
-                <Link
-                  to={managementShortcut.to}
-                  className="icon-interactive liquid-glass-icon relative flex h-10 min-w-[46px] items-center justify-center gap-1 rounded-full px-2 text-white/90 hover:border-brand-blue/55 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
-                  aria-label={managementShortcut.label}
-                  title={managementShortcut.label}
-                  onClick={() => closeHeaderPopups()}
-                >
-                  {managementShortcut.kind === 'owner' ? <Crown size={16} /> : <Shield size={16} />}
-                  <span className="absolute -end-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-blue px-1 text-[10px] font-bold leading-4 text-white">
-                    {managementShortcut.count}
-                  </span>
-                </Link>
-              ) : null}
-              <a
-                href={WHATSAPP_CHANNEL_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-[#25D366] hover:border-emerald-400/55 hover:text-[#4af08a] focus:outline-none focus:ring-2 focus:ring-emerald-400/35"
-                aria-label="WhatsApp Channel"
-                title="WhatsApp Channel"
-                onClick={() => closeHeaderPopups()}
-              >
-                <svg viewBox="0 0 24 24" className="h-[17px] w-[17px] fill-current" aria-hidden="true">
-                  <path d="M19.05 4.91A9.82 9.82 0 0 0 12.03 2C6.61 2 2.2 6.41 2.2 11.83c0 1.74.45 3.43 1.3 4.92L2 22l5.4-1.42a9.8 9.8 0 0 0 4.63 1.18h.01c5.42 0 9.83-4.41 9.83-9.83a9.77 9.77 0 0 0-2.82-7.02Zm-7.02 15.19h-.01a8.15 8.15 0 0 1-4.15-1.13l-.3-.18-3.2.84.86-3.12-.2-.32a8.15 8.15 0 0 1-1.26-4.36c0-4.5 3.66-8.16 8.17-8.16a8.1 8.1 0 0 1 5.78 2.4 8.1 8.1 0 0 1 2.38 5.77c0 4.5-3.66 8.16-8.17 8.16Zm4.48-6.1c-.24-.12-1.4-.69-1.62-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.42-1.34-1.66-.14-.24-.01-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.48-.4-.41-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.68 2.56 4.07 3.59.57.25 1.02.4 1.37.51.58.18 1.1.15 1.52.09.46-.07 1.4-.57 1.6-1.12.2-.55.2-1.02.14-1.12-.06-.1-.22-.16-.46-.28Z" />
-                </svg>
-              </a>
-              <div className="relative" ref={moreMenuRef}>
-                <button
-                  type="button"
-                  className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => {
-                    setNotificationsOpen(false)
-                    setSearchOpen(false)
-                    setLeaderboardOpen(false)
-                    setProfileMenuOpen(false)
-                    setMoreMenuOpen((value) => !value)
-                  }}
-                  aria-label={language === 'ar' ? 'المزيد' : language === 'tr' ? 'Daha fazla' : 'More'}
-                >
-                  <Ellipsis size={17} />
-                </button>
-                <AnimatePresence initial={false}>
-                  {moreMenuOpen ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: 6, scale: 0.985 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 6, scale: 0.985 }}
-                      transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
-                      onPointerDown={(event) => event.stopPropagation()}
-                      className="app-header-more-menu absolute end-0 top-full z-[95] mt-2 w-[190px] rounded-2xl border border-app-border bg-[#0f1628]/95 p-2 shadow-[0_20px_46px_rgba(0,0,0,0.42)] backdrop-blur-2xl"
-                    >
-                      <div className="mb-1 px-2 text-[11px] font-semibold text-white/60">
-                        {t('language')}
-                      </div>
-                      <div className="space-y-1">
-                        {[
-                          { id: 'ar', label: 'العربية' },
-                          { id: 'en', label: 'English' },
-                          { id: 'tr', label: 'Türkçe' },
-                        ].map((item) => {
-                          const active = language === item.id
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => applyLanguage(item.id as Language)}
-                              className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm transition ${
-                                active
-                                  ? 'border border-brand-blue/40 bg-brand-blue/18 text-white'
-                                  : 'text-white/80 hover:bg-white/8 hover:text-white'
-                              }`}
-                            >
-                              <span>{item.label}</span>
-                              {active ? <Globe2 size={14} className="text-brand-blue" /> : null}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </div>
-              {effectiveHeaderIcons.map((item) => {
-                if (!item.visible) return null
-                if (item.id === 'profile') return null
-                if (item.id === 'search') {
-                  if (searchOpen) return null
-                  return (
-                    <button
-                      key="search"
-                      className="icon-interactive liquid-glass-icon flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
-                      type="button"
-                      onClick={() => {
-                        setNotificationsOpen(false)
-                        setLeaderboardOpen(false)
-                        setProfileMenuOpen(false)
-                        setMoreMenuOpen(false)
-                        setSearchOpen(true)
-                      }}
-                      aria-label={t('search_actions')}
-                    >
-                      <Search size={17} />
-                    </button>
-                  )
-                }
-                if (item.id === 'language') {
-                  return null
-                }
-                if (item.id === 'notifications') {
-                  return (
-                    <button
-                      key="notifications"
-                      className="icon-interactive liquid-glass-icon relative flex h-10 w-10 items-center justify-center rounded-full text-white/85 hover:border-brand-blue/55 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/35"
-                      type="button"
-                      onClick={toggleNotifications}
-                      aria-label={t('notifications')}
-                    >
-                      <Bell size={17} />
-                      {unreadCount > 0 ? (
-                        <span className="absolute -end-0.5 -top-0.5 min-w-[17px] rounded-full border border-[#1f2228] bg-brand-blue px-1 text-center text-[10px] font-semibold leading-4 text-white">
-                          {unreadCount > 9 ? '9+' : unreadCount}
-                        </span>
-                      ) : null}
-                    </button>
-                  )
-                }
-                return null
-              })}
-              </div>
-            </div>
+            <div className="min-w-0 flex-1">{renderProfileIdentity(true)}</div>
           </div>
 
-          <AnimatePresence initial={false}>
-            {leaderboardOpen ? (
-              <motion.div
-                initial={{ opacity: 0, y: -8, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8, scale: 0.985 }}
-                transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
-                className="liquid-modal-backdrop app-header-notifications-panel mt-2"
-              >
-                <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-2">
-                  <div className="max-h-[72dvh] overflow-auto rounded-2xl [&_section]:mb-0">
-                    <LeaderboardSection config={leaderboardConfig} previewMode={!leaderboardConfig?.enabled} />
-                  </div>
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-
-          <AnimatePresence initial={false}>
-            {searchOpen ? (
-              <motion.div
-                initial={{ opacity: 0, y: -6, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: -6, height: 0 }}
-                transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
-                className="overflow-hidden"
-              >
-                <div className="glass-panel mt-2 rounded-2xl p-2">
-                  <div className="relative">
-                    <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-white/40">
-                      <Search size={15} />
-                    </span>
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder={t('wallet_search')}
-                      className="glass-input h-10 w-full rounded-full ps-10 pe-10 text-sm text-[var(--text-primary)] placeholder:text-app-muted/80 transition"
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 end-2 inline-flex items-center text-white/60 hover:text-white"
-                      onClick={() => setSearchOpen(false)}
-                      aria-label={t('close_search')}
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex gap-2 overflow-x-auto">
-                    <button
-                      type="button"
-                      className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-                      onClick={() => {
-                        closeHeaderPopups()
-                        navigate('/market')
-                      }}
-                    >
-                      {t('nav_markets')}
-                    </button>
-                    <button
-                      type="button"
-                      className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-                      onClick={() => {
-                        closeHeaderPopups()
-                        navigate('/futures')
-                      }}
-                    >
-                      {t('nav_futures')}
-                    </button>
-                    <button
-                      type="button"
-                      className="glass-pill rounded-full px-2.5 py-1 text-[11px] text-[var(--text-secondary)]"
-                      onClick={() => {
-                        closeHeaderPopups()
-                        navigate('/friends')
-                      }}
-                    >
-                      {t('nav_friends')}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-
-          {showUtilityLinksInHeader ? (
-            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-              {utilityLinks.map((item) => (
+          <div className="space-y-1">
+            {desktopQuickLinks.map((item) => {
+              const Icon = item.icon
+              const isActive = location.pathname.startsWith(item.to)
+              return (
                 <Link
-                  key={item.route}
-                  to={item.route}
-                  onClick={() => closeHeaderPopups()}
-                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${
-                    location.pathname === item.route
-                      ? 'border border-brand-blue/60 bg-brand-blue/22 text-white shadow-[0_0_0_1px_rgba(0,123,255,0.22)]'
-                      : 'border border-white/10 bg-[#242a34] text-white/85 hover:bg-[#2d3542]'
+                  key={`drawer-${item.to}`}
+                  to={item.to}
+                  className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition ${
+                    isActive
+                      ? 'border border-[var(--border-blue)] bg-brand-blue/14 text-white shadow-[var(--shadow-inner)]'
+                      : 'border border-transparent text-white/78 hover:border-app-border hover:bg-app-elevated'
                   }`}
+                  onClick={() => closeHeaderPopups()}
                 >
-                  <Shield size={11} />
-                  {item.title}
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-app-border bg-app-surface/85">
+                    <Icon size={16} />
+                  </span>
+                  <span>{item.label}</span>
                 </Link>
-              ))}
+              )
+            })}
+          </div>
+
+          {utilityLinks.length > 0 ? (
+            <div className="mt-3 border-t border-white/8 pt-3">
+              <div className="mb-2 text-xs font-semibold text-white/45">{t('nav_admin')}</div>
+              <div className="space-y-1">
+                {utilityLinks.map((item) => (
+                  <button
+                    key={`drawer-util-${item.route}`}
+                    type="button"
+                    className="w-full rounded-2xl px-3 py-2.5 text-start text-sm text-white/82 hover:bg-app-elevated"
+                    onClick={() => {
+                      closeHeaderPopups()
+                      navigate(item.route)
+                    }}
+                  >
+                    {item.title}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
 
-          <AnimatePresence initial={false}>
-            {notificationsOpen ? (
-              <motion.div
-                initial={{ opacity: 0, y: -8, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8, scale: 0.985 }}
-                transition={{ duration: scaleDuration(0.2), ease: 'easeOut' }}
-                className="liquid-modal-backdrop app-header-notifications-panel mt-2"
-              >
-                <div className="liquid-modal-card glass-panel rounded-2xl border border-app-border bg-app-card p-3">
-                  <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
-                    <div className="text-sm font-medium text-white">
-                      {pushSubscribed ? pushTexts.disable : pushTexts.enable}
-                    </div>
-                    <div className="mt-1 text-xs text-white/60">
-                      {pushPermission === 'denied'
-                        ? pushTexts.deniedHint
-                        : pushSubscribed
-                          ? pushTexts.enabledHint
-                          : pushTexts.idleHint}
-                    </div>
-                    {pushError ? (
-                      <div className="mt-2 rounded-lg border border-red-400/35 bg-red-500/15 px-2 py-1 text-[11px] text-red-100">
-                        {pushError}
-                      </div>
-                    ) : null}
-                    {pushSupported ? (
-                      <button
-                        type="button"
-                        className="mt-3 icon-interactive rounded-full border border-app-border bg-app-elevated px-3 py-1.5 text-xs text-white/85 hover:border-brand-blue/40 hover:text-brand-blue"
-                        onClick={() => {
-                          if (pushSubscribed) disablePushNotifications().catch(() => {})
-                          else enablePushNotifications(true).catch(() => {})
-                        }}
-                        disabled={pushBusy}
-                      >
-                        {pushBusy ? pushTexts.loading : pushSubscribed ? pushTexts.disable : pushTexts.enable}
-                      </button>
-                    ) : (
-                      <div className="mt-3 text-xs text-white/45">{pushTexts.unsupported}</div>
-                    )}
-                  </div>
-                  {notifications.length === 0 ? (
-                    <div className="text-sm text-white/55">{t('no_notifications')}</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {notifications.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`glass-panel-soft flex items-start justify-between gap-3 rounded-xl p-2 transition ${
-                            Number(item.is_read || 0) === 0
-                              ? 'border border-brand-blue/30 bg-brand-blue/10 shadow-[0_0_0_1px_rgba(0,123,255,0.12)]'
-                              : 'opacity-80'
-                          } ${
-                            isStrategyNotification(item) || isSupportNotification(item)
-                              ? 'border border-amber-400/25 bg-amber-500/10'
-                              : ''
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-start"
-                            onClick={() => {
-                              const route = resolveNotificationRoute(item)
-                              if (!route) return
-                              closeHeaderPopups()
-                              navigate(route)
-                            }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-medium">{item.title}</div>
-                              {Number(item.is_read || 0) === 0 ? (
-                                <span className="rounded-full border border-brand-blue/30 bg-brand-blue/15 px-2 py-0.5 text-[10px] font-bold text-brand-blue">
-                                  جديد
-                                </span>
-                              ) : null}
-                              {isStrategyNotification(item) || isSupportNotification(item) ? (
-                                <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">
-                                  مهم
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-xs text-white/60">{item.body}</div>
-                            <div className="mt-1 text-[11px] text-white/40">{formatNotificationTimestamp(item.created_at)}</div>
-                            {isStrategyNotification(item) ? (
-                              <div className="mt-1 text-[11px] text-amber-200/85">اضغط لفتح لوحة الصفقات الاستراتيجية</div>
-                            ) : isSupportNotification(item) ? (
-                              <div className="mt-1 text-[11px] text-amber-200/85">
-                                {canManageSupport ? 'اضغط لفتح مركز دعم الإدارة' : 'اضغط لفتح مركز المساعدة'}
-                              </div>
-                            ) : null}
-                          </button>
-                          {Number(item.is_read || 0) === 0 ? (
-                            <button
-                              className="icon-interactive rounded-full border border-app-border bg-app-elevated px-2 py-1 text-[11px] text-white/80 hover:border-brand-blue/40 hover:text-brand-blue"
-                              type="button"
-                              onClick={async () => {
-                                await apiFetch('/api/notifications/markAsRead', {
-                                  method: 'POST',
-                                  body: JSON.stringify({ id: item.id, title: item.title, body: item.body }),
-                                })
-                                readNotificationKeysRef.current.add(getNotificationKey(item))
-                                setNotifications((rows) =>
-                                  rows.map((row) => (row.id === item.id ? { ...row, is_read: 1 } : row)),
-                                )
-                                setUnreadCount((value) => (value > 0 ? value - 1 : 0))
-                              }}
-                            >
-                              {t('mark_read')}
-                            </button>
-                          ) : (
-                            <div className="px-2 py-1 text-[11px] text-white/35">مقروء</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
-      </header>
+          <div className="mt-3 border-t border-white/8 pt-3">
+            <button
+              type="button"
+              className="w-full rounded-2xl bg-white/6 px-3 py-3 text-start text-sm text-white/82 hover:bg-white/10"
+              onClick={() => {
+                closeHeaderPopups()
+                navigate('/support')
+              }}
+            >
+              {t('support_page_title')}
+            </button>
+            <button
+              type="button"
+              className="mt-2 w-full rounded-2xl bg-[#2a3342] px-3 py-3 text-start text-sm text-white/92 hover:bg-[#313b4d]"
+              onClick={() => {
+                closeHeaderPopups()
+                onLogout()
+              }}
+            >
+              {t('logout') || 'Logout'}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  ) : null
 
-      <main className="mx-auto w-full max-w-[1280px] px-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-[calc(9rem+env(safe-area-inset-bottom))]">
-        <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-4">
+  return (
+    <div dir={direction} className="min-h-[100dvh] overflow-x-clip bg-app-bg text-[var(--text-primary)]">
+      <AppHeader
+        variant={isPortfolioDashboard ? 'home' : showBackButton ? 'inner' : 'default'}
+        direction={direction}
+        brandName="Break Cash"
+        title={currentHeaderTitle}
+        subtitle={isPortfolioDashboard ? (user.display_name || `#${user.id}`) : undefined}
+        showBack={showBackButton}
+        showMenu={!showBackButton}
+        showSearch={effectiveHeaderIcons.some((item) => item.id === 'search' && item.visible)}
+        showNotifications={effectiveHeaderIcons.some((item) => item.id === 'notifications' && item.visible)}
+        showMore
+        showSupport
+        menuAvatarUrl={!showBackButton && user.avatar_url && !avatarBroken ? resolveAvatarSrc(user.avatar_url) : null}
+        menuAvatarAlt={user.display_name || t('nav_profile')}
+        unreadCount={unreadCount}
+        onBack={() => {
+          closeHeaderPopups()
+          navigate(-1)
+        }}
+        onMenu={() => {
+          setNotificationsOpen(false)
+          setSearchOpen(false)
+          setLeaderboardOpen(false)
+          setMoreMenuOpen(false)
+          setMenuOpen((value) => !value)
+        }}
+        onSearch={() => {
+          setNotificationsOpen(false)
+          setLeaderboardOpen(false)
+          setMoreMenuOpen(false)
+          setSearchOpen((value) => !value)
+        }}
+        onNotifications={toggleNotifications}
+        onMore={() => {
+          setNotificationsOpen(false)
+          setSearchOpen(false)
+          setLeaderboardOpen(false)
+          setMoreMenuOpen((value) => !value)
+        }}
+        onSupport={() => {
+          closeHeaderPopups()
+          window.open(WHATSAPP_CHANNEL_URL, '_blank', 'noopener,noreferrer')
+        }}
+        moreMenu={moreMenu}
+        extraPanels={extraPanels}
+        utilityLinks={utilityLinksRow}
+        menuDrawer={menuDrawer}
+        moreMenuRef={moreMenuRef}
+      />
+
+      <main className={isPortfolioDashboard ? 'portfolio-layout-main' : 'mx-auto w-full max-w-[1280px] px-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-[calc(9rem+env(safe-area-inset-bottom))]'}>
+        <div className={isPortfolioDashboard ? 'portfolio-layout-content' : 'lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-4'}>
+          {!isPortfolioDashboard ? (
           <aside className="hidden lg:block">
             <div className="sticky top-[96px] space-y-3">
               <div className="glass-panel rounded-2xl p-3">
@@ -1328,6 +1198,7 @@ export function Layout({
               </div>
             </div>
           </aside>
+          ) : null}
           <div className="min-w-0">{children}</div>
         </div>
       </main>
@@ -1336,3 +1207,4 @@ export function Layout({
     </div>
   )
 }
+
