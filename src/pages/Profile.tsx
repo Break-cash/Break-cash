@@ -157,26 +157,9 @@ export function Profile() {
       : null
 
   const activeOfferSummary = useMemo<HomeScreenActiveOfferSummary | null>(() => {
-    const activeOffers = depositOffers.filter((offer) => offer.state === 'active' && offer.remainingSeconds !== 0)
-    if (activeOffers.length === 0) return null
+    const nearestOffer = depositOffers.find((offer) => offer.state === 'active' || offer.state === 'claimed')
+    if (!nearestOffer) return null
 
-    const sortedByExpiry = [...activeOffers].sort((a, b) => {
-      const aRemaining =
-        typeof a.remainingSeconds === 'number'
-          ? a.remainingSeconds
-          : a.endsAt
-            ? Math.max(0, Math.floor((new Date(a.endsAt).getTime() - nowTs) / 1000))
-            : Number.POSITIVE_INFINITY
-      const bRemaining =
-        typeof b.remainingSeconds === 'number'
-          ? b.remainingSeconds
-          : b.endsAt
-            ? Math.max(0, Math.floor((new Date(b.endsAt).getTime() - nowTs) / 1000))
-            : Number.POSITIVE_INFINITY
-      return aRemaining - bRemaining
-    })
-
-    const nearestOffer = sortedByExpiry[0]
     const remainingSeconds =
       typeof nearestOffer.remainingSeconds === 'number'
         ? nearestOffer.remainingSeconds
@@ -190,7 +173,7 @@ export function Profile() {
     const seconds = String(safeSeconds % 60).padStart(2, '0')
 
     return {
-      label: activeOffers.length > 1 ? `ينتهي أقرب عرض من ${activeOffers.length}` : 'ينتهي العرض خلال',
+      label: '\u064a\u0646\u062a\u0647\u064a \u0639\u0631\u0636 \u0627\u0644\u064a\u0648\u0645 \u062e\u0644\u0627\u0644',
       value: `${hours}:${minutes}:${seconds}`,
       title: nearestOffer.title,
       teaserText: nearestOffer.teaserText,
@@ -201,7 +184,6 @@ export function Profile() {
       onClick: () => navigate('/deposit'),
     }
   }, [depositOffers, navigate, nowTs])
-
   const primaryPromo = useMemo(
     () => profileAds.find((item) => item.type === 'image') || profileAds[0] || null,
     [profileAds],

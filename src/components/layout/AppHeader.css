@@ -121,21 +121,40 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
 }
 
-.app-header-v3__badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 15px;
-  height: 15px;
-  border-radius: 999px;
+.app-header-v3 .arena-page__icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  border: 1px solid #1e334d;
+  background: #13263d;
+  color: #f5f7fb;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
-  background: var(--accent-red);
-  color: var(--text-primary);
-  font-size: 8px;
+  position: relative;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.app-header-v3 .arena-page__icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.app-header-v3 .arena-page__icon-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #f4c54c;
+  color: #07111f;
+  font-size: 10px;
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .app-header-v3__menu-anchor {
@@ -189,6 +208,17 @@
   gap: 6px;
 }
 
+.app-header-v3--home .arena-page__icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+}
+
+.app-header-v3--home .arena-page__icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
 @media (max-width: 390px) {
   .app-header-v3--home .app-header-v3__shell {
     padding-inline: 6px;
@@ -201,6 +231,11 @@
   .app-header-v3--home .app-header-v3__icon {
     width: 24px;
     height: 24px;
+  }
+
+  .app-header-v3--home .arena-page__icon-btn {
+    width: 30px;
+    height: 30px;
   }
 }
 

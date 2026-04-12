@@ -482,12 +482,12 @@ export function DepositPage({ user, pageMode = 'deposit' }: DepositPageProps) {
         <section className="deposit-section deposit-offers-section">
           <div className="deposit-offers-head">
             <div>
-              <h2 className="deposit-section-title">عروض الإيداع النشطة</h2>
+              <h2 className="deposit-section-title">{'\u0639\u0631\u0636 \u0627\u0644\u0625\u064a\u062f\u0627\u0639 \u0627\u0644\u064a\u0648\u0645\u064a'}</h2>
               <p className="deposit-offers-subtitle">
-                أكثر من 13 عرضًا مرتبطة مباشرة بمكافآت الإيداع. اختر العرض المناسب ثم ثبّت الإيداع قبل انتهاء الوقت.
-              </p>
+                {'\u064a\u0638\u0647\u0631 \u0639\u0631\u0636 \u0648\u0627\u062d\u062f \u0641\u0642\u0637 \u0643\u0644 \u064a\u0648\u0645. \u064a\u062a\u0628\u062f\u0644 \u062a\u0644\u0642\u0627\u0626\u064a\u064b\u0627 \u0643\u0644 24 \u0633\u0627\u0639\u0629\u060c \u0648\u064a\u064f\u0645\u0646\u062d \u0641\u0642\u0637 \u0625\u0630\u0627 \u062a\u0645 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0625\u064a\u062f\u0627\u0639 \u0642\u0628\u0644 \u0627\u0646\u062a\u0647\u0627\u0621 \u0627\u0644\u0645\u0624\u0642\u062a.'}
+                </p>
             </div>
-            <span className="deposit-offers-badge">{offersWithTimers.filter((offer) => offer.state === 'active').length} عرض فعال</span>
+            <span className="deposit-offers-badge">{offersWithTimers[0] ? formatOfferCountdown(offersWithTimers[0].liveRemainingSeconds) : '--:--:--'}</span>
           </div>
           <div className="deposit-offers-grid">
             {offersWithTimers.map((offer) => (

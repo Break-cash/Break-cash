@@ -2,6 +2,8 @@ import { all, get, run } from '../db.js'
 import { createDepositOfferBonusReward } from './wallet-service.js'
 import { createLocalizedNotification } from './notifications.js'
 
+const OFFER_ROTATION_WINDOW_MS = 24 * 60 * 60 * 1000
+
 const DEFAULT_OFFER_DEFINITIONS = [
   { key: 'flash-500-10', title: 'مكافأة بداية سريعة', teaser: 'لفترة قصيرة فقط على أول شريحة إيداع قوية.', headline: 'افتح مكافأة بداية سريعة الآن', urgency: 'العرض النشط ينتهي قريبًا. ثبّت إيداعك قبل انتهاء العد التنازلي.', min: 500, max: 999.99, percent: 10, maxReward: 100, order: 1 },
   { key: 'prime-750-12', title: 'حافز النخبة 12%', teaser: 'ارفع إيداعك إلى مستوى أعلى مع مكافأة مضاعفة.', headline: 'ترقية فورية بإيداع 750 USD', urgency: 'هذه النافذة الترويجية محدودة وتغلق تلقائيًا.', min: 750, max: 1499.99, percent: 12, maxReward: 180, order: 2 },
@@ -24,10 +26,7 @@ function normalizeDate(date) {
 }
 
 function buildSeedOffers() {
-  const now = new Date()
   return DEFAULT_OFFER_DEFINITIONS.map((offer, index) => {
-    const startsAt = new Date(now.getTime() - 60 * 60 * 1000)
-    const endsAt = new Date(now.getTime() + (8 + index) * 60 * 60 * 1000)
     return {
       offerKey: offer.key,
       title: offer.title,
@@ -38,8 +37,8 @@ function buildSeedOffers() {
       maximumDeposit: offer.max,
       rewardPercentage: offer.percent,
       rewardType: 'deposit_bonus',
-      startsAt: normalizeDate(startsAt),
-      endsAt: normalizeDate(endsAt),
+      startsAt: null,
+      endsAt: null,
       isActive: 1,
       claimRule: 'one_time',
       maxClaimsPerUser: 1,
@@ -56,8 +55,6 @@ function buildSeedOffers() {
 }
 
 export async function ensureDepositOffersSeeded(db) {
-  const countRow = await get(db, `SELECT COUNT(*) AS count FROM deposit_offers`)
-  if (Number(countRow?.count || 0) > 0) return
   const offers = buildSeedOffers()
   for (const offer of offers) {
     await run(
@@ -69,7 +66,24 @@ export async function ensureDepositOffersSeeded(db) {
         max_reward_amount, sort_order, eligibility_json, created_at, updated_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT(offer_key) DO NOTHING`,
+      ON CONFLICT(offer_key) DO UPDATE SET
+        title = excluded.title,
+        teaser_text = excluded.teaser_text,
+        headline = excluded.headline,
+        urgency_text = excluded.urgency_text,
+        minimum_deposit = excluded.minimum_deposit,
+        maximum_deposit = excluded.maximum_deposit,
+        reward_percentage = excluded.reward_percentage,
+        reward_type = excluded.reward_type,
+        starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at,
+        is_active = excluded.is_active,
+        claim_rule = excluded.claim_rule,
+        max_claims_per_user = excluded.max_claims_per_user,
+        max_reward_amount = excluded.max_reward_amount,
+        sort_order = excluded.sort_order,
+        eligibility_json = excluded.eligibility_json,
+        updated_at = CURRENT_TIMESTAMP`,
       [
         offer.offerKey,
         offer.title,
@@ -93,6 +107,37 @@ export async function ensureDepositOffersSeeded(db) {
   }
 }
 
+function getOfferRotationWindow(now = new Date()) {
+  const nowMs = now.getTime()
+  const startMs = Math.floor(nowMs / OFFER_ROTATION_WINDOW_MS) * OFFER_ROTATION_WINDOW_MS
+  const endMs = startMs + OFFER_ROTATION_WINDOW_MS
+  return {
+    startMs,
+    endMs,
+    startsAt: normalizeDate(startMs),
+    endsAt: normalizeDate(endMs),
+  }
+}
+
+function buildDeterministicHash(input) {
+  let hash = 0
+  const text = String(input || '')
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0
+  }
+  return hash
+}
+
+function pickDailyFeaturedOffer(offers, now = new Date()) {
+  const available = offers
+    .filter((offer) => Number(offer?.is_active || 0) === 1)
+    .sort((left, right) => Number(left.id || 0) - Number(right.id || 0))
+  if (available.length === 0) return null
+  const window = getOfferRotationWindow(now)
+  const index = buildDeterministicHash(`deposit-offer:${window.startMs}`) % available.length
+  return available[index] || available[0]
+}
+
 function toOfferState(offer, userClaims, now = new Date()) {
   const nowMs = now.getTime()
   const endsAtMs = offer.ends_at ? Date.parse(String(offer.ends_at)) : Number.NaN
@@ -110,8 +155,15 @@ function toOfferState(offer, userClaims, now = new Date()) {
   return 'active'
 }
 
-function mapOfferRow(row, userClaims, now = new Date()) {
-  const endsAtMs = row.ends_at ? Date.parse(String(row.ends_at)) : Number.NaN
+function mapOfferRow(row, userClaims, now = new Date(), windowOverride = null) {
+  const startsAtValue = windowOverride?.startsAt ?? row.starts_at ?? null
+  const endsAtValue = windowOverride?.endsAt ?? row.ends_at ?? null
+  const effectiveRow = {
+    ...row,
+    starts_at: startsAtValue,
+    ends_at: endsAtValue,
+  }
+  const endsAtMs = endsAtValue ? Date.parse(String(endsAtValue)) : Number.NaN
   const remainingSeconds = Number.isFinite(endsAtMs) ? Math.max(0, Math.floor((endsAtMs - now.getTime()) / 1000)) : null
   return {
     id: Number(row.id || 0),
@@ -125,15 +177,15 @@ function mapOfferRow(row, userClaims, now = new Date()) {
     maximumDeposit: row.maximum_deposit == null ? null : Number(row.maximum_deposit),
     rewardPercentage: Number(row.reward_percentage || 0),
     rewardType: String(row.reward_type || 'deposit_bonus'),
-    startsAt: row.starts_at || null,
-    endsAt: row.ends_at || null,
+    startsAt: startsAtValue,
+    endsAt: endsAtValue,
     remainingSeconds,
     isActive: Number(row.is_active || 0) === 1,
     claimRule: String(row.claim_rule || 'one_time'),
     maxClaimsPerUser: row.max_claims_per_user == null ? null : Number(row.max_claims_per_user),
     maxRewardAmount: row.max_reward_amount == null ? null : Number(row.max_reward_amount),
     sortOrder: Number(row.sort_order || 0),
-    state: toOfferState(row, userClaims, now),
+    state: toOfferState(effectiveRow, userClaims, now),
     userClaimCount: Number(userClaims?.totalClaims || 0),
     awardedClaimCount: Number(userClaims?.awardedClaims || 0),
     pendingClaimCount: Number(userClaims?.pendingClaims || 0),
@@ -163,7 +215,10 @@ export async function listDepositOffers(db, userId) {
   ])
   const claimMap = new Map(claimRows.map((row) => [Number(row.offer_id || 0), row]))
   const now = new Date()
-  return offers.map((row) => mapOfferRow(row, claimMap.get(Number(row.id || 0)), now))
+  const featuredOffer = pickDailyFeaturedOffer(offers, now)
+  if (!featuredOffer) return []
+  const rotationWindow = getOfferRotationWindow(now)
+  return [mapOfferRow(featuredOffer, claimMap.get(Number(featuredOffer.id || 0)), now, rotationWindow)]
 }
 
 export async function getDepositOfferById(db, offerId) {
@@ -173,8 +228,19 @@ export async function getDepositOfferById(db, offerId) {
 }
 
 export async function validateDepositOfferEligibility(db, { userId, offerId, depositAmount, now = new Date() }) {
+  await ensureDepositOffersSeeded(db)
+  const allOffers = await all(
+    db,
+    `SELECT *
+     FROM deposit_offers
+     ORDER BY sort_order ASC, reward_percentage DESC, minimum_deposit ASC, id ASC`,
+  )
+  const featuredOffer = pickDailyFeaturedOffer(allOffers, now)
   const offer = await getDepositOfferById(db, offerId)
   if (!offer) return { eligible: false, code: 'offer_not_found', offer: null }
+  if (!featuredOffer || Number(featuredOffer.id || 0) !== Number(offer.id || 0)) {
+    return { eligible: false, code: 'not_current_offer', offer }
+  }
   const claimsRow = await get(
     db,
     `SELECT COUNT(*) AS total_claims,
@@ -184,7 +250,13 @@ export async function validateDepositOfferEligibility(db, { userId, offerId, dep
      WHERE user_id = ? AND offer_id = ?`,
     [userId, offerId],
   )
-  const state = toOfferState(offer, claimsRow, now)
+  const rotationWindow = getOfferRotationWindow(now)
+  const effectiveOffer = {
+    ...offer,
+    starts_at: rotationWindow.startsAt,
+    ends_at: rotationWindow.endsAt,
+  }
+  const state = toOfferState(effectiveOffer, claimsRow, now)
   if (state === 'expired') return { eligible: false, code: 'expired', offer }
   if (state === 'claimed') return { eligible: false, code: 'already_claimed', offer }
   if (state === 'upcoming') return { eligible: false, code: 'not_started', offer }
@@ -211,7 +283,7 @@ export function calculateDepositOfferReward(offer, depositAmount) {
 
 function mapClaimStatusFromEligibility(code) {
   if (code === 'expired') return 'expired'
-  if (code === 'already_claimed' || code === 'maximum_exceeded' || code === 'minimum_not_met' || code === 'not_started') return 'rejected'
+  if (code === 'already_claimed' || code === 'maximum_exceeded' || code === 'minimum_not_met' || code === 'not_started' || code === 'not_current_offer') return 'rejected'
   return 'rejected'
 }
 

@@ -1,6 +1,8 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme {
+:root {
   /* Surfaces – from design tokens */
   --color-app-bg: var(--bg-base);
   --color-app-card: var(--bg-card);

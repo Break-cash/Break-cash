@@ -89,12 +89,14 @@ export function AppHeader({
               {showNotifications ? (
                 <button
                   type="button"
-                  className="app-header-v3__icon app-header-v3__icon--badge"
+                  className="arena-page__icon-btn"
                   aria-label={t('notifications')}
                   onClick={onNotifications}
                 >
                   <Bell size={16} />
-                  {unreadCount > 0 ? <span className="app-header-v3__badge">{unreadCount > 9 ? '9+' : unreadCount}</span> : null}
+                  {unreadCount > 0 ? (
+                    <span className="arena-page__icon-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                  ) : null}
                 </button>
               ) : null}
 
