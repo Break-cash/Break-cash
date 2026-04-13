@@ -23,6 +23,14 @@ import { useI18n } from '../i18nCore'
 
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
 
+function formatHomeBalanceValue(value: number, language: string, isHidden: boolean) {
+  if (isHidden) return '••••••'
+  return Number(value || 0).toLocaleString(language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+}
+
 export function Home() {
   const { t, language } = useI18n()
   const { balance_info } = appData
@@ -113,6 +121,7 @@ export function Home() {
   }
 
   useEffect(() => {
+    void formatVisibleAmount
     getAds('home')
       .then((res) => setAds(res.items || []))
       .catch(() => setAds([]))
@@ -173,8 +182,8 @@ export function Home() {
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                       {t('home_total_assets')}
                     </div>
-                    <div className="mt-2 text-4xl font-black text-white lg:text-[2.8rem]">
-                      {formatVisibleAmount(walletSummary.totalAssets)}
+                    <div className="mt-2 text-[2.35rem] font-black leading-none tracking-tight text-white [font-variant-numeric:tabular-nums] sm:text-[2.6rem] lg:text-[2.8rem]">
+                      {formatHomeBalanceValue(walletSummary.totalAssets, language, isHidden)}
                     </div>
                   </div>
                   <span className="rounded-full border border-brand-blue/25 bg-brand-blue/10 px-3 py-1 text-xs font-semibold text-brand-blue">
@@ -201,7 +210,9 @@ export function Home() {
                   </div>
                   <div className="home-balance-tile rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3">
                     <div className="text-[11px] uppercase tracking-[0.14em] text-amber-200">{headerCopy.fundingLabel}</div>
-                    <div className="mt-2 text-2xl font-bold text-white">{formatVisibleAmount(walletSummary.mainBalance)}</div>
+                    <div className="mt-2 text-2xl font-bold leading-none text-white [font-variant-numeric:tabular-nums]">
+                      {formatHomeBalanceValue(walletSummary.mainBalance, language, isHidden)}
+                    </div>
                     <div className="mt-2 text-[11px] leading-5 text-amber-100/80">{t('home_funding_hint')}</div>
                   </div>
                 </div>
