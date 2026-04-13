@@ -224,36 +224,15 @@ export function Layout({
     return 'denied' as const
   }
 
-  const pushTexts =
-    language === 'ar'
-      ? {
-          enable: 'ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ©',
-          disable: 'Ø¥ÙŠÙ‚Ø§Ù Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ©',
-          enabledHint: 'Ø³ÙŠØµÙ„Ùƒ Ø¥Ø´Ø¹Ø§Ø± Ø­ØªÙ‰ Ø¹Ù†Ø¯ Ø§Ù„Ø®Ø±ÙˆØ¬ Ù…Ù† Ø§Ù„ØªØ·Ø¨ÙŠÙ‚.',
-          deniedHint: 'Ø§Ù„Ù…ØªØµÙØ­ Ù…Ù†Ø¹ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª. ÙØ¹Ù‘Ù„Ù‡Ø§ Ù…Ù† Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…ØªØµÙØ­ Ø£Ùˆ Ø§Ù„Ù†Ø¸Ø§Ù….',
-          idleHint: 'ÙØ¹Ù‘Ù„Ù‡Ø§ Ù„ÙŠØµÙ„Ùƒ Ø¥Ø´Ø¹Ø§Ø± ÙØ¹Ù„ÙŠ Ø¹Ù†Ø¯ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø§Øª ÙˆØ§Ù„ØªØ­Ø¯ÙŠØ«Ø§Øª Ø§Ù„Ù…Ù‡Ù…Ø©.',
-          loading: 'Ø¬Ø§Ø±Ù Ø§Ù„ØªÙØ¹ÙŠÙ„...',
-          unsupported: 'Web Push ØºÙŠØ± Ù…Ø¯Ø¹ÙˆÙ… Ø¹Ù„Ù‰ Ù‡Ø°Ø§ Ø§Ù„Ù…ØªØµÙØ­ Ø£Ùˆ Ø§Ù„Ø¬Ù‡Ø§Ø².',
-        }
-      : language === 'tr'
-        ? {
-            enable: 'Dis bildirimleri ac',
-            disable: 'Dis bildirimleri kapat',
-            enabledHint: 'Uygulama kapaliyken bile bildirim alirsiniz.',
-            deniedHint: 'Tarayici bildirimleri engelledi. Tarayici veya sistem ayarlarindan izin verin.',
-            idleHint: 'Onaylar ve onemli guncellemeler icin gercek bildirimleri acin.',
-            loading: 'Etkinlestiriliyor...',
-            unsupported: 'Web Push bu tarayici veya cihazda desteklenmiyor.',
-          }
-        : {
-            enable: 'Enable push notifications',
-            disable: 'Disable push notifications',
-            enabledHint: 'You will receive alerts even when the app is closed.',
-            deniedHint: 'Browser notifications are blocked. Enable them from browser or system settings.',
-            idleHint: 'Enable real alerts for approvals and important updates.',
-            loading: 'Enabling...',
-            unsupported: 'Web Push is not supported on this browser or device.',
-          }
+  const pushTexts = {
+    enable: t('notifications_push_enable'),
+    disable: t('notifications_push_disable'),
+    enabledHint: t('notifications_push_enabled_hint'),
+    deniedHint: t('notifications_push_denied_hint'),
+    idleHint: t('notifications_push_idle_hint'),
+    loading: t('notifications_push_loading'),
+    unsupported: t('notifications_push_unsupported'),
+  }
 
   function getNotificationKey(item: { title?: string; body?: string }) {
     return `${String(item.title || '').trim()}|${String(item.body || '').trim()}`
@@ -315,20 +294,8 @@ export function Layout({
       hour: '2-digit',
       minute: '2-digit',
     })
-    if (diffDays === 0) {
-      return language === 'ar'
-        ? `Ø§Ù„ÙŠÙˆÙ…ØŒ ${timeOnly}`
-        : language === 'tr'
-          ? `BugÃ¼n, ${timeOnly}`
-          : `Today, ${timeOnly}`
-    }
-    if (diffDays === 1) {
-      return language === 'ar'
-        ? `Ø£Ù…Ø³ØŒ ${timeOnly}`
-        : language === 'tr'
-          ? `DÃ¼n, ${timeOnly}`
-          : `Yesterday, ${timeOnly}`
-    }
+    if (diffDays === 0) return `${t('notifications_today')}, ${timeOnly}`
+    if (diffDays === 1) return `${t('notifications_yesterday')}, ${timeOnly}`
     return date.toLocaleString(locale, {
       year: 'numeric',
       month: 'short',
@@ -374,10 +341,10 @@ export function Layout({
     const haystack = `${String(item.title || '')} ${String(item.body || '')}`.toLowerCase()
     return (
       haystack.includes('strategy') ||
-      haystack.includes('Ø§Ù„Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©') ||
-      haystack.includes('Ø§Ù„Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠÙ‡') ||
-      haystack.includes('ØµÙÙ‚Ø©') ||
-      haystack.includes('ÙƒÙˆØ¯')
+      haystack.includes('الاستراتيجية') ||
+      haystack.includes('الاستراتيجيه') ||
+      haystack.includes('صفقة') ||
+      haystack.includes('كود')
     )
   }
 
@@ -387,9 +354,9 @@ export function Layout({
       haystack.includes('support') ||
       haystack.includes('help') ||
       haystack.includes('ticket') ||
-      haystack.includes('Ø§Ù„Ø¯Ø¹Ù…') ||
-      haystack.includes('Ù…Ø³Ø§Ø¹Ø¯Ø©') ||
-      haystack.includes('Ù…Ø­Ø§Ø¯Ø«Ø©')
+      haystack.includes('الدعم') ||
+      haystack.includes('مساعدة') ||
+      haystack.includes('محادثة')
     )
   }
 
@@ -506,17 +473,17 @@ export function Layout({
             nativeError === 'SERVICE_NOT_AVAILABLE'
           setPushError(
             timeoutLike
-              ? 'ØªØ¹Ø°Ø± Ø§Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ø±Ù…Ø² Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ù…Ù† Ø®Ø¯Ù…Ø§Øª Google. ØªØ­Ù‚Ù‚ Ù…Ù† Ø§ØªØµØ§Ù„ Ø§Ù„Ø¥Ù†ØªØ±Ù†Øª ÙˆØ®Ø¯Ù…Ø§Øª Google Play Ø«Ù… Ø£Ø¹Ø¯ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©.'
+              ? t('notifications_push_native_token_error')
               : nativeError
-              ? `ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¬Ù‡Ø§Ø² Ù„Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª (${nativeError}).`
-              : 'ØªØ¹Ø°Ø± ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¬Ù‡Ø§Ø² Ù„Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª. Ø­Ø¯Ù‘Ø« Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø«Ù… Ø£Ø¹Ø¯ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©.',
+              ? `${t('notifications_push_native_register_error')} (${nativeError}).`
+              : t('notifications_push_native_register_generic'),
           )
           return
         }
         await saveNativePushToken(token, getNativePushPlatform())
         setPushSubscribed(true)
         if (permission !== 'granted') {
-          setPushError('ØªÙ… Ø±Ø¨Ø· Ø§Ù„Ø¬Ù‡Ø§Ø²ØŒ Ù„ÙƒÙ† Ø¥Ø´Ø¹Ø§Ø±Ø§Øª Ø§Ù„Ù†Ø¸Ø§Ù… Ù…Ø§ Ø²Ø§Ù„Øª Ù…Ø¹Ø·Ù„Ø©. ÙØ¹Ù‘Ù„Ù‡Ø§ Ù…Ù† Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„ØªØ·Ø¨ÙŠÙ‚.')
+          setPushError(t('notifications_push_native_permission_warning'))
         }
         await sendNativePushTest().catch(() => {})
         return
@@ -539,7 +506,7 @@ export function Layout({
       setPushSubscribed(true)
       await sendPushTest().catch(() => {})
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'ØªØ¹Ø°Ø± ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª.'
+      const message = error instanceof Error ? error.message : t('notifications_push_enable_error')
       setPushError(message)
     } finally {
       setPushBusy(false)
@@ -566,7 +533,7 @@ export function Layout({
       }
       setPushSubscribed(false)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'ØªØ¹Ø°Ø± Ø¥ÙŠÙ‚Ø§Ù Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª.'
+      const message = error instanceof Error ? error.message : t('notifications_push_disable_error')
       setPushError(message)
     } finally {
       setPushBusy(false)
@@ -940,8 +907,8 @@ export function Layout({
                       >
                         <div className="flex items-center gap-2">
                           <div className="text-sm font-medium">{item.title}</div>
-                          {Number(item.is_read || 0) === 0 ? <span className="rounded-full border border-brand-blue/30 bg-brand-blue/15 px-2 py-0.5 text-[10px] font-bold text-brand-blue">Ø¬Ø¯ÙŠØ¯</span> : null}
-                          {isStrategyNotification(item) || isSupportNotification(item) ? <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">Ù…Ù‡Ù…</span> : null}
+                          {Number(item.is_read || 0) === 0 ? <span className="rounded-full border border-brand-blue/30 bg-brand-blue/15 px-2 py-0.5 text-[10px] font-bold text-brand-blue">{t('nav_new_badge')}</span> : null}
+                          {isStrategyNotification(item) || isSupportNotification(item) ? <span className="rounded-full border border-amber-300/30 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">{t('notifications_important_badge')}</span> : null}
                         </div>
                         <div className="text-xs text-white/60">{item.body}</div>
                         <div className="mt-1 text-[11px] text-white/40">{formatNotificationTimestamp(item.created_at)}</div>
@@ -963,7 +930,7 @@ export function Layout({
                           {t('mark_read')}
                         </button>
                       ) : (
-                        <div className="px-2 py-1 text-[11px] text-white/35">Ù…Ù‚Ø±ÙˆØ¡</div>
+                        <div className="px-2 py-1 text-[11px] text-white/35">{t('notifications_read_badge')}</div>
                       )}
                     </div>
                   ))}
