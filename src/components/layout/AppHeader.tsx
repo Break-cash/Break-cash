@@ -62,6 +62,8 @@ export function AppHeader({
   const { t } = useI18n()
   const startLabel = showBack ? t('back') : t('app_menu')
   const secondaryLabel = title && title !== brandName ? title : subtitle
+  const menuAvatarSrc = !showBack ? menuAvatarUrl ?? undefined : undefined
+  const showMenuAvatar = Boolean(menuAvatarSrc)
 
   return (
     <>
@@ -128,10 +130,12 @@ export function AppHeader({
                   onClick={showBack ? onBack : onMenu}
                   aria-label={startLabel}
                 >
-                  {menuAvatarUrl && !showBack ? <img src={menuAvatarUrl} alt={menuAvatarAlt} className="app-header-v3__menu-avatar" /> : null}
-                  <span className="app-header-v3__menu-glyph" aria-hidden="true">
-                    {showBack ? direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} /> : <Grid2x2 size={15} />}
-                  </span>
+                  {showMenuAvatar ? <img src={menuAvatarSrc} alt={menuAvatarAlt} className="app-header-v3__menu-avatar" /> : null}
+                  {!showMenuAvatar ? (
+                    <span className="app-header-v3__menu-glyph" aria-hidden="true">
+                      {showBack ? direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} /> : <Grid2x2 size={15} />}
+                    </span>
+                  ) : null}
                 </button>
               ) : null}
             </div>
