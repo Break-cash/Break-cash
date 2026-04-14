@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'com.breakcash.app',
-  appName: 'Break Cash',
+  appName: 'BreakCash',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {

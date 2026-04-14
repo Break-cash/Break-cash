@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Break Cash</string>
-    <string name="title_activity_main">Break Cash</string>
+    <string name="app_name">BreakCash</string>
+    <string name="title_activity_main">BreakCash</string>
     <string name="package_name">com.breakcash.app</string>
     <string name="custom_url_scheme">com.breakcash.app</string>
     <string name="asset_statements">[{"include":"https://breakcash.cash/.well-known/assetlinks.json"}]</string>
