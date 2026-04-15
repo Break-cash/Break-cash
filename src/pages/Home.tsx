@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -15,6 +15,7 @@ import {
 } from '../api'
 import { appData } from '../data'
 import { AdBanner } from '../components/ads/AdBanner'
+import { ProfilePullToRefreshIndicator } from '../components/profile-v2/ProfilePullToRefreshIndicator'
 import { useMarketBoard } from '../hooks/useMarketBoard'
 import { useDailyEarningsSummary } from '../hooks/useDailyEarningsSummary'
 import { useAssetVisibility } from '../hooks/useAssetVisibility'
@@ -22,6 +23,8 @@ import { useWalletSummary } from '../hooks/useWalletSummary'
 import { useI18n } from '../i18nCore'
 
 const WHATSAPP_CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb7YcfVEVccPWi28j22U'
+const HOME_PULL_REFRESH_THRESHOLD = 72
+const HOME_PULL_REFRESH_MAX_DISTANCE = 112
 
 function formatHomeBalanceValue(value: number, language: string, isHidden: boolean) {
   if (isHidden) return '••••••'
@@ -35,10 +38,16 @@ export function Home() {
   const { t, language } = useI18n()
   const { balance_info } = appData
   const [ads, setAds] = useState<AdItem[]>([])
-  const { summary: walletSummary } = useWalletSummary()
-  const { summary: dailyEarningsSummary } = useDailyEarningsSummary()
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
+  const pageRef = useRef<HTMLDivElement | null>(null)
+  const pullStartYRef = useRef(0)
+  const pullDistanceRef = useRef(0)
+  const pullActiveRef = useRef(false)
+  const { summary: walletSummary, refresh: refreshWalletSummary } = useWalletSummary()
+  const { summary: dailyEarningsSummary, refresh: refreshDailyEarnings } = useDailyEarningsSummary()
   const { isHidden } = useAssetVisibility()
-  const { mostTraded, usingFallback, loading } = useMarketBoard(5000)
+  const { mostTraded, usingFallback, loading, reload: reloadMarketBoard } = useMarketBoard(5000)
 
   const headerCopy = useMemo(() => {
     if (language === 'ar') {
@@ -120,6 +129,90 @@ export function Home() {
     return isHidden ? '••••••' : value.toFixed(2)
   }
 
+  const resolveScrollContainer = useCallback(() => {
+    let node = pageRef.current?.parentElement ?? pageRef.current
+
+    while (node) {
+      const style = window.getComputedStyle(node)
+      const overflowY = style.overflowY
+      const canScroll = (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && node.scrollHeight > node.clientHeight
+      if (canScroll) return node
+      node = node.parentElement
+    }
+
+    return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : null
+  }, [])
+
+  const getCurrentScrollTop = useCallback(() => {
+    const scrollContainer = resolveScrollContainer()
+    if (scrollContainer) return scrollContainer.scrollTop
+    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+  }, [resolveScrollContainer])
+
+  const refreshHomeContent = useCallback(async () => {
+    await Promise.allSettled([
+      refreshWalletSummary(),
+      refreshDailyEarnings(),
+      reloadMarketBoard(),
+      getAds('home')
+        .then((res) => setAds(res.items || []))
+        .catch(() => setAds([])),
+    ])
+  }, [refreshDailyEarnings, refreshWalletSummary, reloadMarketBoard])
+
+  const finishPullGesture = useCallback(async () => {
+    if (!pullActiveRef.current) return
+
+    pullActiveRef.current = false
+    const shouldRefresh = pullDistanceRef.current >= HOME_PULL_REFRESH_THRESHOLD
+    pullDistanceRef.current = 0
+    setPullDistance(0)
+
+    if (!shouldRefresh || isPullRefreshing) return
+
+    setIsPullRefreshing(true)
+    try {
+      await refreshHomeContent()
+    } finally {
+      setIsPullRefreshing(false)
+    }
+  }, [isPullRefreshing, refreshHomeContent])
+
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (isPullRefreshing || getCurrentScrollTop() > 0) return
+    pullActiveRef.current = true
+    pullStartYRef.current = event.touches[0]?.clientY || 0
+    pullDistanceRef.current = 0
+  }, [getCurrentScrollTop, isPullRefreshing])
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!pullActiveRef.current || isPullRefreshing) return
+
+    if (getCurrentScrollTop() > 0) {
+      pullActiveRef.current = false
+      pullDistanceRef.current = 0
+      setPullDistance(0)
+      return
+    }
+
+    const currentY = event.touches[0]?.clientY || 0
+    const delta = currentY - pullStartYRef.current
+
+    if (delta <= 0) {
+      pullDistanceRef.current = 0
+      setPullDistance(0)
+      return
+    }
+
+    const easedDistance = Math.min(HOME_PULL_REFRESH_MAX_DISTANCE, delta * 0.4)
+    pullDistanceRef.current = easedDistance
+    setPullDistance(easedDistance)
+
+    if (event.cancelable) {
+      event.preventDefault()
+    }
+  }, [getCurrentScrollTop, isPullRefreshing])
+
   useEffect(() => {
     void formatVisibleAmount
     getAds('home')
@@ -137,7 +230,24 @@ export function Home() {
   }, [])
 
   return (
-    <div className="page home-page">
+    <div
+      ref={pageRef}
+      className="page home-page"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={() => {
+        finishPullGesture().catch(() => {})
+      }}
+      onTouchCancel={() => {
+        finishPullGesture().catch(() => {})
+      }}
+    >
+      <ProfilePullToRefreshIndicator
+        pullDistance={pullDistance}
+        isPullRefreshing={isPullRefreshing}
+        loadingText={t('common_loading')}
+        pullText={t('home_pull_to_refresh')}
+      />
       <section className="home-overview mb-6">
         <div className="home-overview-grid grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
           <div className="home-hero card overflow-hidden rounded-[28px] border border-brand-blue/20 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.2),transparent_28%),linear-gradient(135deg,rgba(6,13,24,0.96),rgba(10,18,32,0.92))] p-0 shadow-[0_22px_52px_rgba(2,8,20,0.38)]">
@@ -177,18 +287,20 @@ export function Home() {
               </div>
 
               <div className="home-balance-panel space-y-3 rounded-[24px] border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {t('home_total_assets')}
-                    </div>
-                    <div className="mt-2 text-[2.35rem] font-black leading-none tracking-tight text-white [font-variant-numeric:tabular-nums] sm:text-[2.6rem] lg:text-[2.8rem]">
-                      {formatHomeBalanceValue(walletSummary.totalAssets, language, isHidden)}
-                    </div>
+                <div className="rounded-[20px] border border-white/8 bg-black/10 px-3.5 py-3 sm:px-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t('home_total_assets')}
                   </div>
-                  <span className="rounded-full border border-brand-blue/25 bg-brand-blue/10 px-3 py-1 text-xs font-semibold text-brand-blue">
-                    {balance_info.currency}
-                  </span>
+                  <div className="mt-2 flex items-end justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(2rem,8vw,2.8rem)] font-black leading-none tracking-[-0.03em] text-white [font-variant-numeric:tabular-nums]">
+                        {formatHomeBalanceValue(walletSummary.totalAssets, language, isHidden)}
+                      </div>
+                    </div>
+                    <span className="mb-0.5 shrink-0 rounded-full border border-brand-blue/20 bg-brand-blue/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-blue/80 sm:text-[11px]">
+                      {balance_info.currency}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="home-balance-grid grid gap-3 sm:grid-cols-2">
