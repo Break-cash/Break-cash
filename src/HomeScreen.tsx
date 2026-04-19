@@ -359,7 +359,10 @@ export function HomeScreen({
     return () => window.clearTimeout(timeoutId)
   }, [normalizedBalance, normalizedDailyEarnings])
 
-  const maskedAmount = balanceHidden ? '' : Number(currentBalance || 0).toFixed(2)
+  const maskedAmount = balanceHidden ? '' : Number(currentBalance || 0).toLocaleString(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
   const maskedDaily = balanceHidden ? '' : Number(dailyEarnings || 0).toFixed(2)
 
   const renderedOffers =
