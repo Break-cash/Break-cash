@@ -435,7 +435,17 @@ export function HomeScreen({
         <section className="app-home__hero">
           <div className="app-home__hero-top">
             <div className="app-home__hero-side app-home__hero-side--balance">
-              <div className="app-home__eyebrow">{copy.currentBalance}</div>
+              <div className="app-home__balance-head">
+                <div className="app-home__eyebrow">{copy.currentBalance}</div>
+                <button
+                  type="button"
+                  className="app-home__vision-toggle"
+                  aria-label={balanceHidden ? copy.showBalance : copy.hideBalance}
+                  onClick={() => setBalanceHidden((current) => !current)}
+                >
+                  {balanceHidden ? <Eye size={15} /> : <EyeOff size={15} />}
+                </button>
+              </div>
               <div className="app-home__balance-row">
                 <strong className="app-home__balance-number">{maskedAmount}</strong>
                 <span className="app-home__balance-currency">{currency}</span>
@@ -444,14 +454,6 @@ export function HomeScreen({
             </div>
 
             <div className="app-home__hero-center">
-              <button
-                type="button"
-                className="app-home__vision-toggle"
-                aria-label={balanceHidden ? copy.showBalance : copy.hideBalance}
-                onClick={() => setBalanceHidden((current) => !current)}
-              >
-                {balanceHidden ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
               <div className="app-home__hero-orbit" aria-hidden="true" />
               <div className="app-home__hero-orbit app-home__hero-orbit--reverse" aria-hidden="true" />
               <div className={`app-home__hero-coin ${coinBoosted ? 'is-boosted' : ''}`} aria-hidden="true">

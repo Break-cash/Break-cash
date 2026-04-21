@@ -144,6 +144,14 @@
   text-align: right;
 }
 
+.app-home__balance-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .app-home__eyebrow,
 .app-home__hero-meta,
 .app-home__progress-label,
@@ -213,19 +221,26 @@
 }
 
 .app-home__vision-toggle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
   border: 1px solid var(--border-soft);
-  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
-  color: var(--text-secondary);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 96%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  color: var(--text-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-inner);
+  flex: 0 0 auto;
+  box-shadow: var(--shadow-inner), 0 8px 18px rgba(7, 12, 24, 0.2);
+  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.app-home__vision-toggle:hover,
+.app-home__vision-toggle:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(89, 161, 255, 0.32);
+  color: var(--accent-blue-soft);
 }
 
 .app-home__promo-coin {
