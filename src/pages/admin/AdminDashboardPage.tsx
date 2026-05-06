@@ -225,11 +225,17 @@ export function AdminDashboardPage() {
     try {
       const title = notificationDraft.title.trim()
       const body = notificationDraft.body.trim()
+      if (!title || !body) {
+        throw new Error('يرجى كتابة عنوان الإشعار ومحتواه قبل الإرسال.')
+      }
       if (notificationDraft.broadcast) {
         const res = await broadcastAdminNotification({ title, body, vibrate: true })
         setMessage({ type: 'success', text: `تم إرسال الإشعار إلى ${res.createdCount} مستخدم.` })
       } else {
         const userId = Number(notificationDraft.userId || 0)
+        if (!userId) {
+          throw new Error('يرجى إدخال رقم المستخدم قبل إرسال الإشعار الفردي.')
+        }
         await createAdminNotification({ userId, title, body })
         setMessage({ type: 'success', text: `تم إرسال الإشعار إلى المستخدم #${userId}.` })
       }
@@ -252,6 +258,50 @@ export function AdminDashboardPage() {
         <div className={`rounded-xl px-3 py-2 text-sm ${message.type === 'success' ? 'owner-message-success' : 'owner-message-error'}`}>
           {message.text}
         </div>
+      ) : null}
+
+      {canManageNotifications ? (
+        <section className="rounded-2xl border border-app-border bg-app-card p-4">
+          <h2 className="text-sm font-semibold text-white">الإشعار العام للمستخدمين</h2>
+          <p className="mt-1 text-xs text-app-muted">أرسل إشعارًا موحدًا للجميع أو إشعارًا فرديًا لمستخدم محدد من أعلى لوحة الإدارة.</p>
+          <div className="mt-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm text-app-muted">
+              <input
+                type="checkbox"
+                checked={notificationDraft.broadcast}
+                onChange={(e) => setNotificationDraft((prev) => ({ ...prev, broadcast: e.target.checked }))}
+              />
+              <span>إرسال للجميع</span>
+            </label>
+            {!notificationDraft.broadcast ? (
+              <input
+                className="field-input"
+                type="number"
+                placeholder="رقم المستخدم"
+                value={notificationDraft.userId}
+                onChange={(e) => setNotificationDraft((prev) => ({ ...prev, userId: e.target.value }))}
+              />
+            ) : null}
+            <input
+              className="field-input"
+              placeholder="عنوان الإشعار"
+              value={notificationDraft.title}
+              onChange={(e) => setNotificationDraft((prev) => ({ ...prev, title: e.target.value }))}
+            />
+            <textarea
+              className="field-input"
+              rows={4}
+              placeholder="محتوى الإشعار"
+              value={notificationDraft.body}
+              onChange={(e) => setNotificationDraft((prev) => ({ ...prev, body: e.target.value }))}
+            />
+            <div className="flex justify-end">
+              <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSendNotification} disabled={sendingNotification}>
+                {sendingNotification ? '...' : 'إرسال الإشعار'}
+              </button>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -468,49 +518,6 @@ export function AdminDashboardPage() {
         </>
       ) : null}
 
-      {canManageNotifications ? (
-        <section className="rounded-2xl border border-app-border bg-app-card p-4">
-          <h2 className="text-sm font-semibold text-white">إنشاء إشعار</h2>
-          <p className="mt-1 text-xs text-app-muted">يمكن للمشرف إرسال إشعار لمستخدم محدد أو بث إشعار عام لجميع المستخدمين.</p>
-          <div className="mt-3 space-y-2">
-            <label className="flex items-center gap-2 text-sm text-app-muted">
-              <input
-                type="checkbox"
-                checked={notificationDraft.broadcast}
-                onChange={(e) => setNotificationDraft((prev) => ({ ...prev, broadcast: e.target.checked }))}
-              />
-              <span>إرسال للجميع</span>
-            </label>
-            {!notificationDraft.broadcast ? (
-              <input
-                className="field-input"
-                type="number"
-                placeholder="رقم المستخدم"
-                value={notificationDraft.userId}
-                onChange={(e) => setNotificationDraft((prev) => ({ ...prev, userId: e.target.value }))}
-              />
-            ) : null}
-            <input
-              className="field-input"
-              placeholder="عنوان الإشعار"
-              value={notificationDraft.title}
-              onChange={(e) => setNotificationDraft((prev) => ({ ...prev, title: e.target.value }))}
-            />
-            <textarea
-              className="field-input"
-              rows={4}
-              placeholder="محتوى الإشعار"
-              value={notificationDraft.body}
-              onChange={(e) => setNotificationDraft((prev) => ({ ...prev, body: e.target.value }))}
-            />
-            <div className="flex justify-end">
-              <button type="button" className="wallet-action-btn wallet-action-deposit" onClick={handleSendNotification} disabled={sendingNotification}>
-                {sendingNotification ? '...' : 'إرسال الإشعار'}
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
     </div>
   )
 }

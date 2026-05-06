@@ -207,7 +207,7 @@ export function createNotificationsRouter(db) {
     return res.status(201).json({ ok: true })
   })
 
-  router.post('/broadcast', requireAnyPermission(db, ['notifications.manage']), async (req, res) => {
+  router.post('/broadcast', requireAnyPermission(db, ['manage_users', 'notifications.manage']), async (req, res) => {
     const title = String(req.body?.title || '').trim().slice(0, 180)
     const body = String(req.body?.body || '').trim().slice(0, 1200)
     const vibrate = req.body?.vibrate !== false
