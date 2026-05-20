@@ -10,6 +10,7 @@ import { getUploadsRoot } from '../services/uploads-root.js'
 
 const PLACEMENTS = new Set(['all', 'home', 'profile', 'mining', 'deposit'])
 const GLOBAL_PROMOTED_AD_ITEMS = [
+  { type: 'image', mediaUrl: '/ads/referral-200-bonus.png', title: 'دعوة للكسب', description: 'ادعُ أصدقاءك واحصل على مكافآت الإحالة', linkUrl: '/referral' },
   { type: 'image', mediaUrl: '/ads/mani.jpeg', title: 'mani', description: 'Open the deposit page', linkUrl: '/deposit' },
   { type: 'image', mediaUrl: '/ads/frnd.jpeg', title: 'frnd', description: 'Open referral center', linkUrl: '/referral' },
   { type: 'image', mediaUrl: '/ads/mining-main-banner.jpg', title: 'اعلان تعدين', description: 'اذهب إلى التعدين', linkUrl: '/mining' },

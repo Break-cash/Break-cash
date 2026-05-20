@@ -31,6 +31,7 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
   const canRotate = filtered.length > 1
   const current = filtered[activeIndex] || null
   const currentIsVideo = current?.type === 'video'
+  const useContainFit = Boolean(current?.mediaUrl && current.mediaUrl.includes('/ads/referral-200-bonus.png'))
 
   useEffect(() => {
     const el = containerRef.current
@@ -187,7 +188,7 @@ export function AdBanner({ items, placement, className = '' }: AdBannerProps) {
                 <img
                   src={current.mediaUrl}
                   alt={current.title || ''}
-                  className="h-full w-full object-cover"
+                  className={`h-full w-full ${useContainFit ? 'object-contain bg-black' : 'object-cover'}`}
                   loading="lazy"
                   decoding="async"
                 />
